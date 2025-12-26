@@ -1,0 +1,18 @@
+# 基础应用配置
+spring:
+  profiles:
+    active: dev  # 默认环境
+  application:
+    name:  cyan-dataman
+  main:
+    web-application-type: servlet
+# 服务监控端点（暴露所有端点，生产环境需调整）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+

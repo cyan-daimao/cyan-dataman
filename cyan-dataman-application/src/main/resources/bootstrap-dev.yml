@@ -1,0 +1,22 @@
+spring:
+  config:
+    import: "nacos:cyan-dataman.yaml?group=DEFAULT_GROUP&namespace=f52b16a2-2434-4a52-b096-b7c52dbc974d"
+  cloud:
+    nacos:
+      # 通用配置（配置中心和注册中心可共享）
+      server-addr: 10.0.0.2:18848  # Nacos服务器地址
+      username: nacos  # Nacos登录账号
+      password: nacos  # Nacos登录密码
+      # 配置中心专项配置
+      config:
+        file-extension: yaml
+        namespace: f52b16a2-2434-4a52-b096-b7c52dbc974d
+      # 注册中心专项配置
+      discovery:
+        ephemeral: true
+        namespace: f52b16a2-2434-4a52-b096-b7c52dbc974d
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 627459859@qq.com
+    url: jdbc:mysql://10.0.0.2:3306/cyan_honeycomb
