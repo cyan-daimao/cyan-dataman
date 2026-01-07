@@ -1,4 +1,4 @@
-package com.cyan.dataman.adapter.http.datasource.dto;
+package com.cyan.dataman.domain.datasource;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 /**
- * 数据源-表
+ * 数据源表信息
  * @author cy.Y
  * @since 1.0.0
  */
@@ -14,15 +14,11 @@ import lombok.experimental.Accessors;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public class DatasourceTableDTO {
+public class DatasourceSchema {
 
     /**
      * 库名
      */
     private String db;
 
-    /**
-     * 表名
-     */
-    private String name;
 }

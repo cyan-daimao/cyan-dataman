@@ -1,10 +1,10 @@
 package com.cyan.dataman.infra.util;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * JDBC 工具类，用于获取数据库连接和关闭资源。
@@ -25,6 +25,71 @@ public class JDBCUtil {
             throw new ExceptionInInitializerError("MySQL JDBC Driver not found!");
         }
     }
+    /**
+     * 执行查询 SQL，返回 List<Map<String, Object>>
+     *
+     * @param sql 任意 SELECT 语句（不支持参数化，若需防注入请使用带参数版本）
+     * @return 查询结果，每行是一个 Map<列名, 值>
+     * @throws SQLException 数据库异常
+     */
+    public static List<Map<String, Object>> queryForList(String sql) throws SQLException {
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            List<Map<String, Object>> result = new ArrayList<>();
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            while (rs.next()) {
+                Map<String, Object> row = new LinkedHashMap<>(); // 保持列顺序
+                for (int i = 1; i <= columnCount; i++) {
+                    String columnName = metaData.getColumnLabel(i); // 使用别名（AS）
+                    Object value = rs.getObject(i);
+                    row.put(columnName, value);
+                }
+                result.add(row);
+            }
+            return result;
+        }
+    }
+
+    /**
+     * 执行带参数的查询，返回 List<Map<String, Object>>
+     *
+     * @param sql    带 ? 占位符的 SQL
+     * @param params 参数数组
+     * @return 结果列表
+     * @throws SQLException 数据库异常
+     */
+    public static List<Map<String, Object>> queryForList(String sql, Object... params) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            // 设置参数
+            for (int i = 0; i < params.length; i++) {
+                pstmt.setObject(i + 1, params[i]);
+            }
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Map<String, Object>> result = new ArrayList<>();
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+
+                while (rs.next()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+                        String columnName = metaData.getColumnLabel(i);
+                        Object value = rs.getObject(i);
+                        row.put(columnName, value);
+                    }
+                    result.add(row);
+                }
+                return result;
+            }
+        }
+    }
+
 
     /**
      * 获取数据库连接

@@ -6,20 +6,21 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 /**
- * 数据源表信息
+ * 数据库信息
  * @author cy.Y
  * @since 1.0.0
  */
+@Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Data
 @Accessors(chain = true)
 public class DatasourceTable {
 
     /**
-     * 库名
+     * 数据库名称
      */
     private String db;
+
     /**
      * 表名
      */

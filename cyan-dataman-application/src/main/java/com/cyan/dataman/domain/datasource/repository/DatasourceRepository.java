@@ -1,6 +1,8 @@
 package com.cyan.dataman.domain.datasource.repository;
 
+import com.cyan.dataman.domain.datasource.DatasourceSchema;
 import com.cyan.dataman.domain.datasource.DatasourceTable;
+import com.cyan.dataman.domain.datasource.query.DatasourceTableQuery;
 import com.cyan.dataman.enums.StorageType;
 
 import java.util.List;
@@ -18,7 +20,7 @@ public interface DatasourceRepository {
      *
      * @return 数据源表列表
      */
-    List<DatasourceTable> list();
+    List<DatasourceSchema> listDB();
 
     /**
      * 获取数据源类型
@@ -26,4 +28,10 @@ public interface DatasourceRepository {
      * @return 数据源类型
      */
     StorageType getStorageType();
+
+    /**
+     * 获取数据源-表列表
+     *
+     */
+    List<DatasourceTable> listTable(DatasourceTableQuery query);
 }

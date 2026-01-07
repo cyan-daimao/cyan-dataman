@@ -14,15 +14,10 @@ import lombok.experimental.Accessors;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public class DatasourceTableDTO {
+public class DatasourceSchemaDTO {
 
     /**
      * 库名
      */
     private String db;
-
-    /**
-     * 表名
-     */
-    private String name;
 }

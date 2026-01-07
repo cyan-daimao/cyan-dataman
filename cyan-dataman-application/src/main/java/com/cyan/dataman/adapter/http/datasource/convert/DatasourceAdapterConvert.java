@@ -1,7 +1,9 @@
 package com.cyan.dataman.adapter.http.datasource.convert;
 
 import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.dataman.adapter.http.datasource.dto.DatasourceSchemaDTO;
 import com.cyan.dataman.adapter.http.datasource.dto.DatasourceTableDTO;
+import com.cyan.dataman.application.datasource.bo.DatasourceSchemaBO;
 import com.cyan.dataman.application.datasource.bo.DatasourceTableBO;
 import org.mapstruct.Mapper;
 import org.mapstruct.factory.Mappers;
@@ -17,5 +19,7 @@ public interface DatasourceAdapterConvert {
 
     DatasourceAdapterConvert INSTANCE = Mappers.getMapper(DatasourceAdapterConvert.class);
 
-    DatasourceTableDTO toDatasourceTableDTO(DatasourceTableBO bo);
+    DatasourceSchemaDTO toDatasourceSchemaDTO(DatasourceSchemaBO bo);
+
+    DatasourceTableDTO toDatasourceTableDTO(DatasourceTableBO datasourceTableBO);
 }

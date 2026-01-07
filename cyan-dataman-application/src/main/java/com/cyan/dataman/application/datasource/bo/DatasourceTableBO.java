@@ -20,6 +20,7 @@ public class DatasourceTableBO {
      * 库名
      */
     private String db;
+
     /**
      * 表名
      */
