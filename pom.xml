@@ -98,4 +98,21 @@
             </plugin>
         </plugins>
     </build>
+
+
+    <!-- 核心：添加部署仓库配置 -->
+    <distributionManagement>
+        <!-- 正式版仓库（对应Nexus的maven-releases） -->
+        <repository>
+            <id>maven-releases</id>
+            <name>Nexus Releases Repository</name>
+            <url>http://10.0.0.2:20010/repository/maven-releases/</url>
+        </repository>
+        <!-- 快照版仓库（对应Nexus的maven-snapshots） -->
+        <snapshotRepository>
+            <id>maven-snapshots</id>
+            <name>Nexus Snapshots Repository</name>
+            <url>http://10.0.0.2:20010/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>

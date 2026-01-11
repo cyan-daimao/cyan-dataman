@@ -109,4 +109,26 @@
             </exclusions>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 核心JAR打包插件（自定义JAR名称、排除不必要文件等） -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>3.3.13</version> <!-- 与父依赖版本一致 -->
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal> <!-- 关键：重新打包为可执行 JAR -->
+                        </goals>
+                    </execution>
+                </executions>
+                <!-- 可选：指定主类（如果插件未自动识别） -->
+                <configuration>
+                    <mainClass>com.cyan.dataman.Application</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>
