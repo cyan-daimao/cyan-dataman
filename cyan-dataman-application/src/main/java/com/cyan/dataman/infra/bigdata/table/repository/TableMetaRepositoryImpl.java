@@ -12,6 +12,7 @@ import com.cyan.dataman.domain.bigdata.table.repository.TableMetaRepository;
 import com.cyan.dataman.enums.DataLayer;
 import com.cyan.dataman.enums.PartitionType;
 import com.cyan.dataman.enums.WriteMode;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -19,6 +20,8 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
+import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.types.Types;
 import org.springframework.stereotype.Repository;
 
@@ -31,6 +34,7 @@ import java.util.stream.Collectors;
  * @version 1.0.0
  */
 @Repository
+@Slf4j
 public class TableMetaRepositoryImpl implements TableMetaRepository {
     private final Catalog icebergCatalog;
 
@@ -100,6 +104,18 @@ public class TableMetaRepositoryImpl implements TableMetaRepository {
         }
         Map<String, String> tableProperties = new HashMap<>();
         tableProperties.put("comment", tableMeta.getComment());
+        Namespace namespace = Namespace.of(tableMeta.getDb().getCode());
+
+        HiveCatalog hiveCatalog = (HiveCatalog) icebergCatalog;
+        try {
+            //  检查命名空间是否存在（通过尝试加载命名空间来验证）
+            hiveCatalog.loadNamespaceMetadata(namespace);
+        } catch (NoSuchNamespaceException e) {
+            //  如果命名空间不存在，则创建它
+            log.info("命名空间 {} 不存在，正在创建...", namespace);
+            hiveCatalog.createNamespace(namespace);
+        }
+
         org.apache.iceberg.Table iceTable = icebergCatalog.createTable(tableIdentifier, schema, partitionSpecBuilder.build(), tableProperties);
         return toTable(iceTable);
     }
