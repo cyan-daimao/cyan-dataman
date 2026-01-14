@@ -128,7 +128,26 @@
                 <!-- 可选：指定主类（如果插件未自动识别） -->
                 <configuration>
                     <mainClass>com.cyan.dataman.Application</mainClass>
+                    <!-- 修正：移除错误的 <resources> 节点，仅保留 groupId/artifactId 排除 -->
+                    <excludes>
+                        <exclude>
+                            <groupId>org.apache.hive</groupId>
+                            <artifactId>hive-common</artifactId>
+                        </exclude>
+                    </excludes>
+                    <requiresUnpack>
+                        <!-- 解决 Hive 依赖在 Jar 内的类加载问题 -->
+                        <dependency>
+                            <groupId>org.apache.hive</groupId>
+                            <artifactId>hive-exec</artifactId>
+                        </dependency>
+                        <dependency>
+                            <groupId>org.apache.iceberg</groupId>
+                            <artifactId>iceberg-hive</artifactId>
+                        </dependency>
+                    </requiresUnpack>
                 </configuration>
+
             </plugin>
         </plugins>
     </build>
