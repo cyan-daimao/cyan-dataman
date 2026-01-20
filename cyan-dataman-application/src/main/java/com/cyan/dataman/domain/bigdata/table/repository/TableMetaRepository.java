@@ -2,7 +2,6 @@ package com.cyan.dataman.domain.bigdata.table.repository;
 
 import com.cyan.dataman.domain.bigdata.table.TableMeta;
 import com.cyan.dataman.domain.bigdata.table.TableSnapshot;
-import com.cyan.dataman.enums.DataLayer;
 
 import java.util.List;
 
@@ -17,10 +16,11 @@ public interface TableMetaRepository {
     /**
      * 获取表
      *
+     * @param catalog 目录
      * @param dbs 库列表
      * @return 表列表
      */
-    List<TableMeta> listTableByDb(List<DataLayer> dbs);
+    List<TableMeta> listTableByDb(String catalog,List<String> dbs);
 
     /**
      * 创建表
@@ -33,11 +33,12 @@ public interface TableMetaRepository {
     /**
      * 获取表
      *
+     * @param catalog 目录
      * @param db   库
-     * @param name 表名
+     * @param tbl 表名
      * @return 表
      */
-    TableMeta get(DataLayer db, String name);
+    TableMeta get(String catalog, String db, String tbl);
 
     /**
      * 获取表快照数据
@@ -46,5 +47,14 @@ public interface TableMetaRepository {
      * @param name 表名
      * @return 表快照数据
      */
-    List<TableSnapshot> snapshots(DataLayer db, String name);
+    List<TableSnapshot> snapshots(String db, String name);
+
+    /**
+     * 删除表
+     *
+     * @param catalog 目录
+     * @param db   库
+     * @param tbl 表名
+     */
+    void delete(String catalog, String db, String tbl);
 }

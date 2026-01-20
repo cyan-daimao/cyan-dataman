@@ -1,38 +1,30 @@
-package com.cyan.dataman.domain.bigdata.table.query;
+package com.cyan.dataman.domain.bigdata.table.cmd;
 
-import com.cyan.arch.common.api.Pagination;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 /**
- * 表查询参数
- *
+ * 表删除命令
  * @author cy.Y
- * @since v1.0.0
+ * @since 1.0.0
  */
-@EqualsAndHashCode(callSuper = true)
+@Data
 @AllArgsConstructor
 @NoArgsConstructor
 @Accessors(chain = true)
-@Data
-public class TableQuery extends Pagination {
-
+public class TableMetaDeleteCmd {
     /**
      * 目录
      */
     private String catalog;
-
     /**
-     * 数据库
+     * 库名
      */
     private String db;
-
     /**
      * 表名
      */
     private String tbl;
-
 }

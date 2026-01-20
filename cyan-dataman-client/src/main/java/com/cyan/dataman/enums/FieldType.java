@@ -25,6 +25,7 @@ public enum FieldType {
     UUID("UUID", "UUID类型"),
     FIXED("FIXED", "固定长度字节数组类型"),
     BINARY("BINARY", "二进制类型"),
+    BYTE("BYTE", "字节类型"),
     DECIMAL("DECIMAL", "十进制类型"),
     GEOMETRY("GEOMETRY", "几何类型"),
     GEOGRAPHY("GEOGRAPHY", "地理位置类型"),

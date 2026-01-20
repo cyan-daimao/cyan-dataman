@@ -7,9 +7,6 @@ import com.cyan.dataman.domain.bigdata.table.query.TableDataListQuery;
 import com.cyan.dataman.domain.bigdata.table.repository.TableDataRepository;
 import com.cyan.dataman.enums.UploadFileType;
 import com.cyan.dataman.infra.bigdata.table.handler.upload.TableDataUploadHandler;
-import org.apache.iceberg.Table;
-import org.apache.iceberg.catalog.Catalog;
-import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,14 +25,12 @@ public class TableDataRepositoryImpl implements TableDataRepository {
 
     private final Map<UploadFileType, TableDataUploadHandler> uploadHandlerMap = new EnumMap<>(UploadFileType.class);
     private final SparkSession sparkSession;
-    private final Catalog icebergCatalog;
 
 
     @Autowired
-    public TableDataRepositoryImpl(List<TableDataUploadHandler> uploadHandlers, SparkSession sparkSession, Catalog icebergCatalog) {
+    public TableDataRepositoryImpl(List<TableDataUploadHandler> uploadHandlers, SparkSession sparkSession) {
         uploadHandlers.forEach(uploadHandler -> uploadHandlerMap.put(uploadHandler.getType(), uploadHandler));
         this.sparkSession = sparkSession;
-        this.icebergCatalog = icebergCatalog;
     }
 
 
@@ -78,13 +73,13 @@ public class TableDataRepositoryImpl implements TableDataRepository {
      */
     @Override
     public void snapshots(TableDataListQuery query) {
-        TableIdentifier tableIdentifier = TableIdentifier.of(query.getDb().getCode(), query.getName());
-        Table table = icebergCatalog.loadTable(tableIdentifier);
-        table.snapshots().forEach(snapshot -> System.out.printf(
-                "快照 ID: %d, 创建时间: %s, 数据行数: %s%n",
-                snapshot.snapshotId(),
-                snapshot.timestampMillis(),  // 时间戳（可转成日期）
-                snapshot.summary().get("total-records")  // 该版本的数据行数
-        ));
+//        TableIdentifier tableIdentifier = TableIdentifier.of(query.getCatalog(),query.getDb(), query.getName());
+//        Table table = icebergCatalog.loadTable(tableIdentifier);
+//        table.snapshots().forEach(snapshot -> System.out.printf(
+//                "快照 ID: %d, 创建时间: %s, 数据行数: %s%n",
+//                snapshot.snapshotId(),
+//                snapshot.timestampMillis(),  // 时间戳（可转成日期）
+//                snapshot.summary().get("total-records")  // 该版本的数据行数
+//        ));
     }
 }

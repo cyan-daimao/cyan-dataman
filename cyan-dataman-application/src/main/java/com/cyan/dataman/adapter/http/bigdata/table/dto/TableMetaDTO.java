@@ -1,6 +1,5 @@
 package com.cyan.dataman.adapter.http.bigdata.table.dto;
 
-import com.cyan.dataman.enums.DataLayer;
 import com.cyan.dataman.enums.PartitionType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -23,7 +22,7 @@ public class TableMetaDTO {
     /**
      * 表名
      */
-    private String name;
+    private String tbl;
 
     /**
      * 目录
@@ -33,7 +32,7 @@ public class TableMetaDTO {
     /**
      * 数据库名
      */
-    private DataLayer db;
+    private String db;
 
     /**
      * 表描述

@@ -2,7 +2,7 @@ package com.cyan.dataman.application.bigdata.table.service;
 
 import com.cyan.dataman.application.bigdata.table.bo.TableMetaBO;
 import com.cyan.dataman.domain.bigdata.table.cmd.TableMetaCmd;
-import com.cyan.dataman.enums.DataLayer;
+import com.cyan.dataman.domain.bigdata.table.cmd.TableMetaDeleteCmd;
 
 import java.util.List;
 
@@ -24,17 +24,19 @@ public interface TableMetaService {
     /**
      * 获取表列表
      *
+     * @param catalog 目录
      * @param db 库名
      */
-    List<TableMetaBO> listTableByDb(List<DataLayer> db);
+    List<TableMetaBO> listTableByDb(String catalog,List<String> db);
 
     /**
      * 获取表
      *
+     * @param catalog 目录
      * @param db   库名
      * @param name 表名
      */
-    TableMetaBO get(DataLayer db, String name);
+    TableMetaBO get(String catalog, String db, String name);
 
     /**
      * 获取表快照数据
@@ -42,5 +44,12 @@ public interface TableMetaService {
      * @param db   库名
      * @param name 表名
      */
-    TableMetaBO snapshots(DataLayer db, String name);
+    TableMetaBO snapshots(String catalog, String db, String name);
+
+    /**
+     * 删除表
+     *
+     * @param cmd 删除表命令
+     */
+    void delete(TableMetaDeleteCmd cmd);
 }

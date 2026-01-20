@@ -1,8 +1,6 @@
 package com.cyan.dataman.domain.bigdata.table.query;
 
-import com.cyan.dataman.enums.DataLayer;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -19,11 +17,15 @@ import lombok.experimental.Accessors;
 @Data
 @Accessors(chain = true)
 public class TableDataListQuery {
+
+    @NotBlank(message = "目录不能为空")
+    private String catalog;
+
     /**
      * 库
      */
-    @NotNull(message = "库不能为空")
-    private DataLayer db;
+    @NotBlank(message = "库不能为空")
+    private String db;
     /**
      * 表
      */
@@ -39,7 +41,7 @@ public class TableDataListQuery {
     /**
      * 获取完整表名
      */
-    public  String fullName(){
-        return db.getCode() + "." + name;
+    public String fullName() {
+        return catalog + "." + db + "." + name;
     }
 }

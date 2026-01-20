@@ -25,7 +25,7 @@ public class TableMetaBOAssembler {
     }
 
     public void assemblerSnapshots(TableMetaBO tableMetaBO) {
-        List<TableSnapshot> snapshots = tableMetaRepository.snapshots(tableMetaBO.getDb(), tableMetaBO.getName());
+        List<TableSnapshot> snapshots = tableMetaRepository.snapshots(tableMetaBO.getDb(), tableMetaBO.getTbl());
         List<TableSnapshotBO> snapshotBOS = Optional.ofNullable(snapshots).orElse(List.of()).stream().map(TableMetaAppConvert.INSTANCE::toTableSnapshotBO).toList();
         tableMetaBO.setSnapshots(snapshotBOS);
     }

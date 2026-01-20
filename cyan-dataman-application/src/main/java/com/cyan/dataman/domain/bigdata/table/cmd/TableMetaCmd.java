@@ -1,6 +1,5 @@
 package com.cyan.dataman.domain.bigdata.table.cmd;
 
-import com.cyan.dataman.enums.DataLayer;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,13 +25,19 @@ public class TableMetaCmd {
      * 表名
      */
     @NotBlank(message = "表名不能为空")
-    private String name;
+    private String tbl;
+
+    /**
+     * catalog
+     */
+    @NotNull(message = "catalog不能为空")
+    private String catalog;
 
     /**
      * 数据库名
      */
     @NotNull(message = "数据库名不能为空")
-    private DataLayer db;
+    private String db;
 
     /**
      * 表描述

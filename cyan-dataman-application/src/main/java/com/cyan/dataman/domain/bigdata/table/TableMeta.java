@@ -1,7 +1,6 @@
 package com.cyan.dataman.domain.bigdata.table;
 
 import com.cyan.dataman.domain.bigdata.table.repository.TableMetaRepository;
-import com.cyan.dataman.enums.DataLayer;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -28,12 +27,12 @@ public class TableMeta {
     /**
      * 表名
      */
-    private String name;
+    private String tbl;
 
     /**
      * 数据库名
      */
-    private DataLayer db;
+    private String db;
 
     /**
      * 全名

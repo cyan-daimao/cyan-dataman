@@ -20,3 +20,13 @@ spring:
     username: root
     password: 627459859@qq.com
     url: jdbc:mysql://10.0.0.2:3306/cyan_honeycomb
+
+
+# Gravitino 配置
+gravitino:
+  server:
+    url: http://gravitino.cyan.com  # Gravitino 服务地址
+  catalog:
+    name: iceberg_catalog       # 要创建/使用的catalog名称
+    type: ICEBERG               # catalog类型
+    comment: "Iceberg catalog managed by Gravitino"
