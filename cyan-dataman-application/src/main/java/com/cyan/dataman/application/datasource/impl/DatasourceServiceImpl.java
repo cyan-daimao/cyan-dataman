@@ -33,17 +33,6 @@ public class DatasourceServiceImpl implements DatasourceService {
     }
 
     /**
-     * 获取数据源-库
-     *
-     */
-    @Override
-    public List<DatasourceSchemaBO> listDB(@Validated DatasourceTableQuery query) {
-        DatasourceRepository datasourceRepository = repositoryMap.get(query.getStorageType());
-        List<DatasourceSchema> list = datasourceRepository.listDB();
-        return Optional.ofNullable(list).orElse(List.of()).stream().map(DatasourceAppConvert.INSTANCE::toDatasourceSchemaBO).toList();
-    }
-
-    /**
      * 获取数据源-表
      *
      */
@@ -52,5 +41,16 @@ public class DatasourceServiceImpl implements DatasourceService {
         DatasourceRepository datasourceRepository = repositoryMap.get(query.getStorageType());
         List<DatasourceTable> datasourceTables = datasourceRepository.listTable(query);
         return Optional.ofNullable(datasourceTables).orElse(List.of()).stream().map(DatasourceAppConvert.INSTANCE::toDatasourceTableBO).toList();
+    }
+
+    /**
+     * 获取数据源-库
+     *
+     */
+    @Override
+    public List<DatasourceSchemaBO> listSchemas(StorageType storageType) {
+        DatasourceRepository datasourceRepository = repositoryMap.get(storageType);
+        List<DatasourceSchema> list = datasourceRepository.listSchemas();
+        return Optional.ofNullable(list).orElse(List.of()).stream().map(DatasourceAppConvert.INSTANCE::toDatasourceSchemaBO).toList();
     }
 }

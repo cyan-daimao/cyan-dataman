@@ -1,23 +1,21 @@
-package com.cyan.dataman.adapter.http.datasource.dto;
+package com.cyan.dataman.domain.datasource.valobj;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 /**
- * 数据源-库
+ * mysql字段
+ *
  * @author cy.Y
  * @since 1.0.0
  */
+@EqualsAndHashCode(callSuper = true)
+@Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Data
 @Accessors(chain = true)
-public class DatasourceSchemaDTO {
-
-    /**
-     * 库名
-     */
-    private String db;
+public class MySQLFieldValObj extends FieldValObj {
 }

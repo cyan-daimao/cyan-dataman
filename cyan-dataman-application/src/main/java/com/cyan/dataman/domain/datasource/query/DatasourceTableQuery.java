@@ -1,6 +1,7 @@
 package com.cyan.dataman.domain.datasource.query;
 
 import com.cyan.dataman.enums.StorageType;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -21,16 +22,12 @@ public class DatasourceTableQuery {
     /**
      * 数据库名称
      */
+    @NotBlank(message = "数据库名称不能为空")
     private String db;
-
-    /**
-     * 表名称
-     */
-    private String name;
 
     /**
      * 存储类型
      */
-    @NotNull
+    @NotNull(message = "存储类型不能为空")
     private StorageType storageType;
 }

@@ -24,27 +24,6 @@ import java.util.Optional;
  */
 @Repository
 public class MySQLRepositoryImpl implements DatasourceRepository {
-    /**
-     * 获取数据源表列表
-     *
-     * @return 数据源表列表
-     */
-    @Override
-    public List<DatasourceSchema> listDB() {
-        String sql = "SHOW DATABASES";
-        try {
-            List<Map<String, Object>> maps = JDBCUtil.queryForList(sql);
-            return Optional.of(maps).orElse(List.of()).stream().map(map -> {
-                String db = "";
-                for (Object value : map.values()) {
-                    db = Convert.toStr(value);
-                }
-                return new DatasourceSchema().setDb(db);
-            }).filter(db -> db.getDb().contains("cyan_")).toList();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
 
     /**
      * 获取数据源类型
@@ -72,6 +51,26 @@ public class MySQLRepositoryImpl implements DatasourceRepository {
             return Optional.of(maps).orElse(List.of()).stream().map(map ->
                     new DatasourceTable().setDb(query.getDb()).setName(Convert.toStr(map.get("TABLE_NAME")))
             ).toList();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 获取数据源-库
+     */
+    @Override
+    public List<DatasourceSchema> listSchemas() {
+        String sql = "SHOW DATABASES";
+        try {
+            List<Map<String, Object>> maps = JDBCUtil.queryForList(sql);
+            return Optional.of(maps).orElse(List.of()).stream().map(map -> {
+                String db = "";
+                for (Object value : map.values()) {
+                    db = Convert.toStr(value);
+                }
+                return new DatasourceSchema().setDb(db);
+            }).filter(db -> db.getDb().contains("cyan_")).toList();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

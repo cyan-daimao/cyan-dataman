@@ -1,4 +1,4 @@
-package com.cyan.dataman.domain.bigdata.table.cmd;
+package com.cyan.dataman.adapter.http.datasource.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -6,25 +6,22 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 /**
- * 表删除命令
+ * 字段
  * @author cy.Y
  * @since 1.0.0
  */
-@Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Data
 @Accessors(chain = true)
-public class TableMetaDeleteCmd {
+public class TableFieldDTO {
     /**
-     * 目录
+     * 字段名称
      */
-    private String catalog;
+    private String name;
+
     /**
-     * 库名
+     * 字段类型
      */
-    private String db;
-    /**
-     * 表名
-     */
-    private String tbl;
+    private String type;
 }

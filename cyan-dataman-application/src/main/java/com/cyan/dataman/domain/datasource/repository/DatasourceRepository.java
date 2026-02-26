@@ -16,13 +16,6 @@ import java.util.List;
 public interface DatasourceRepository {
 
     /**
-     * 获取数据源表列表
-     *
-     * @return 数据源表列表
-     */
-    List<DatasourceSchema> listDB();
-
-    /**
      * 获取数据源类型
      *
      * @return 数据源类型
@@ -34,4 +27,9 @@ public interface DatasourceRepository {
      *
      */
     List<DatasourceTable> listTable(DatasourceTableQuery query);
+
+    /**
+     * 获取数据源-库
+     */
+    List<DatasourceSchema> listSchemas();
 }
