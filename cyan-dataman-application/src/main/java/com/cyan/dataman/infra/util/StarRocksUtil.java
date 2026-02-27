@@ -1,21 +1,26 @@
 package com.cyan.dataman.infra.util;
 
+import com.cyan.arch.common.util.Convert;
+import lombok.extern.slf4j.Slf4j;
+
 import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * JDBC 工具类，用于获取数据库连接和关闭资源。
- * 注意：实际项目中建议使用连接池（如 HikariCP、Druid）替代 DriverManager。
+ * SR工具类
+ * @author cy.Y
+ * @since 1.0.0
  */
-public class JDBCUtil {
+@Slf4j
+public class StarRocksUtil {
 
     // 数据库连接参数（建议从配置文件读取）
-    private static final String URL = "jdbc:mysql://10.0.0.2:3306/?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
+    private static final String URL = "jdbc:mysql://10.0.0.2:30040/?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
     private static final String USERNAME = "root";
-    private static final String PASSWORD = "627459859@qq.com";
 
     static {
         try {
@@ -46,6 +51,9 @@ public class JDBCUtil {
                 for (int i = 1; i <= columnCount; i++) {
                     String columnName = metaData.getColumnLabel(i); // 使用别名（AS）
                     Object value = rs.getObject(i);
+                    if (value instanceof LocalDateTime){
+                        value = Convert.toDateTimeStr(value);
+                    }
                     row.put(columnName, value);
                 }
                 result.add(row);
@@ -95,7 +103,7 @@ public class JDBCUtil {
      * 获取数据库连接
      */
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL, USERNAME, PASSWORD);
+        return DriverManager.getConnection(URL, USERNAME, "");
     }
 
     /**
@@ -106,7 +114,7 @@ public class JDBCUtil {
             try {
                 rs.close();
             } catch (SQLException e) {
-                e.printStackTrace(); // 或使用日志框架
+                log.error("Failed to close ResultSet: {}", e.getMessage());
             }
         }
     }
@@ -119,7 +127,7 @@ public class JDBCUtil {
             try {
                 stmt.close();
             } catch (SQLException e) {
-                e.printStackTrace();
+                log.error("Failed to close Statement: {}", e.getMessage());
             }
         }
     }
@@ -132,7 +140,7 @@ public class JDBCUtil {
             try {
                 conn.close();
             } catch (SQLException e) {
-                e.printStackTrace();
+                log.error("Failed to close Connection: {}", e.getMessage());
             }
         }
     }

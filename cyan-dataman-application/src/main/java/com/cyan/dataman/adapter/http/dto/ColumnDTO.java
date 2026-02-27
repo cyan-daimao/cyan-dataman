@@ -1,12 +1,13 @@
-package com.cyan.dataman.domain.datasource.valobj;
+package com.cyan.dataman.adapter.http.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
+import org.apache.gravitino.rel.types.Type;
 
 /**
- * 字段值对象
+ * 字段信息
  * @author cy.Y
  * @since 1.0.0
  */
@@ -14,7 +15,7 @@ import lombok.experimental.Accessors;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public abstract class FieldValObj {
+public class ColumnDTO {
     /**
      * 字段名称
      */
@@ -23,10 +24,25 @@ public abstract class FieldValObj {
     /**
      * 字段类型
      */
-    private String type;
+    private Type.Name type;
 
     /**
      * 字段注释
      */
     private String comment;
+
+    /**
+     * 字段是否为空
+     */
+    private Boolean nullable;
+
+    /**
+     * 字段是否自增
+     */
+    private Boolean autoIncrement;
+
+    /**
+     * 字段默认值
+     */
+    private String defaultValue;
 }

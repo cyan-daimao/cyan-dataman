@@ -1,12 +1,14 @@
-package com.cyan.dataman.adapter.http.datasource.dto;
+package com.cyan.dataman.adapter.http.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
+import java.util.List;
+
 /**
- * 字段
+ * 索引信息
  * @author cy.Y
  * @since 1.0.0
  */
@@ -14,14 +16,19 @@ import lombok.experimental.Accessors;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public class TableFieldDTO {
+public class IndexDTO {
     /**
-     * 字段名称
+     * 索引名称
      */
     private String name;
 
     /**
-     * 字段类型
+     * 索引类型
      */
-    private String type;
+    private String indexType;
+
+    /**
+     * 索引字段
+     */
+    private List<String> fieldNames;
 }
