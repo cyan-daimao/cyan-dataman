@@ -22,6 +22,10 @@
             <groupId>com.cyan</groupId>
             <artifactId>cyan-dataman-client</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.cyan</groupId>
+            <artifactId>cyan-employee-login</artifactId>
+        </dependency>
         <!-- OpenCSV -->
         <dependency>
             <groupId>com.opencsv</groupId>

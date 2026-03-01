@@ -20,6 +20,7 @@
         <arch.version>1.0-SNAPSHOT</arch.version>
         <cyan-bigdata-base.version>1.0-SNAPSHOT</cyan-bigdata-base.version>
         <cyan-dataman-client.version>1.0-SNAPSHOT</cyan-dataman-client.version>
+        <cyan-employee-login.version>1.0-SNAPSHOT</cyan-employee-login.version>
         <lombok.version>1.18.42</lombok.version>
         <scala.binary.version>2.12</scala.binary.version>
         <!-- 数据库 -->
@@ -45,6 +46,11 @@
                 <groupId>com.cyan</groupId>
                 <artifactId>cyan-dataman-client</artifactId>
                 <version>${cyan-dataman-client.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.cyan</groupId>
+                <artifactId>cyan-employee-login</artifactId>
+                <version>${cyan-employee-login.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.projectlombok</groupId>
