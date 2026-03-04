@@ -1,4 +1,4 @@
-package com.cyan.dataman.adapter.http.dto;
+package com.cyan.dataman.domain.metadata.query;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -8,7 +8,7 @@ import lombok.experimental.Accessors;
 import java.util.List;
 
 /**
- * 索引信息
+ * 元数据列表查询
  * @author cy.Y
  * @since 1.0.0
  */
@@ -16,19 +16,10 @@ import java.util.List;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public class IndexDTO {
-    /**
-     * 索引名称
-     */
-    private String name;
+public class MetadataTableListQuery {
 
     /**
-     * 索引类型
+     * 主键
      */
-    private String indexType;
-
-    /**
-     * 索引字段
-     */
-    private List<String> fieldNames;
+    private List<String> ids;
 }

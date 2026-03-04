@@ -1,4 +1,4 @@
-package com.cyan.dataman.adapter.http.dto;
+package com.cyan.dataman.adapter.metadata.http.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

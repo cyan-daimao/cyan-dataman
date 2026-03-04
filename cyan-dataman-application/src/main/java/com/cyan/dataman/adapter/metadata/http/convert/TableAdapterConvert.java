@@ -1,9 +1,9 @@
-package com.cyan.dataman.adapter.http.convert;
+package com.cyan.dataman.adapter.metadata.http.convert;
 
 import com.cyan.arch.common.mapstruct.MapstructConvert;
-import com.cyan.dataman.adapter.http.dto.ColumnDTO;
-import com.cyan.dataman.adapter.http.dto.IndexDTO;
-import com.cyan.dataman.adapter.http.dto.TableDTO;
+import com.cyan.dataman.adapter.metadata.http.dto.ColumnDTO;
+import com.cyan.dataman.adapter.metadata.http.dto.IndexDTO;
+import com.cyan.dataman.adapter.metadata.http.dto.TableDTO;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.expressions.Expression;
