@@ -1,4 +1,4 @@
-package com.cyan.dataman.adapter.metadata.http.dto;
+package com.cyan.dataman.domain.metadata.valobj;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -14,7 +14,7 @@ import lombok.experimental.Accessors;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public class SchemaDTO {
+public class SchemaValObj {
     /**
      * 库名称
      */

@@ -1,6 +1,8 @@
 package com.cyan.dataman.application.metadata.bo;
 
 import com.cyan.dataman.enums.HeatLevel;
+import com.cyan.dataman.enums.OnlineStatus;
+import com.cyan.dataman.enums.SecretLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -24,7 +26,7 @@ public class MetadataTableBO {
     /**
      * 主键
      */
-    private Long id;
+    private String id;
 
     /**
      * 表名
@@ -65,6 +67,16 @@ public class MetadataTableBO {
      * 热度等级
      */
     private HeatLevel heatLevel;
+
+    /**
+     * 秘密等级
+     */
+    private SecretLevel secretLevel;
+
+    /**
+     * 在线状态
+     */
+    private OnlineStatus onlineStatus;
 
     /**
      * 创建时间

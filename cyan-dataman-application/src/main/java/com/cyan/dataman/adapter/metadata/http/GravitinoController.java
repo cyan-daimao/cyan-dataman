@@ -3,7 +3,7 @@ package com.cyan.dataman.adapter.metadata.http;
 import com.cyan.arch.common.api.Response;
 import com.cyan.dataman.adapter.metadata.http.convert.TableAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.CatalogDTO;
-import com.cyan.dataman.adapter.metadata.http.dto.SchemaDTO;
+import com.cyan.dataman.domain.metadata.valobj.SchemaValObj;
 import com.cyan.dataman.adapter.metadata.http.dto.TableDTO;
 import com.cyan.dataman.infra.util.StarRocksUtil;
 import org.apache.gravitino.Catalog;
@@ -54,9 +54,9 @@ public class GravitinoController {
      * 获取库列表
      */
     @GetMapping("/catalog/{catalog}/schemas")
-    public Response<List<SchemaDTO>> list(@PathVariable String catalog) {
+    public Response<List<SchemaValObj>> list(@PathVariable String catalog) {
         SupportsSchemas schemas = gravitinoClient.loadCatalog(catalog).asSchemas();
-        List<SchemaDTO> list = Arrays.stream(Optional.ofNullable(schemas.listSchemas()).orElse(new String[0])).map(schema -> new SchemaDTO().setName(schema)).toList();
+        List<SchemaValObj> list = Arrays.stream(Optional.ofNullable(schemas.listSchemas()).orElse(new String[0])).map(schema -> new SchemaValObj().setName(schema)).toList();
         return Response.success(list);
     }
 

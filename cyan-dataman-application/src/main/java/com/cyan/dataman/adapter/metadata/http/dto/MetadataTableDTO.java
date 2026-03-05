@@ -1,5 +1,6 @@
 package com.cyan.dataman.adapter.metadata.http.dto;
 
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.HeatLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -20,6 +21,11 @@ import java.time.LocalDateTime;
 @Data
 @Accessors(chain = true)
 public class MetadataTableDTO {
+
+    /**
+     * 表
+     */
+    private TableValObj table;
 
     /**
      * 主键

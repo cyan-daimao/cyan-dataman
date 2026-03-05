@@ -56,7 +56,6 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     public List<MetadataTable> list(MetadataTableListQuery query) {
         LambdaQueryWrapper<MetadataTableDO> queryWrapper = new LambdaQueryWrapper<MetadataTableDO>()
                 .in(CollUtils.isNotEmpty(query.getIds()), MetadataTableDO::getId, query.getIds());
-
         List<MetadataTableDO> metadataTables = metadataTableMapper.selectList(queryWrapper);
         return Optional.ofNullable(metadataTables).orElse(List.of()).stream().map(MetadataTableInfraConvert.INSTANCE::toMetadataTable).toList();
     }
@@ -66,7 +65,9 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
      */
     @Override
     public MetadataTable save(MetadataTable table) {
-        return null;
+        MetadataTableDO metadataTableDO = MetadataTableInfraConvert.INSTANCE.toMetadataTableDO(table);
+        metadataTableMapper.insert(metadataTableDO);
+        return findById(metadataTableDO.getId()+"");
     }
 
     /**

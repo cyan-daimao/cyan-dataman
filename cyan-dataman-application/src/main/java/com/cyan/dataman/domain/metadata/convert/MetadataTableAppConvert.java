@@ -1,21 +1,20 @@
-package com.cyan.dataman.application.metadata.convert;
+package com.cyan.dataman.domain.metadata.convert;
 
-import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
+import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.MetadataTable;
 import org.mapstruct.Mapper;
 import org.mapstruct.factory.Mappers;
 
 /**
- * 元数据转换
+ *
  * @author cy.Y
  * @since 1.0.0
  */
-@Mapper
+@Mapper(uses = MapstructConvert.class)
 public interface MetadataTableAppConvert {
-    MetadataTableAppConvert INSTANCE = Mappers.getMapper(MetadataTableAppConvert.class);
 
-    MetadataTableBO toMetadataTableBO(MetadataTable metadataTable);
+    MetadataTableAppConvert INSTANCE = Mappers.getMapper(MetadataTableAppConvert.class);
 
     MetadataTable toMetadataTable(MetadataTableCmd cmd);
 }

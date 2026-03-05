@@ -1,12 +1,18 @@
 package com.cyan.dataman.domain.metadata;
 
+import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
+import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import com.cyan.dataman.enums.HeatLevel;
+import com.cyan.dataman.enums.OnlineStatus;
+import com.cyan.dataman.enums.SecretLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 
 /**
@@ -24,7 +30,7 @@ public class MetadataTable {
     /**
      * 主键
      */
-    private Long id;
+    private String id;
 
     /**
      * 表名
@@ -67,6 +73,16 @@ public class MetadataTable {
     private HeatLevel heatLevel;
 
     /**
+     * 秘密等级
+     */
+    private SecretLevel secretLevel;
+
+    /**
+     * 在线状态
+     */
+    private OnlineStatus onlineStatus;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;
@@ -80,4 +96,21 @@ public class MetadataTable {
      * 删除时间
      */
     private LocalDateTime deletedAt;
+
+    /**
+     * 字段
+     */
+    private List<ColumnValObj> columns;
+
+    /**
+     * 索引
+     */
+    private List<IndexValObj> indexes;
+
+    /**
+     * 保存
+     */
+    public MetadataTable save(MetadataTableRepository metadataTableRepository) {
+        return metadataTableRepository.save(this);
+    }
 }

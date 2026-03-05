@@ -6,9 +6,11 @@ import com.cyan.dataman.adapter.metadata.http.convert.MetadataTableAdapterConver
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
+import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,6 +62,24 @@ public class MetadataTableController {
         return Response.success(metadataTableDTO);
     }
 
+    /**
+     * 创建表
+     */
+    @PostMapping
+    public Response<MetadataTableDTO> save(@RequestBody @Valid MetadataTableCmd cmd) {
+       MetadataTableBO metadataTableBO = metadataTableService.save(cmd);
+        MetadataTableDTO metadataTableDTO = MetadataTableAdapterConvert.INSTANCE.toMetadataTableDTO(metadataTableBO);
+        return Response.success(metadataTableDTO);
+    }
 
+    /**
+     * 更新表
+     */
+    @PutMapping("/{id}")
+    public Response<MetadataTableDTO> update(@PathVariable String id, @RequestBody @Valid MetadataTableCmd cmd) {
+        MetadataTableBO metadataTableBO = metadataTableService.update(id,cmd);
+        MetadataTableDTO metadataTableDTO = MetadataTableAdapterConvert.INSTANCE.toMetadataTableDTO(metadataTableBO);
+        return Response.success(metadataTableDTO);
+    }
 
 }

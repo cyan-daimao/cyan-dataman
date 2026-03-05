@@ -1,8 +1,8 @@
 package com.cyan.dataman.adapter.metadata.http.convert;
 
 import com.cyan.arch.common.mapstruct.MapstructConvert;
-import com.cyan.dataman.adapter.metadata.http.dto.ColumnDTO;
-import com.cyan.dataman.adapter.metadata.http.dto.IndexDTO;
+import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import com.cyan.dataman.adapter.metadata.http.dto.TableDTO;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Table;
@@ -29,7 +29,7 @@ public interface TableAdapterConvert {
 
     default TableDTO tableToTableDTO(Table table) {
         //字段
-        List<ColumnDTO> columns = Arrays.stream(Optional.ofNullable(table.columns()).orElse(new Column[0])).map(column -> {
+        List<ColumnValObj> columns = Arrays.stream(Optional.ofNullable(table.columns()).orElse(new Column[0])).map(column -> {
                             String defaultValue = "";
                             Expression expression = column.defaultValue();
                             if (expression instanceof Literals.LiteralImpl literal) {
@@ -38,7 +38,7 @@ public interface TableAdapterConvert {
                             if (expression instanceof FunctionExpression.FuncExpressionImpl funcExpression) {
                                 defaultValue = funcExpression.functionName();
                             }
-                            return new ColumnDTO()
+                            return new ColumnValObj()
                                     .setName(column.name())
                                     .setType(column.dataType().name())
                                     .setDefaultValue(defaultValue)
@@ -51,8 +51,8 @@ public interface TableAdapterConvert {
                 .toList();
         //索引
         Index[] index = table.index();
-        List<IndexDTO> indexes = Arrays.stream(Optional.ofNullable(index).orElse(new Index[0])).map(idx ->
-                        new IndexDTO()
+        List<IndexValObj> indexes = Arrays.stream(Optional.ofNullable(index).orElse(new Index[0])).map(idx ->
+                        new IndexValObj()
                                 .setName(idx.name())
                                 .setIndexType(idx.type().name())
                                 .setFieldNames(Arrays.stream(idx.fieldNames()).map(fieldName -> fieldName[0]).toList())

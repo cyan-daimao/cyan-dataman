@@ -16,5 +16,7 @@ public interface MetadataTableInfraConvert {
 
     MetadataTableInfraConvert INSTANCE = Mappers.getMapper(MetadataTableInfraConvert.class);
 
-    MetadataTable toMetadataTable(MetadataTableDO bo);
+    MetadataTable toMetadataTable(MetadataTableDO metadataTableDO);
+
+    MetadataTableDO toMetadataTableDO(MetadataTable table);
 }

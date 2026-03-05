@@ -1,4 +1,4 @@
-package com.cyan.dataman.adapter.metadata.http.dto;
+package com.cyan.dataman.domain.metadata.valobj;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -16,7 +16,7 @@ import java.util.List;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public class IndexDTO {
+public class IndexValObj {
     /**
      * 索引名称
      */

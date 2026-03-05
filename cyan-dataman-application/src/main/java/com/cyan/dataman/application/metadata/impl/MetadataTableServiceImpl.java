@@ -3,6 +3,7 @@ package com.cyan.dataman.application.metadata.impl;
 import com.cyan.arch.common.api.Page;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
+import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.application.metadata.convert.MetadataTableAppConvert;
 import com.cyan.dataman.domain.metadata.MetadataTable;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
@@ -45,6 +46,26 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     public MetadataTableBO findById(String id) {
         MetadataTable metadataTable = metadataTableRepository.findById(id);
         return MetadataTableAppConvert.INSTANCE.toMetadataTableBO(metadataTable);
+    }
+
+    /**
+     * 创建表
+     *
+     */
+    @Override
+    public MetadataTableBO save(MetadataTableCmd cmd) {
+        MetadataTable metadataTable = MetadataTableAppConvert.INSTANCE.toMetadataTable(cmd);
+        metadataTable = metadataTable.save(metadataTableRepository);
+        return MetadataTableAppConvert.INSTANCE.toMetadataTableBO(metadataTable);
+    }
+
+    /**
+     * 更新表
+     *
+     */
+    @Override
+    public MetadataTableBO update(String id, MetadataTableCmd cmd) {
+        return null;
     }
 
     /**

@@ -1,7 +1,5 @@
-package com.cyan.dataman.adapter.metadata.http.dto;
+package com.cyan.dataman.domain.metadata.valobj;
 
-import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
-import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -10,7 +8,7 @@ import lombok.experimental.Accessors;
 import java.util.List;
 
 /**
- * 表对象
+ * 表值对象
  * @author cy.Y
  * @since 1.0.0
  */
@@ -18,7 +16,8 @@ import java.util.List;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public class TableDTO {
+public class TableValObj {
+
     /**
      * 目录
      */

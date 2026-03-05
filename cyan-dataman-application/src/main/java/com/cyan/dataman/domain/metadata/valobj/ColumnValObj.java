@@ -1,4 +1,4 @@
-package com.cyan.dataman.adapter.metadata.http.dto;
+package com.cyan.dataman.domain.metadata.valobj;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -15,7 +15,7 @@ import org.apache.gravitino.rel.types.Type;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-public class ColumnDTO {
+public class ColumnValObj {
     /**
      * 字段名称
      */

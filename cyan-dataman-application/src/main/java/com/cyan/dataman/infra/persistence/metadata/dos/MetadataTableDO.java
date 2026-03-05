@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.cyan.dataman.enums.HeatLevel;
+import com.cyan.dataman.enums.OnlineStatus;
+import com.cyan.dataman.enums.SecretLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -68,7 +70,7 @@ public class MetadataTableDO {
     @TableField(value = "access_count")
     private String accessCount;
 
-/**
+    /**
      * 最后访问时间
      */
     @TableField(value = "last_access_time")
@@ -79,6 +81,18 @@ public class MetadataTableDO {
      */
     @TableField(value = "heat_level")
     private HeatLevel heatLevel;
+
+    /**
+     * 密级 1-4
+     */
+    @TableField(value = "secret_level")
+    private SecretLevel secretLevel;
+
+    /**
+     * 线上状态
+     */
+    @TableField(value = "online_status")
+    private OnlineStatus onlineStatus;
 
     /**
      * 创建时间
