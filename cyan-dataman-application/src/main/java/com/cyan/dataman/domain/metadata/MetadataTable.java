@@ -3,6 +3,7 @@ package com.cyan.dataman.domain.metadata;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.HeatLevel;
 import com.cyan.dataman.enums.OnlineStatus;
 import com.cyan.dataman.enums.SecretLevel;
@@ -98,14 +99,9 @@ public class MetadataTable {
     private LocalDateTime deletedAt;
 
     /**
-     * 字段
+     * 字段 gravitino  表
      */
-    private List<ColumnValObj> columns;
-
-    /**
-     * 索引
-     */
-    private List<IndexValObj> indexes;
+    private TableValObj table;
 
     /**
      * 保存

@@ -1,6 +1,7 @@
 package com.cyan.dataman.application.metadata.cmd;
 
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.DataLayer;
 import com.cyan.dataman.enums.HeatLevel;
 import com.cyan.dataman.enums.OnlineStatus;
@@ -76,6 +77,6 @@ public class MetadataTableCmd {
     /**
      * 表字段
      */
-    @NotEmpty(message = "表字段不能为空")
-    private List<ColumnValObj> columns;
+    @NotNull(message = "表结构不能为空")
+    private TableValObj tableValObj;
 }

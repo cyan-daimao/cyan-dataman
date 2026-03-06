@@ -39,7 +39,7 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
                 .eq(StrUtils.isNotBlank(query.getSubjectCode()), MetadataTableDO::getSubjectCode, query.getSubjectCode())
                 .eq(StrUtils.isNotBlank(query.getOwner()), MetadataTableDO::getOwner, query.getOwner())
                 .and(q ->
-                        q.like(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getName, query.getName())
+                        q.like(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
                                 .or()
                                 .like(StrUtils.isNotBlank(query.getComment()), MetadataTableDO::getComment, query.getComment())
                 );

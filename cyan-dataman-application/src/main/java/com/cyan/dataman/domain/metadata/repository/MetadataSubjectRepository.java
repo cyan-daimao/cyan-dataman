@@ -1,6 +1,7 @@
 package com.cyan.dataman.domain.metadata.repository;
 
 import com.cyan.dataman.domain.metadata.MetadataSubject;
+import com.cyan.dataman.domain.metadata.query.MetadataSubjectFindQuery;
 
 import java.util.List;
 
@@ -35,4 +36,10 @@ public interface MetadataSubjectRepository {
      * 删除主题
      */
     void deleteById(String id);
+
+    /**
+     * 查询主题
+     *
+     */
+    MetadataSubject find(MetadataSubjectFindQuery query);
 }

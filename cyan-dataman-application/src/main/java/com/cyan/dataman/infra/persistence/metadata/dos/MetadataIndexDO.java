@@ -4,8 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.cyan.dataman.enums.HeatLevel;
-import com.cyan.dataman.enums.OnlineStatus;
+import com.cyan.dataman.enums.ColumnDataType;
 import com.cyan.dataman.enums.SecretLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -16,7 +15,7 @@ import java.time.LocalDateTime;
 
 
 /**
- * 元数据表
+ * 元数据表字段索引
  *
  * @author cy.Y
  * @since 1.0.0
@@ -25,8 +24,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-@TableName("metadata_table")
-public class MetadataTableDO {
+@TableName("metadata_index")
+public class MetadataIndexDO {
 
     /**
      * 主键
@@ -34,6 +33,12 @@ public class MetadataTableDO {
     @TableId(value = "id")
     private Long id;
 
+
+    /**
+     * 目录
+     */
+    @TableField(value = "catalog")
+    private String name;
 
     /**
      * 目录
@@ -54,58 +59,22 @@ public class MetadataTableDO {
     private String tbl;
 
     /**
-     * 负责人
+     * 索引类型
      */
-    @TableField(value = "owner")
-    private String owner;
+    @TableField(value = "index_type")
+    private String indexType;
 
     /**
-     * 元数据主题编码
+     * 字段JSON_ARRAY
      */
-    @TableField(value = "subject_code")
-    private String subjectCode;
+    @TableField(value = "columns")
+    private String columns;
 
     /**
-     * 元数据主题层编码
-     */
-    @TableField(value = "layer_code")
-    private String layerCode;
-
-    /**
-     * 描述
+     * 字段注释
      */
     @TableField(value = "comment")
     private String comment;
-
-    /**
-     * 访问次数
-     */
-    @TableField(value = "access_count")
-    private Long accessCount;
-
-    /**
-     * 最后访问时间
-     */
-    @TableField(value = "last_access_time")
-    private LocalDateTime lastAccessTime;
-
-    /**
-     * 热度等级
-     */
-    @TableField(value = "heat_level")
-    private HeatLevel heatLevel;
-
-    /**
-     * 密级 1-4
-     */
-    @TableField(value = "secret_level")
-    private SecretLevel secretLevel;
-
-    /**
-     * 线上状态
-     */
-    @TableField(value = "online_status")
-    private OnlineStatus onlineStatus;
 
     /**
      * 创建时间

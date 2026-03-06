@@ -1,5 +1,6 @@
 package com.cyan.dataman.application.metadata.bo;
 
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.HeatLevel;
 import com.cyan.dataman.enums.OnlineStatus;
 import com.cyan.dataman.enums.SecretLevel;
@@ -92,4 +93,9 @@ public class MetadataTableBO {
      * 删除时间
      */
     private LocalDateTime deletedAt;
+
+    /**
+     * 表信息
+     */
+    private TableValObj table;
 }

@@ -4,6 +4,7 @@ import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableDTO;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 /**

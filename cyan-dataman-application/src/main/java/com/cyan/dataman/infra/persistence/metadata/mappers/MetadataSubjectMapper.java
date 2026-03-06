@@ -2,7 +2,7 @@ package com.cyan.dataman.infra.persistence.metadata.mappers;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataSubjectDO;
-import org.mapstruct.Mapper;
+import org.apache.ibatis.annotations.Mapper;
 
 /**
  *

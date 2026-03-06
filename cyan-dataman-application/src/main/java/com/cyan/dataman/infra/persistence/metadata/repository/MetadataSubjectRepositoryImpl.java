@@ -1,6 +1,8 @@
 package com.cyan.dataman.infra.persistence.metadata.repository;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cyan.dataman.domain.metadata.MetadataSubject;
+import com.cyan.dataman.domain.metadata.query.MetadataSubjectFindQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataSubjectRepository;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataSubjectInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataSubjectDO;
@@ -73,6 +75,18 @@ public class MetadataSubjectRepositoryImpl implements MetadataSubjectRepository 
     @Override
     public void deleteById(String id) {
         metadataSubjectMapper.deleteById(id);
+    }
+
+    /**
+     * 查询主题
+     *
+     */
+    @Override
+    public MetadataSubject find(MetadataSubjectFindQuery query) {
+        LambdaQueryWrapper<MetadataSubjectDO> queryWrapper = new LambdaQueryWrapper<MetadataSubjectDO>()
+                .eq(MetadataSubjectDO::getSubjectCode, query.getSubjectCode());
+        MetadataSubjectDO metadataSubjectDO = metadataSubjectMapper.selectOne(queryWrapper);
+        return MetadataSubjectInfraConvert.INSTANCE.toMetaDataSubject(metadataSubjectDO);
     }
 
 

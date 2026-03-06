@@ -6,6 +6,9 @@ import com.cyan.dataman.adapter.metadata.http.dto.MetadataSubjectDTO;
 import com.cyan.dataman.application.metadata.MetadataSubjectService;
 import com.cyan.dataman.application.metadata.bo.MetadataSubjectBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataSubjectCmd;
+import com.cyan.employee.login.filter.UserContextHolder;
+import jakarta.validation.Valid;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -52,7 +55,10 @@ public class MetaSubjectController {
      * 创建主题
      */
     @PostMapping
-    public Response<MetadataSubjectDTO> create(MetadataSubjectCmd cmd) {
+    public Response<MetadataSubjectDTO> create(@RequestBody @Valid MetadataSubjectCmd cmd) {
+        cmd.setParentId(StringUtils.isBlank(cmd.getParentId())?"0":cmd.getParentId());
+        cmd.setCreateBy(UserContextHolder.getCurrentEmployee().getPassport());
+        cmd.setUpdateBy(UserContextHolder.getCurrentEmployee().getPassport());
         MetadataSubjectBO subjectBO = metadataSubjectService.create(cmd);
         MetadataSubjectDTO metadataSubjectDTO = MetadataSubjectAdapterConvert.INSTANCE.toDMetadataSubjectDTO(subjectBO);
         return Response.success(metadataSubjectDTO);

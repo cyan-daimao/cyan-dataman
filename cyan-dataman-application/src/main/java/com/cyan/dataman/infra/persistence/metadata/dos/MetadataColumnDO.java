@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.cyan.dataman.enums.ColumnDataType;
 import com.cyan.dataman.enums.HeatLevel;
 import com.cyan.dataman.enums.OnlineStatus;
 import com.cyan.dataman.enums.SecretLevel;
@@ -16,7 +17,7 @@ import java.time.LocalDateTime;
 
 
 /**
- * 元数据表
+ * 元数据表字段
  *
  * @author cy.Y
  * @since 1.0.0
@@ -25,8 +26,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
-@TableName("metadata_table")
-public class MetadataTableDO {
+@TableName("metadata_column")
+public class MetadataColumnDO {
 
     /**
      * 主键
@@ -54,58 +55,40 @@ public class MetadataTableDO {
     private String tbl;
 
     /**
-     * 负责人
+     * 字段名
      */
-    @TableField(value = "owner")
-    private String owner;
+    @TableField(value = "col")
+    private String col;
 
     /**
-     * 元数据主题编码
+     * 数据类型
      */
-    @TableField(value = "subject_code")
-    private String subjectCode;
+    @TableField(value = "data_type")
+    private ColumnDataType dataType;
 
     /**
-     * 元数据主题层编码
-     */
-    @TableField(value = "layer_code")
-    private String layerCode;
-
-    /**
-     * 描述
+     * 字段注释
      */
     @TableField(value = "comment")
     private String comment;
 
     /**
-     * 访问次数
+     * 可空
      */
-    @TableField(value = "access_count")
-    private Long accessCount;
+    @TableField(value = "nullable")
+    private Boolean nullable;
 
     /**
-     * 最后访问时间
-     */
-    @TableField(value = "last_access_time")
-    private LocalDateTime lastAccessTime;
-
-    /**
-     * 热度等级
-     */
-    @TableField(value = "heat_level")
-    private HeatLevel heatLevel;
-
-    /**
-     * 密级 1-4
+     * 秘密等级
      */
     @TableField(value = "secret_level")
     private SecretLevel secretLevel;
 
     /**
-     * 线上状态
+     * 默认值
      */
-    @TableField(value = "online_status")
-    private OnlineStatus onlineStatus;
+    @TableField(value = "default_value")
+    private String defaultValue;
 
     /**
      * 创建时间

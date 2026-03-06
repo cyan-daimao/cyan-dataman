@@ -3,6 +3,7 @@ package com.cyan.dataman.infra.persistence.metadata.dos;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.cyan.dataman.enums.OpenStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -20,6 +21,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
+@TableName("metadata_subject")
 public class MetadataSubjectDO {
 
     /**
