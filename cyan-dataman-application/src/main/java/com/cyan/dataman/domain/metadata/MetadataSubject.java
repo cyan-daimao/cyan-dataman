@@ -12,6 +12,10 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 元数据主题
@@ -91,11 +95,57 @@ public class MetadataSubject {
     private LocalDateTime deletedAt;
 
     /**
-     * 保存
+     * 子主题
      */
-    public MetadataSubject save(MetadataSubjectRepository metadataSubjectRepository) {
+    private List<MetadataSubject> children;
 
-        Assert.isTrue(StringUtils.isNotBlank(this.id), new SilentException("不能存在主题id"));
+    /**
+     * 将扁平的MetadataSubject列表转换为树形结构
+     * @param flatList 扁平的主题列表
+     * @return 树形结构的根节点列表（一级主题）
+     */
+    public static List<MetadataSubject> buildTree(List<MetadataSubject> flatList) {
+        // 1. 参数校验
+        if (flatList == null || flatList.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 2. 将列表转换为Map（key: id, value: MetadataSubject），方便快速查找
+        Map<String, MetadataSubject> idToSubjectMap = flatList.stream()
+                .collect(Collectors.toMap(
+                        MetadataSubject::getId,  // 以id为key
+                        subject -> subject,      // 以对象本身为value
+                        (existing, replacement) -> existing  // 处理重复id，保留原有值
+                ));
+
+        // 3. 构建树形结构
+        List<MetadataSubject> rootNodes = new ArrayList<>();
+        for (MetadataSubject subject : flatList) {
+            String parentId = subject.getParentId();
+
+            // 4. 判断是否是一级节点（parentId为空/空字符串/0 都视为一级）
+            if (parentId == null || parentId.isEmpty() || "0".equals(parentId)) {
+                rootNodes.add(subject);
+            } else {
+                // 5. 找到父节点，将当前节点添加到父节点的children中
+                MetadataSubject parentSubject = idToSubjectMap.get(parentId);
+                if (parentSubject != null) {
+                    // 初始化children列表（避免空指针）
+                    if (parentSubject.getChildren() == null) {
+                        parentSubject.setChildren(new ArrayList<>());
+                    }
+                    parentSubject.getChildren().add(subject);
+                }
+            }
+        }
+
+        return rootNodes;
+    }
+
+    /**
+     * 验证
+     */
+    private void validate(MetadataSubjectRepository metadataSubjectRepository) {
         Assert.isTrue(StringUtils.isBlank(this.subjectCode), new SilentException("主题code不能为空"));
         Assert.isTrue(StringUtils.isBlank(this.subjectName), new SilentException("主题name不能为空"));
         Assert.isTrue(StringUtils.isBlank(this.subjectDesc), new SilentException("主题desc不能为空"));
@@ -104,21 +154,57 @@ public class MetadataSubject {
         Assert.isTrue(openStatus == null, new SilentException("开启状态为空"));
         Assert.isTrue(StringUtils.isBlank(this.createBy), new SilentException("创建人不能为空"));
         Assert.isTrue(StringUtils.isBlank(this.updateBy), new SilentException("更新人不能为空"));
-        this.createdAt = LocalDateTime.now();
-        this.updateAt = LocalDateTime.now();
 
         if ("0".equals(this.parentId)) {
             this.level = 1;
         } else {
             MetadataSubject parent = metadataSubjectRepository.findById(this.parentId);
+            Assert.isTrue(parent==null, new SilentException("父主题不存在"));
             this.level = parent.getLevel() + 1;
+            if (this.level>3){
+                Assert.isTrue(false, new SilentException("主题层级不能超过3级"));
+            }
         }
         MetadataSubject metadataSubject = metadataSubjectRepository.find(new MetadataSubjectFindQuery().setSubjectCode(this.subjectCode));
-        Assert.isTrue(metadataSubject.subjectCode.equals(this.subjectCode), new SilentException(metadataSubject.getSubjectCode() + "已存在"));
+        if (metadataSubject!=null){
+            if (!metadataSubject.id.equals(this.id)){
+                Assert.isTrue(metadataSubject.subjectCode.equals(this.subjectCode), new SilentException(metadataSubject.getSubjectCode() + "已存在"));
+            }
+        }
 
         metadataSubject = metadataSubjectRepository.find(new MetadataSubjectFindQuery().setSubjectName(this.subjectName));
-        Assert.isTrue(metadataSubject.subjectName.equals(this.subjectName), new SilentException(metadataSubject.getSubjectName() + "已存在"));
+        if (metadataSubject!=null){
+            if (!metadataSubject.id.equals(this.id)){
+                Assert.isTrue(metadataSubject.subjectName.equals(this.subjectName), new SilentException(metadataSubject.getSubjectName() + "已存在"));
+            }
+        }
+    }
 
+    /**
+     * 保存
+     */
+    public MetadataSubject save(MetadataSubjectRepository metadataSubjectRepository) {
+        Assert.isTrue(StringUtils.isNotBlank(this.id), new SilentException("不能存在主题id"));
+        validate(metadataSubjectRepository);
+        this.createdAt = LocalDateTime.now();
+        this.updateAt = LocalDateTime.now();
         return metadataSubjectRepository.save(this);
+    }
+
+    /**
+     * 修改
+     */
+    public MetadataSubject update(MetadataSubjectRepository metadataSubjectRepository) {
+        validate(metadataSubjectRepository);
+        this.updateAt = LocalDateTime.now();
+        return metadataSubjectRepository.update(this);
+    }
+
+    /**
+     * 删除
+     */
+    public void delete(MetadataSubjectRepository metadataSubjectRepository) {
+       metadataSubjectRepository.deleteById(this.id);
+
     }
 }

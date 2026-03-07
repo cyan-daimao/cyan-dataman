@@ -1,23 +1,21 @@
 package com.cyan.dataman.application.metadata.cmd;
 
-import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.DataLayer;
 import com.cyan.dataman.enums.HeatLevel;
 import com.cyan.dataman.enums.OnlineStatus;
 import com.cyan.dataman.enums.SecretLevel;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
-import java.util.List;
 
 /**
  * 元数据表命令
+ *
  * @author cy.Y
  * @since 1.0.0
  */

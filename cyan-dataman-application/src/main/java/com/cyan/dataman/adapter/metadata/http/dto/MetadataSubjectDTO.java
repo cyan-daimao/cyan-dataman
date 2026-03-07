@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 主题传输对象
@@ -82,4 +83,8 @@ public class MetadataSubjectDTO {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updateAt;
 
+    /**
+     * 子主题
+     */
+    private List<MetadataSubjectDTO> children;
 }

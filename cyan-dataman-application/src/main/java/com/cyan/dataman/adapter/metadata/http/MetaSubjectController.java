@@ -59,6 +59,7 @@ public class MetaSubjectController {
         cmd.setParentId(StringUtils.isBlank(cmd.getParentId())?"0":cmd.getParentId());
         cmd.setCreateBy(UserContextHolder.getCurrentEmployee().getPassport());
         cmd.setUpdateBy(UserContextHolder.getCurrentEmployee().getPassport());
+        cmd.setOwner(cmd.getOwner());
         MetadataSubjectBO subjectBO = metadataSubjectService.create(cmd);
         MetadataSubjectDTO metadataSubjectDTO = MetadataSubjectAdapterConvert.INSTANCE.toDMetadataSubjectDTO(subjectBO);
         return Response.success(metadataSubjectDTO);

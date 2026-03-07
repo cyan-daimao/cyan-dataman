@@ -67,7 +67,7 @@ public class MetadataTableController {
      */
     @PostMapping
     public Response<MetadataTableDTO> save(@RequestBody @Valid MetadataTableCmd cmd) {
-       MetadataTableBO metadataTableBO = metadataTableService.save(cmd);
+        MetadataTableBO metadataTableBO = metadataTableService.save(cmd);
         MetadataTableDTO metadataTableDTO = MetadataTableAdapterConvert.INSTANCE.toMetadataTableDTO(metadataTableBO);
         return Response.success(metadataTableDTO);
     }
@@ -77,7 +77,7 @@ public class MetadataTableController {
      */
     @PutMapping("/{id}")
     public Response<MetadataTableDTO> update(@PathVariable String id, @RequestBody @Valid MetadataTableCmd cmd) {
-        MetadataTableBO metadataTableBO = metadataTableService.update(id,cmd);
+        MetadataTableBO metadataTableBO = metadataTableService.update(id, cmd);
         MetadataTableDTO metadataTableDTO = MetadataTableAdapterConvert.INSTANCE.toMetadataTableDTO(metadataTableBO);
         return Response.success(metadataTableDTO);
     }

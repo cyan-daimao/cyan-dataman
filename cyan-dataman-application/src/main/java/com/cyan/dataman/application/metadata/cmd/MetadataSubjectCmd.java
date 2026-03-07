@@ -11,7 +11,6 @@ import javax.validation.constraints.NotNull;
 
 /**
  * 元数据主题命令
- *
  * @author cy.Y
  * @since 1.0.0
  */
@@ -20,12 +19,16 @@ import javax.validation.constraints.NotNull;
 @Data
 @Accessors
 public class MetadataSubjectCmd {
+    /**
+     * 主键
+     */
+    private String id;
 
     /**
      * 主题编码
      */
     @NotBlank(message = "主题编码不能为空")
-    private String subjectCode;
+    private  String subjectCode;
 
     /**
      * 主题名称

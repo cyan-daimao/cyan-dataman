@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 元数据主题业务对象
@@ -82,4 +83,9 @@ public class MetadataSubjectBO {
      * 逻辑删除
      */
     private LocalDateTime deletedAt;
+
+    /**
+     * 子主题
+     */
+    private List<MetadataSubjectBO> children;
 }

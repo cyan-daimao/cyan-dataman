@@ -1,15 +1,17 @@
 package com.cyan.dataman.application.metadata.impl;
 
+import com.cyan.arch.common.api.Assert;
+import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.application.metadata.MetadataSubjectService;
 import com.cyan.dataman.application.metadata.bo.MetadataSubjectBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataSubjectCmd;
 import com.cyan.dataman.application.metadata.convert.MetadataSubjectAppConvert;
 import com.cyan.dataman.domain.metadata.MetadataSubject;
 import com.cyan.dataman.domain.metadata.repository.MetadataSubjectRepository;
+import com.cyan.dataman.infra.util.EmployeeUtil;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 
 
 /**
@@ -20,9 +22,11 @@ import java.util.Optional;
 @Service
 public class MetadataSubjectServiceImpl implements MetadataSubjectService {
     private final MetadataSubjectRepository metadataSubjectRepository;
+    private final EmployeeUtil employeeUtil;
 
-    public MetadataSubjectServiceImpl(MetadataSubjectRepository metadataSubjectRepository) {
+    public MetadataSubjectServiceImpl(MetadataSubjectRepository metadataSubjectRepository, EmployeeUtil employeeUtil) {
         this.metadataSubjectRepository = metadataSubjectRepository;
+        this.employeeUtil = employeeUtil;
     }
     /**
      * 获取主题列表
@@ -30,7 +34,8 @@ public class MetadataSubjectServiceImpl implements MetadataSubjectService {
     @Override
     public List<MetadataSubjectBO> list() {
         List<MetadataSubject> metadataSubjects = metadataSubjectRepository.list();
-        return Optional.ofNullable(metadataSubjects).orElse(List.of()).stream().map(MetadataSubjectAppConvert.INSTANCE::toMetadataSubjectBO).toList();
+        metadataSubjects = MetadataSubject.buildTree(metadataSubjects);
+        return metadataSubjects.stream().map(MetadataSubjectAppConvert.INSTANCE::toMetadataSubjectBO).toList();
     }
 
     /**
@@ -38,6 +43,7 @@ public class MetadataSubjectServiceImpl implements MetadataSubjectService {
      */
     @Override
     public MetadataSubjectBO create(MetadataSubjectCmd cmd) {
+        employeeUtil.validEmployee(cmd.getOwner());
         MetadataSubject metadataSubject = MetadataSubjectAppConvert.INSTANCE.toMetadataSubject(cmd);
         metadataSubject = metadataSubject.save(metadataSubjectRepository);
         return MetadataSubjectAppConvert.INSTANCE.toMetadataSubjectBO(metadataSubject);
@@ -60,9 +66,10 @@ public class MetadataSubjectServiceImpl implements MetadataSubjectService {
      */
     @Override
     public MetadataSubjectBO update(String id, MetadataSubjectCmd cmd) {
+        employeeUtil.validEmployee(cmd.getOwner());
         MetadataSubject metadataSubject = MetadataSubjectAppConvert.INSTANCE.toMetadataSubject(cmd);
         metadataSubject.setId(id);
-        metadataSubject = metadataSubjectRepository.update(metadataSubject);
+        metadataSubject =  metadataSubject.update(metadataSubjectRepository);
         return MetadataSubjectAppConvert.INSTANCE.toMetadataSubjectBO(metadataSubject);
     }
 
@@ -72,6 +79,9 @@ public class MetadataSubjectServiceImpl implements MetadataSubjectService {
      */
     @Override
     public void deleteById(String id) {
-        metadataSubjectRepository.deleteById(id);
+        MetadataSubject metadataSubject = metadataSubjectRepository.findById(id);
+        Assert.isTrue(metadataSubject==null, new SilentException("主题不存在"));
+        metadataSubject.delete(metadataSubjectRepository);
     }
+
 }
