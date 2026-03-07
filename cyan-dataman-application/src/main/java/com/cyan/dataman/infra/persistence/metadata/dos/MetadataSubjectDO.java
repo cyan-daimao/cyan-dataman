@@ -94,7 +94,7 @@ public class MetadataSubjectDO {
      * 更新时间
      */
     @TableField("updated_at")
-    private LocalDateTime updateAt;
+    private LocalDateTime updatedAt;
 
     /**
      * 逻辑删除

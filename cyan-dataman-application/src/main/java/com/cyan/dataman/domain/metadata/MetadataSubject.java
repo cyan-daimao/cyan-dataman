@@ -87,7 +87,7 @@ public class MetadataSubject {
     /**
      * 更新时间
      */
-    private LocalDateTime updateAt;
+    private LocalDateTime updatedAt;
 
     /**
      * 逻辑删除
@@ -187,7 +187,7 @@ public class MetadataSubject {
         Assert.isTrue(StringUtils.isNotBlank(this.id), new SilentException("不能存在主题id"));
         validate(metadataSubjectRepository);
         this.createdAt = LocalDateTime.now();
-        this.updateAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
         return metadataSubjectRepository.save(this);
     }
 
@@ -196,7 +196,7 @@ public class MetadataSubject {
      */
     public MetadataSubject update(MetadataSubjectRepository metadataSubjectRepository) {
         validate(metadataSubjectRepository);
-        this.updateAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
         return metadataSubjectRepository.update(this);
     }
 

@@ -44,7 +44,7 @@ public class MetadataSubjectDTO {
     /**
      * 父级主题id
      */
-    private Long parentId;
+    private String parentId;
 
     /**
      * 层级：1 一级、2 二级、3 三级
@@ -81,7 +81,7 @@ public class MetadataSubjectDTO {
      * 更新时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime updateAt;
+    private LocalDateTime updatedAt;
 
     /**
      * 子主题

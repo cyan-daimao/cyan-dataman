@@ -77,7 +77,7 @@ public class MetadataSubjectBO {
     /**
      * 更新时间
      */
-    private LocalDateTime updateAt;
+    private LocalDateTime updatedAt;
 
     /**
      * 逻辑删除
