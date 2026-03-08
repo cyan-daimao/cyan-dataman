@@ -56,4 +56,14 @@ public class MetadataSubjectCmd {
     @NotNull(message = "主题开启状态不能为空")
     private OpenStatus openStatus;
 
+    /**
+     * 创建人
+     */
+    private String createBy;
+
+    /**
+     * 修改人
+     */
+    private String updateBy;
+
 }
