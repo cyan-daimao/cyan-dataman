@@ -67,7 +67,10 @@ public class MetadataSubjectServiceImpl implements MetadataSubjectService {
     @Override
     public MetadataSubjectBO update(String id, MetadataSubjectCmd cmd) {
         employeeUtil.validEmployee(cmd.getOwner());
+        MetadataSubjectBO metadataSubjectBO = findById(id);
+        Assert.isTrue(metadataSubjectBO==null, new SilentException("主题不存在"));
         MetadataSubject metadataSubject = MetadataSubjectAppConvert.INSTANCE.toMetadataSubject(cmd);
+        metadataSubject.setCreateBy(metadataSubjectBO.getCreateBy());
         metadataSubject.setId(id);
         metadataSubject =  metadataSubject.update(metadataSubjectRepository);
         return MetadataSubjectAppConvert.INSTANCE.toMetadataSubjectBO(metadataSubject);

@@ -19,10 +19,6 @@ import javax.validation.constraints.NotNull;
 @Data
 @Accessors
 public class MetadataSubjectCmd {
-    /**
-     * 主键
-     */
-    private String id;
 
     /**
      * 主题编码
@@ -59,15 +55,5 @@ public class MetadataSubjectCmd {
      */
     @NotNull(message = "主题开启状态不能为空")
     private OpenStatus openStatus;
-
-    /**
-     * 创建人
-     */
-    private String createBy;
-
-    /**
-     * 修改人
-     */
-    private String updateBy;
 
 }
