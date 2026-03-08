@@ -35,7 +35,6 @@ public class MetadataSubjectServiceImpl implements MetadataSubjectService {
     @Override
     public List<MetadataSubjectBO> list(MetadataSubjectListQuery query) {
         List<MetadataSubject> metadataSubjects = metadataSubjectRepository.list(query);
-        metadataSubjects = MetadataSubject.buildTree(metadataSubjects);
         return metadataSubjects.stream().map(MetadataSubjectAppConvert.INSTANCE::toMetadataSubjectBO).toList();
     }
 
