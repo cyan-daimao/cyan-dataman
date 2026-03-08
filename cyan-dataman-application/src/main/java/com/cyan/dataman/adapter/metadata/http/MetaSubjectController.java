@@ -70,8 +70,8 @@ public class MetaSubjectController {
      */
     @PutMapping("/{id}")
     public Response<MetadataSubjectDTO> update(@PathVariable String id, @RequestBody MetadataSubjectCmd cmd) {
-        MetadataSubjectBO subjectBO = metadataSubjectService.update(id, cmd);
         cmd.setUpdateBy(UserContextHolder.getCurrentEmployee().getPassport());
+        MetadataSubjectBO subjectBO = metadataSubjectService.update(id, cmd);
         MetadataSubjectDTO metadataSubjectDTO = MetadataSubjectAdapterConvert.INSTANCE.toDMetadataSubjectDTO(subjectBO);
         return Response.success(metadataSubjectDTO);
     }
