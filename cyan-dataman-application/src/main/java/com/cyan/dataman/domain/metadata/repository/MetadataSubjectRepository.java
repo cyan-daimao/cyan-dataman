@@ -2,6 +2,7 @@ package com.cyan.dataman.domain.metadata.repository;
 
 import com.cyan.dataman.domain.metadata.MetadataSubject;
 import com.cyan.dataman.domain.metadata.query.MetadataSubjectFindQuery;
+import com.cyan.dataman.domain.metadata.query.MetadataSubjectListQuery;
 
 import java.util.List;
 
@@ -20,7 +21,7 @@ public interface MetadataSubjectRepository {
     /**
      * 获取主题列表
      */
-    List<MetadataSubject> list();
+    List<MetadataSubject> list(MetadataSubjectListQuery query);
 
     /**
      * 保存主题

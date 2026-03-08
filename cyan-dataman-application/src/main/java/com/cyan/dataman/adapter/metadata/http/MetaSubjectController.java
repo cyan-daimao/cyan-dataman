@@ -6,6 +6,7 @@ import com.cyan.dataman.adapter.metadata.http.dto.MetadataSubjectDTO;
 import com.cyan.dataman.application.metadata.MetadataSubjectService;
 import com.cyan.dataman.application.metadata.bo.MetadataSubjectBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataSubjectCmd;
+import com.cyan.dataman.domain.metadata.query.MetadataSubjectListQuery;
 import com.cyan.employee.login.filter.UserContextHolder;
 import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
@@ -34,8 +35,8 @@ public class MetaSubjectController {
      * 获取主题列表
      */
     @GetMapping
-    public Response<List<MetadataSubjectDTO>> list() {
-        List<MetadataSubjectBO> subjectBOS = metadataSubjectService.list();
+    public Response<List<MetadataSubjectDTO>> list(MetadataSubjectListQuery query) {
+        List<MetadataSubjectBO> subjectBOS = metadataSubjectService.list(query);
         List<MetadataSubjectDTO> list = Optional.ofNullable(subjectBOS).orElse(List.of()).stream().map(MetadataSubjectAdapterConvert.INSTANCE::toDMetadataSubjectDTO).toList();
         return Response.success(list);
     }

@@ -2,6 +2,7 @@ package com.cyan.dataman.application.metadata;
 
 import com.cyan.dataman.application.metadata.bo.MetadataSubjectBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataSubjectCmd;
+import com.cyan.dataman.domain.metadata.query.MetadataSubjectListQuery;
 
 import java.util.List;
 
@@ -14,7 +15,7 @@ public interface MetadataSubjectService {
     /**
      * 获取主题列表
      */
-    List<MetadataSubjectBO> list();
+    List<MetadataSubjectBO> list(MetadataSubjectListQuery query);
 
     /**
      * 创建主题
