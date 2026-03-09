@@ -80,7 +80,7 @@ public class GravitinoController {
     /**
      * 获取表信息
      */
-    @GetMapping("/catalogs/{catalog}/schemas/{schema}/table/{table}")
+    @GetMapping("/catalogs/{catalog}/schemas/{schema}/tables/{table}")
     public Response<TableDTO> listTableFields(@PathVariable String catalog, @PathVariable String schema, @PathVariable String table) {
         Table tableInfo = gravitinoClient.loadCatalog(catalog).asTableCatalog().loadTable(NameIdentifier.of(schema, table));
         TableDTO tableDTO = TableAdapterConvert.INSTANCE.tableToTableDTO(tableInfo);
@@ -93,7 +93,7 @@ public class GravitinoController {
     /**
      * 获取表数据
      */
-    @GetMapping("/catalogs/{catalog}/schemas/{schema}/table/{table}/data")
+    @GetMapping("/catalogs/{catalog}/schemas/{schema}/tables/{table}/data")
     public Response<List<Map<String, Object>>> listTableData(@PathVariable String catalog, @PathVariable String schema, @PathVariable String table) throws SQLException {
         String sql = "select * from %s.%s.%s limit 100".formatted(catalog, schema, table);
         List<Map<String, Object>> data = StarRocksUtil.queryForList(sql);
