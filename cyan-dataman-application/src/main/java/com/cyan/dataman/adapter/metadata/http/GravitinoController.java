@@ -68,11 +68,15 @@ public class GravitinoController {
     public Response<List<TableDTO>> listTable(@PathVariable String catalog, @PathVariable String schema) {
         TableCatalog tableCatalog = gravitinoClient.loadCatalog(catalog).asTableCatalog();
         NameIdentifier[] nameIdentifiers = tableCatalog.listTables(Namespace.of(schema));
-        List<TableDTO> list = Arrays.stream(Optional.ofNullable(nameIdentifiers).orElse(new NameIdentifier[0])).map(nameIdentifier ->
-                new TableDTO()
-                        .setCatalog(catalog)
-                        .setSchema(nameIdentifier.namespace().toString())
-                        .setName(nameIdentifier.name())
+
+        List<TableDTO> list = Arrays.stream(Optional.ofNullable(nameIdentifiers).orElse(new NameIdentifier[0])).map(nameIdentifier ->{
+            Table tableInfo = gravitinoClient.loadCatalog(catalog).asTableCatalog().loadTable(NameIdentifier.of(schema, nameIdentifier.name()));
+            return new TableDTO()
+                    .setCatalog(catalog)
+                    .setSchema(nameIdentifier.namespace().toString())
+                    .setName(nameIdentifier.name())
+                    .setComment(tableInfo.comment());
+                }
         ).toList();
         return Response.success(list);
     }
