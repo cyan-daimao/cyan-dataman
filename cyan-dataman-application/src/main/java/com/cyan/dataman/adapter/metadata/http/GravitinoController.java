@@ -54,7 +54,7 @@ public class GravitinoController {
     /**
      * 获取库列表
      */
-    @GetMapping("/catalog/{catalog}/schemas")
+    @GetMapping("/catalogs/{catalog}/schemas")
     public Response<List<SchemaValObj>> list(@PathVariable String catalog) {
         SupportsSchemas schemas = gravitinoClient.loadCatalog(catalog).asSchemas();
         List<SchemaValObj> list = Arrays.stream(Optional.ofNullable(schemas.listSchemas()).orElse(new String[0])).map(schema -> new SchemaValObj().setName(schema)).toList();
@@ -64,7 +64,7 @@ public class GravitinoController {
     /**
      * 获取表列表
      */
-    @GetMapping("/catalog/{catalog}/schema/{schema}/tables")
+    @GetMapping("/catalogs/{catalog}/schema/{schema}/tables")
     public Response<List<TableDTO>> listTable(@PathVariable String catalog, @PathVariable String schema) {
         TableCatalog tableCatalog = gravitinoClient.loadCatalog(catalog).asTableCatalog();
         NameIdentifier[] nameIdentifiers = tableCatalog.listTables(Namespace.of(schema));
@@ -80,7 +80,7 @@ public class GravitinoController {
     /**
      * 获取表信息
      */
-    @GetMapping("/catalog/{catalog}/schema/{schema}/table/{table}")
+    @GetMapping("/catalogs/{catalog}/schema/{schema}/table/{table}")
     public Response<TableDTO> listTableFields(@PathVariable String catalog, @PathVariable String schema, @PathVariable String table) {
         Table tableInfo = gravitinoClient.loadCatalog(catalog).asTableCatalog().loadTable(NameIdentifier.of(schema, table));
         TableDTO tableDTO = TableAdapterConvert.INSTANCE.tableToTableDTO(tableInfo);
@@ -93,7 +93,7 @@ public class GravitinoController {
     /**
      * 获取表数据
      */
-    @GetMapping("/catalog/{catalog}/schema/{schema}/table/{table}/data")
+    @GetMapping("/catalogs/{catalog}/schema/{schema}/table/{table}/data")
     public Response<List<Map<String, Object>>> listTableData(@PathVariable String catalog, @PathVariable String schema, @PathVariable String table) throws SQLException {
         String sql = "select * from %s.%s.%s limit 100".formatted(catalog, schema, table);
         List<Map<String, Object>> data = StarRocksUtil.queryForList(sql);

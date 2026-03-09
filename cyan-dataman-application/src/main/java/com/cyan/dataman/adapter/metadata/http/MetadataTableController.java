@@ -6,6 +6,7 @@ import com.cyan.dataman.adapter.metadata.http.convert.MetadataTableAdapterConver
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
+import com.cyan.dataman.application.metadata.cmd.ImportTableCmd;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import org.springframework.web.bind.annotation.*;
@@ -50,6 +51,16 @@ public class MetadataTableController {
         List<MetadataTableDTO> data = Optional.ofNullable(metadataTables.getData()).orElse(List.of()).stream().map(MetadataTableAdapterConvert.INSTANCE::toMetadataTableDTO).toList();
         Page<MetadataTableDTO> page = new Page<>(data, metadataTables.getCurrent(), metadataTables.getSize(), metadataTables.getTotal());
         return Response.success(page);
+    }
+
+    /**
+     * 导入表
+     */
+    @PostMapping("/importTable")
+    public Response<MetadataTableDTO> importTable(@RequestBody @Valid ImportTableCmd cmd){
+        MetadataTableBO metadataTableBO =  metadataTableService.importTable(cmd);
+        MetadataTableDTO metadataTableDTO = MetadataTableAdapterConvert.INSTANCE.toMetadataTableDTO(metadataTableBO);
+        return Response.success(metadataTableDTO);
     }
 
     /**

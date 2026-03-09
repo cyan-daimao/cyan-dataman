@@ -3,12 +3,17 @@ package com.cyan.dataman.application.metadata.impl;
 import com.cyan.arch.common.api.Page;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
+import com.cyan.dataman.application.metadata.cmd.ImportTableCmd;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.application.metadata.convert.MetadataTableAppConvert;
 import com.cyan.dataman.domain.metadata.MetadataTable;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
+import org.apache.gravitino.Catalog;
+import org.apache.gravitino.NameIdentifier;
+import org.apache.gravitino.client.GravitinoClient;
+import org.apache.gravitino.rel.Table;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -23,14 +28,15 @@ import java.util.Optional;
 @Service
 public class MetadataTableServiceImpl implements MetadataTableService {
     private final MetadataTableRepository metadataTableRepository;
+    private final GravitinoClient gravitinoClient;
 
-    public MetadataTableServiceImpl(MetadataTableRepository metadataTableRepository) {
+    public MetadataTableServiceImpl(MetadataTableRepository metadataTableRepository, GravitinoClient gravitinoClient) {
         this.metadataTableRepository = metadataTableRepository;
+        this.gravitinoClient = gravitinoClient;
     }
 
     /**
      * 获取表列表
-     *
      */
     @Override
     public List<MetadataTableBO> list(MetadataTableListQuery query) {
@@ -40,7 +46,6 @@ public class MetadataTableServiceImpl implements MetadataTableService {
 
     /**
      * 获取表
-     *
      */
     @Override
     public MetadataTableBO findById(String id) {
@@ -50,7 +55,6 @@ public class MetadataTableServiceImpl implements MetadataTableService {
 
     /**
      * 创建表
-     *
      */
     @Override
     public MetadataTableBO save(MetadataTableCmd cmd) {
@@ -61,7 +65,6 @@ public class MetadataTableServiceImpl implements MetadataTableService {
 
     /**
      * 更新表
-     *
      */
     @Override
     public MetadataTableBO update(String id, MetadataTableCmd cmd) {
@@ -69,8 +72,17 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     }
 
     /**
+     * 导入表
+     */
+    @Override
+    public MetadataTableBO importTable(ImportTableCmd cmd) {
+        Catalog catalog = gravitinoClient.loadCatalog(cmd.getCatalog());
+        Table table = catalog.asTableCatalog().loadTable(NameIdentifier.of(cmd.getSchema(),cmd.getTable()));
+        return null;
+    }
+
+    /**
      * 获取表列表
-     *
      */
     @Override
     public Page<MetadataTableBO> page(MetadataTablePageQuery query) {

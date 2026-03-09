@@ -2,17 +2,17 @@ package com.cyan.dataman.application.metadata;
 
 import com.cyan.arch.common.api.Page;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
+import com.cyan.dataman.application.metadata.cmd.ImportTableCmd;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 
-import javax.validation.Valid;
 import java.util.List;
 
 
 /**
- *
  * 元数据服务
+ *
  * @author cy.Y
  * @since 1.0.0
  */
@@ -36,10 +36,15 @@ public interface MetadataTableService {
     /**
      * 创建表
      */
-    MetadataTableBO save(@Valid MetadataTableCmd cmd);
+    MetadataTableBO save(MetadataTableCmd cmd);
 
     /**
      * 更新表
      */
-    MetadataTableBO update(String id, @Valid MetadataTableCmd cmd);
+    MetadataTableBO update(String id, MetadataTableCmd cmd);
+
+    /**
+     * 导入表
+     */
+    MetadataTableBO importTable(ImportTableCmd cmd);
 }
