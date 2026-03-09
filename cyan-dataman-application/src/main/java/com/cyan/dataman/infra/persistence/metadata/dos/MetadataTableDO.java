@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.enums.HeatLevel;
 import com.cyan.dataman.enums.OnlineStatus;
 import com.cyan.dataman.enums.SecretLevel;
@@ -40,6 +41,12 @@ public class MetadataTableDO {
      */
     @TableField(value = "catalog")
     private String catalog;
+
+    /**
+     * 数据源类型
+     */
+    @TableField(value = "datasource_type")
+    private DatasourceType datasourceType;
 
     /**
      * 库

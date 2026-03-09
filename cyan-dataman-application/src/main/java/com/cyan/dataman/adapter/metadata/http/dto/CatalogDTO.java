@@ -1,5 +1,6 @@
 package com.cyan.dataman.adapter.metadata.http.dto;
 
+import com.cyan.dataman.enums.DatasourceType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -19,4 +20,9 @@ public class CatalogDTO {
      * 目录名称
      */
     private String name;
+
+    /**
+     * 数据源类型
+     */
+    private DatasourceType datasourceType;
 }

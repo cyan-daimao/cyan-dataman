@@ -4,6 +4,7 @@ import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
+import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.enums.HeatLevel;
 import com.cyan.dataman.enums.OnlineStatus;
 import com.cyan.dataman.enums.SecretLevel;
@@ -47,6 +48,11 @@ public class MetadataTable {
      * 元数据主题编码
      */
     private String subjectCode;
+
+    /**
+     * 数据源类型
+     */
+    private DatasourceType datasourceType;
 
     /**
      * 元数据主题层编码

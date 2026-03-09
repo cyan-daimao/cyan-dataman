@@ -1,6 +1,7 @@
 package com.cyan.dataman.adapter.metadata.http.dto;
 
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
+import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.enums.HeatLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -46,6 +47,11 @@ public class MetadataTableDTO {
      * 元数据主题编码
      */
     private String subjectCode;
+
+    /**
+     * 数据源类型
+     */
+    private DatasourceType datasourceType;
 
     /**
      * 元数据主题层编码

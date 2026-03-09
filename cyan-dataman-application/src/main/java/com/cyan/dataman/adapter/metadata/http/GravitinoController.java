@@ -5,6 +5,7 @@ import com.cyan.dataman.adapter.metadata.http.convert.TableAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.CatalogDTO;
 import com.cyan.dataman.domain.metadata.valobj.SchemaValObj;
 import com.cyan.dataman.adapter.metadata.http.dto.TableDTO;
+import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.infra.util.StarRocksUtil;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
@@ -46,7 +47,7 @@ public class GravitinoController {
     @GetMapping("/catalogs")
     public Response<List<CatalogDTO>> list() {
         Catalog[] catalogs = gravitinoClient.listCatalogsInfo();
-        List<CatalogDTO> list = Arrays.stream(Optional.ofNullable(catalogs).orElse(new Catalog[0])).map(catalog -> new CatalogDTO().setName(catalog.name())).toList();
+        List<CatalogDTO> list = Arrays.stream(Optional.ofNullable(catalogs).orElse(new Catalog[0])).map(catalog -> new CatalogDTO().setName(catalog.name()).setDatasourceType(DatasourceType.getByCode(catalog.provider()))).toList();
         return Response.success(list);
     }
 
