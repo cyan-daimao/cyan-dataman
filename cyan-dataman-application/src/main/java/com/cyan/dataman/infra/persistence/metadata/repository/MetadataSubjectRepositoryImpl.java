@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- *
  * 主题仓储服务
  *
  * @author cy.Y
@@ -31,7 +30,6 @@ public class MetadataSubjectRepositoryImpl implements MetadataSubjectRepository 
 
     /**
      * 根据id获取主题
-     *
      */
     @Override
     public MetadataSubject findById(String id) {
@@ -44,6 +42,7 @@ public class MetadataSubjectRepositoryImpl implements MetadataSubjectRepository 
      */
     @Override
     public List<MetadataSubject> list(MetadataSubjectListQuery query) {
+        query = query == null ? new MetadataSubjectListQuery() : query;
         LambdaQueryWrapper<MetadataSubjectDO> queryWrapper = new LambdaQueryWrapper<MetadataSubjectDO>()
                 .eq(StringUtils.isNotBlank(query.getParentId()), MetadataSubjectDO::getParentId, query.getParentId());
         List<MetadataSubjectDO> metadataSubjectDOS = metadataSubjectMapper.selectList(queryWrapper);
@@ -52,7 +51,6 @@ public class MetadataSubjectRepositoryImpl implements MetadataSubjectRepository 
 
     /**
      * 保存主题
-     *
      */
     @Override
     public MetadataSubject save(MetadataSubject metadataSubject) {
@@ -63,7 +61,6 @@ public class MetadataSubjectRepositoryImpl implements MetadataSubjectRepository 
 
     /**
      * 更新主题
-     *
      */
     @Override
     public MetadataSubject update(MetadataSubject metadataSubject) {
@@ -74,7 +71,6 @@ public class MetadataSubjectRepositoryImpl implements MetadataSubjectRepository 
 
     /**
      * 删除主题
-     *
      */
     @Override
     public void deleteById(String id) {
@@ -83,7 +79,6 @@ public class MetadataSubjectRepositoryImpl implements MetadataSubjectRepository 
 
     /**
      * 查询主题
-     *
      */
     @Override
     public MetadataSubject find(MetadataSubjectFindQuery query) {

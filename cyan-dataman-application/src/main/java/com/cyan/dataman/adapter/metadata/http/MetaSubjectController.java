@@ -42,6 +42,16 @@ public class MetaSubjectController {
     }
 
     /**
+     * 获取主题树
+     */
+    @GetMapping("/tree")
+    public Response<List<MetadataSubjectDTO>> tree() {
+        List<MetadataSubjectBO> subjectBOS = metadataSubjectService.list(null);
+        subjectBOS = MetadataSubjectBO.buildTree(subjectBOS);
+        List<MetadataSubjectDTO> tree = subjectBOS.stream().map(MetadataSubjectAdapterConvert.INSTANCE::toDMetadataSubjectDTO).toList();
+        return Response.success(tree);
+    }
+    /**
      * 获取主题
      */
     @GetMapping("/{id}")
