@@ -41,12 +41,16 @@ public class MetadataTableController {
     @GetMapping
     public Response<Page<MetadataTableDTO>> page(@RequestParam(required = false) String content,
                                                  @RequestParam(required = false) String subjectCode,
-                                                 @RequestParam(required = false) String owner) {
+                                                 @RequestParam(required = false) String owner,
+                                                 @RequestParam(required = false) Long current,
+                                                 @RequestParam(required = false) Long size) {
         MetadataTablePageQuery query = new MetadataTablePageQuery()
                 .setOrName(content)
                 .setOrComment(content)
                 .setSubjectCode(subjectCode)
                 .setOwner(owner);
+        query.setCurrent(current)
+                .setSize(size);
         Page<MetadataTableBO> metadataTables = metadataTableService.page(query);
         List<MetadataTableDTO> data = Optional.ofNullable(metadataTables.getData()).orElse(List.of()).stream().map(MetadataTableAdapterConvert.INSTANCE::toMetadataTableDTO).toList();
         Page<MetadataTableDTO> page = new Page<>(data, metadataTables.getCurrent(), metadataTables.getSize(), metadataTables.getTotal());
@@ -57,8 +61,8 @@ public class MetadataTableController {
      * 导入表
      */
     @PostMapping("/importTable")
-    public Response<MetadataTableDTO> importTable(@RequestBody @Valid ImportTableCmd cmd){
-        MetadataTableBO metadataTableBO =  metadataTableService.importTable(cmd);
+    public Response<MetadataTableDTO> importTable(@RequestBody @Valid ImportTableCmd cmd) {
+        MetadataTableBO metadataTableBO = metadataTableService.importTable(cmd);
         MetadataTableDTO metadataTableDTO = MetadataTableAdapterConvert.INSTANCE.toMetadataTableDTO(metadataTableBO);
         return Response.success(metadataTableDTO);
     }

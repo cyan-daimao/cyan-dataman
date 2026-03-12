@@ -11,6 +11,7 @@ import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataTableInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataTableDO;
 import com.cyan.dataman.infra.persistence.metadata.mappers.MetadataTableMapper;
+import io.micrometer.common.util.StringUtils;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -37,12 +38,15 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     public Page<MetadataTable> page(MetadataTablePageQuery query) {
         LambdaQueryWrapper<MetadataTableDO> queryWrapper = new LambdaQueryWrapper<MetadataTableDO>()
                 .eq(StrUtils.isNotBlank(query.getSubjectCode()), MetadataTableDO::getSubjectCode, query.getSubjectCode())
-                .eq(StrUtils.isNotBlank(query.getOwner()), MetadataTableDO::getOwner, query.getOwner())
-                .and(q ->
-                        q.like(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
-                                .or()
-                                .like(StrUtils.isNotBlank(query.getComment()), MetadataTableDO::getComment, query.getComment())
-                );
+                .eq(StrUtils.isNotBlank(query.getOwner()), MetadataTableDO::getOwner, query.getOwner());
+        if (StringUtils.isNotBlank(query.getName()) || StringUtils.isNotBlank(query.getComment())){
+            queryWrapper.and(q ->
+                    q.like(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
+                            .or()
+                            .like(StrUtils.isNotBlank(query.getComment()), MetadataTableDO::getComment, query.getComment())
+            );
+        }
+
         com.baomidou.mybatisplus.extension.plugins.pagination.Page<MetadataTableDO> page = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(query.getCurrent(), query.getSize());
         page = metadataTableMapper.selectPage(page, queryWrapper);
         List<MetadataTable> data = Optional.ofNullable(page.getRecords()).orElse(List.of()).stream().map(MetadataTableInfraConvert.INSTANCE::toMetadataTable).toList();

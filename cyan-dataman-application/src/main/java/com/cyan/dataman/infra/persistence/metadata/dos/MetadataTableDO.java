@@ -39,8 +39,8 @@ public class MetadataTableDO {
     /**
      * 目录
      */
-    @TableField(value = "catalog")
-    private String catalog;
+    @TableField(value = "data_catalog")
+    private String dataCatalog;
 
     /**
      * 数据源类型
@@ -51,8 +51,8 @@ public class MetadataTableDO {
     /**
      * 库
      */
-    @TableField(value = "schema")
-    private String schema;
+    @TableField(value = "data_schema")
+    private String dataSchema;
 
     /**
      * 表名
@@ -117,13 +117,13 @@ public class MetadataTableDO {
     /**
      * 创建时间
      */
-    @TableField(value = "create_time")
-    private LocalDateTime createTime;
+    @TableField(value = "created_at")
+    private LocalDateTime createdAt;
     /**
      * 修改时间
      */
-    @TableField(value = "update_time")
-    private LocalDateTime updateTime;
+    @TableField(value = "updated_at")
+    private LocalDateTime updatedAt;
 
     /**
      * 删除时间
