@@ -68,7 +68,7 @@ public class MetadataSubjectServiceImpl implements MetadataSubjectService {
     public MetadataSubjectBO update(String id, MetadataSubjectCmd cmd) {
         employeeUtil.validEmployee(cmd.getOwner());
         MetadataSubjectBO metadataSubjectBO = findById(id);
-        Assert.isTrue(metadataSubjectBO==null, new SilentException("主题不存在"));
+        Assert.notNull(metadataSubjectBO, new SilentException("主题不存在"));
         MetadataSubject metadataSubject = MetadataSubjectAppConvert.INSTANCE.toMetadataSubject(cmd);
         metadataSubject.setCreateBy(metadataSubjectBO.getCreateBy());
         metadataSubject.setId(id);
@@ -83,7 +83,7 @@ public class MetadataSubjectServiceImpl implements MetadataSubjectService {
     @Override
     public void deleteById(String id) {
         MetadataSubject metadataSubject = metadataSubjectRepository.findById(id);
-        Assert.isTrue(metadataSubject==null, new SilentException("主题不存在"));
+        Assert.notNull(metadataSubject, new SilentException("主题不存在"));
         metadataSubject.delete(metadataSubjectRepository);
     }
 

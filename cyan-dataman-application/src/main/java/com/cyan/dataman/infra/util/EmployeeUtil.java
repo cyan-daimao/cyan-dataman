@@ -26,6 +26,6 @@ public class EmployeeUtil {
      */
     public void validEmployee(String passport){
         Response<EmployeeDTO> resp = employeeClient.query(new EmployeeRPCQuery().setPassport(passport));
-        Assert.isTrue(resp.getData()==null, new SilentException("负责人%s不存在".formatted(passport)));
+        Assert.notNull(resp.getData(), new SilentException("负责人%s不存在".formatted(passport)));
     }
 }

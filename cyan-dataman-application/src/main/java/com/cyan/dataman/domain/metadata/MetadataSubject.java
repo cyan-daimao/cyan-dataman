@@ -5,7 +5,6 @@ import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.domain.metadata.query.MetadataSubjectFindQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataSubjectRepository;
 import com.cyan.dataman.enums.OpenStatus;
-import io.micrometer.common.util.StringUtils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -101,36 +100,36 @@ public class MetadataSubject {
      * 验证
      */
     private void validate(MetadataSubjectRepository metadataSubjectRepository) {
-        Assert.isTrue(StringUtils.isBlank(this.subjectCode), new SilentException("主题code不能为空"));
-        Assert.isTrue(StringUtils.isBlank(this.subjectName), new SilentException("主题name不能为空"));
-        Assert.isTrue(StringUtils.isBlank(this.subjectDesc), new SilentException("主题desc不能为空"));
-        Assert.isTrue(StringUtils.isBlank(this.parentId), new SilentException("父id不能为空"));
-        Assert.isTrue(StringUtils.isBlank(this.owner), new SilentException("负责人不能为空"));
-        Assert.isTrue(openStatus == null, new SilentException("开启状态为空"));
-        Assert.isTrue(StringUtils.isBlank(this.createBy), new SilentException("创建人不能为空"));
-        Assert.isTrue(StringUtils.isBlank(this.updateBy), new SilentException("更新人不能为空"));
+        Assert.notBlank(this.subjectCode, new SilentException("主题code不能为空"));
+        Assert.notBlank(this.subjectName, new SilentException("主题name不能为空"));
+        Assert.notBlank(this.subjectDesc, new SilentException("主题desc不能为空"));
+        Assert.notBlank(this.parentId, new SilentException("父id不能为空"));
+        Assert.notBlank(this.owner, new SilentException("负责人不能为空"));
+        Assert.notNull(openStatus, new SilentException("开启状态为空"));
+        Assert.notBlank(this.createBy, new SilentException("创建人不能为空"));
+        Assert.notBlank(this.updateBy, new SilentException("更新人不能为空"));
 
         if ("0".equals(this.parentId)) {
             this.level = 1;
         } else {
             MetadataSubject parent = metadataSubjectRepository.findById(this.parentId);
-            Assert.isTrue(parent==null, new SilentException("父主题不存在"));
+            Assert.notNull(parent, new SilentException("父主题不存在"));
             this.level = parent.getLevel() + 1;
-            if (this.level>3){
-                Assert.isTrue(false, new SilentException("主题层级不能超过3级"));
+            if (this.level > 3) {
+                throw new SilentException("主题层级不能超过3级");
             }
         }
         MetadataSubject metadataSubject = metadataSubjectRepository.find(new MetadataSubjectFindQuery().setSubjectCode(this.subjectCode));
-        if (metadataSubject!=null){
-            if (!metadataSubject.id.equals(this.id)){
-                Assert.isTrue(metadataSubject.subjectCode.equals(this.subjectCode), new SilentException(metadataSubject.getSubjectCode() + "已存在"));
+        if (metadataSubject != null) {
+            if (!metadataSubject.id.equals(this.id)) {
+                Assert.isFalse(metadataSubject.subjectCode.equals(this.subjectCode), new SilentException(metadataSubject.getSubjectCode() + "已存在"));
             }
         }
 
         metadataSubject = metadataSubjectRepository.find(new MetadataSubjectFindQuery().setSubjectName(this.subjectName));
-        if (metadataSubject!=null){
-            if (!metadataSubject.id.equals(this.id)){
-                Assert.isTrue(metadataSubject.subjectName.equals(this.subjectName), new SilentException(metadataSubject.getSubjectName() + "已存在"));
+        if (metadataSubject != null) {
+            if (!metadataSubject.id.equals(this.id)) {
+                Assert.isFalse(metadataSubject.subjectName.equals(this.subjectName), new SilentException(metadataSubject.getSubjectName() + "已存在"));
             }
         }
     }
@@ -139,7 +138,7 @@ public class MetadataSubject {
      * 保存
      */
     public MetadataSubject save(MetadataSubjectRepository metadataSubjectRepository) {
-        Assert.isTrue(StringUtils.isNotBlank(this.id), new SilentException("不能存在主题id"));
+        Assert.notBlank(this.id, new SilentException("保存接口，不能存在主题id"));
         validate(metadataSubjectRepository);
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
@@ -159,7 +158,7 @@ public class MetadataSubject {
      * 删除
      */
     public void delete(MetadataSubjectRepository metadataSubjectRepository) {
-       metadataSubjectRepository.deleteById(this.id);
+        metadataSubjectRepository.deleteById(this.id);
 
     }
 }

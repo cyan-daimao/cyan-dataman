@@ -61,19 +61,19 @@ public class MetadataTableCmd {
     private HeatLevel heatLevel;
 
     /**
-     * 热度
+     * 密级
      */
     @NotNull(message = "秘密等级不能为空")
     private SecretLevel secretLevel;
 
     /**
-     * 热度
+     * 在线
      */
     @NotNull(message = "在线状态")
     private OnlineStatus onlineStatus;
 
     /**
-     * 表字段
+     * 表结构
      */
     @NotNull(message = "表结构不能为空")
     private TableValObj tableValObj;
