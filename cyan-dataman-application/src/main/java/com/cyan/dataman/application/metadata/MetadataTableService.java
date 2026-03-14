@@ -2,9 +2,9 @@ package com.cyan.dataman.application.metadata;
 
 import com.cyan.arch.common.api.Page;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
-import com.cyan.dataman.application.metadata.cmd.ImportTableCmd;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
+import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 
 import java.util.List;
@@ -28,6 +28,8 @@ public interface MetadataTableService {
      */
     List<MetadataTableBO> list(MetadataTableListQuery query);
 
+    MetadataTableBO findOne(MetadataTableOneQuery query);
+
     /**
      * 获取表
      */
@@ -44,7 +46,8 @@ public interface MetadataTableService {
     MetadataTableBO update(String id, MetadataTableCmd cmd);
 
     /**
-     * 导入表
+     * 删除表
      */
-    MetadataTableBO importTable(ImportTableCmd cmd);
+    void delete(String id);
+
 }

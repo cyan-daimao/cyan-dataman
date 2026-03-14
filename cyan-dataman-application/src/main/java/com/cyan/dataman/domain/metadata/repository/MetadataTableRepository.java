@@ -3,6 +3,7 @@ package com.cyan.dataman.domain.metadata.repository;
 import com.cyan.arch.common.api.Page;
 import com.cyan.dataman.domain.metadata.MetadataTable;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
+import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 
 import java.util.List;
@@ -33,4 +34,19 @@ public interface MetadataTableRepository {
      * 获取表
      */
     MetadataTable findById(String id);
+
+    /**
+     * 删除表
+     */
+    void deleteById(String id);
+
+    /**
+     * 更新表
+     */
+    MetadataTable updateById(MetadataTable table);
+
+    /**
+     * 获取表
+     */
+    MetadataTable findOne(MetadataTableOneQuery query);
 }

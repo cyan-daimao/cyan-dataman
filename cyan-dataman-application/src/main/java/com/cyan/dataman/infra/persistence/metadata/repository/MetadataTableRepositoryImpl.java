@@ -6,10 +6,14 @@ import com.cyan.arch.common.util.CollUtils;
 import com.cyan.arch.common.util.StrUtils;
 import com.cyan.dataman.domain.metadata.MetadataTable;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
+import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
+import com.cyan.dataman.infra.persistence.metadata.convert.MetadataColumnInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataTableInfraConvert;
+import com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataTableDO;
+import com.cyan.dataman.infra.persistence.metadata.mappers.MetadataColumnMapper;
 import com.cyan.dataman.infra.persistence.metadata.mappers.MetadataTableMapper;
 import io.micrometer.common.util.StringUtils;
 import org.springframework.stereotype.Repository;
@@ -26,9 +30,11 @@ import java.util.Optional;
 @Repository
 public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     private final MetadataTableMapper metadataTableMapper;
+    private final MetadataColumnMapper metadataColumnMapper;
 
-    public MetadataTableRepositoryImpl(MetadataTableMapper metadataTableMapper) {
+    public MetadataTableRepositoryImpl(MetadataTableMapper metadataTableMapper, MetadataColumnMapper metadataColumnMapper) {
         this.metadataTableMapper = metadataTableMapper;
+        this.metadataColumnMapper = metadataColumnMapper;
     }
 
     /**
@@ -39,7 +45,7 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
         LambdaQueryWrapper<MetadataTableDO> queryWrapper = new LambdaQueryWrapper<MetadataTableDO>()
                 .eq(StrUtils.isNotBlank(query.getSubjectCode()), MetadataTableDO::getSubjectCode, query.getSubjectCode())
                 .eq(StrUtils.isNotBlank(query.getOwner()), MetadataTableDO::getOwner, query.getOwner());
-        if (StringUtils.isNotBlank(query.getName()) || StringUtils.isNotBlank(query.getComment())){
+        if (StringUtils.isNotBlank(query.getName()) || StringUtils.isNotBlank(query.getComment())) {
             queryWrapper.and(q ->
                     q.like(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
                             .or()
@@ -72,7 +78,24 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
         MetadataTableDO metadataTableDO = MetadataTableInfraConvert.INSTANCE.toMetadataTableDO(table);
         metadataTableDO.setDataCatalog("iceberg");
         metadataTableMapper.insert(metadataTableDO);
-        return findById(metadataTableDO.getId()+"");
+        // 保存字段信息
+        saveColumns(table, metadataTableDO);
+        return findById(metadataTableDO.getId() + "");
+    }
+
+    /**
+     * 保存字段信息
+     */
+    private void saveColumns(MetadataTable table, MetadataTableDO metadataTableDO) {
+        if (CollUtils.isNotEmpty(table.getTable().getColumns())) {
+            List<MetadataColumnDO> columnDOs = MetadataColumnInfraConvert.INSTANCE.toMetadataColumnDOList(table.getTable().getColumns());
+            columnDOs.forEach(col -> {
+                col.setCatalog(metadataTableDO.getDataCatalog());
+                col.setSchema(metadataTableDO.getDataSchema());
+                col.setTbl(metadataTableDO.getTbl());
+                metadataColumnMapper.insert(col);
+            });
+        }
     }
 
     /**
@@ -82,5 +105,53 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     public MetadataTable findById(String id) {
         MetadataTableDO metadataTableDO = metadataTableMapper.selectById(id);
         return MetadataTableInfraConvert.INSTANCE.toMetadataTable(metadataTableDO);
+    }
+
+    /**
+     * 删除表
+     */
+    @Override
+    public void deleteById(String id) {
+        metadataTableMapper.deleteById(id);
+    }
+
+    /**
+     * 更新表
+     */
+    @Override
+    public MetadataTable updateById(MetadataTable table) {
+        MetadataTableDO metadataTableDO = MetadataTableInfraConvert.INSTANCE.toMetadataTableDO(table);
+        metadataTableMapper.updateById(metadataTableDO);
+        // 删除旧字段并保存新字段
+        updateColumns(table, metadataTableDO);
+        return findById(metadataTableDO.getId() + "");
+    }
+
+    /**
+     * 获取表
+     */
+    @Override
+    public MetadataTable findOne(MetadataTableOneQuery query) {
+        if (query == null || query.isEmpty()) {
+            return null;
+        }
+        LambdaQueryWrapper<MetadataTableDO> queryWrapper = new LambdaQueryWrapper<MetadataTableDO>()
+                .eq(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
+                .last("limit 1");
+        MetadataTableDO metadataTableDO = metadataTableMapper.selectOne(queryWrapper);
+        return MetadataTableInfraConvert.INSTANCE.toMetadataTable(metadataTableDO);
+    }
+
+    /**
+     * 更新字段信息
+     */
+    private void updateColumns(MetadataTable table, MetadataTableDO metadataTableDO) {
+        // 删除旧字段
+        metadataColumnMapper.delete(new LambdaQueryWrapper<MetadataColumnDO>()
+                .eq(MetadataColumnDO::getCatalog, metadataTableDO.getDataCatalog())
+                .eq(MetadataColumnDO::getSchema, metadataTableDO.getDataSchema())
+                .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl()));
+        // 保存新字段
+        saveColumns(table, metadataTableDO);
     }
 }

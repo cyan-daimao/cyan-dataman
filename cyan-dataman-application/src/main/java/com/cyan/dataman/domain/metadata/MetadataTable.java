@@ -1,8 +1,6 @@
 package com.cyan.dataman.domain.metadata;
 
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
-import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
-import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.enums.HeatLevel;
@@ -14,7 +12,6 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 
 /**
@@ -114,5 +111,12 @@ public class MetadataTable {
      */
     public MetadataTable save(MetadataTableRepository metadataTableRepository) {
         return metadataTableRepository.save(this);
+    }
+
+    /**
+     * 更新
+     */
+    public MetadataTable update(MetadataTableRepository metadataTableRepository) {
+        return metadataTableRepository.updateById(this);
     }
 }

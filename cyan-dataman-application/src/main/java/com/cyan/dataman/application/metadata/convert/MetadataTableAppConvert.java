@@ -4,6 +4,7 @@ import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.MetadataTable;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 /**
@@ -17,5 +18,7 @@ public interface MetadataTableAppConvert {
 
     MetadataTableBO toMetadataTableBO(MetadataTable metadataTable);
 
+    @Mapping(target = "layerCode", expression = "java(cmd.getLayerCode().getCode())")
+    @Mapping(target = "table", source = "tableValObj")
     MetadataTable toMetadataTable(MetadataTableCmd cmd);
 }
