@@ -246,10 +246,10 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     public void delete(String id) {
         MetadataTable existingTable = metadataTableRepository.findById(id);
         Assert.notNull(existingTable, new SilentException("表不存在"));
-        // 在Gravitino中删除表
-        dropTableInGravitino(existingTable);
         // 从数据库删除
         metadataTableRepository.deleteById(id);
+        // 在Gravitino中删除表
+        dropTableInGravitino(existingTable);
     }
 
     /**

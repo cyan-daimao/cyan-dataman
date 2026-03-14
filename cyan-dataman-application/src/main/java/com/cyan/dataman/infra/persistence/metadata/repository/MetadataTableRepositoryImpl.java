@@ -119,7 +119,11 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
      */
     @Override
     public void deleteById(String id) {
+        MetadataTable table = findById(id);
+        // 删除表
         metadataTableMapper.deleteById(id);
+        // 删除字段
+        metadataColumnMapper.delete(new LambdaQueryWrapper<MetadataColumnDO>().eq(MetadataColumnDO::getTbl, table.getName()));
     }
 
     /**
