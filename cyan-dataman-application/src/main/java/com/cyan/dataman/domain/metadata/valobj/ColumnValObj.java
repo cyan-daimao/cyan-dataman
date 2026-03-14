@@ -1,6 +1,7 @@
 package com.cyan.dataman.domain.metadata.valobj;
 
 import com.cyan.dataman.enums.ColumnDataType;
+import com.cyan.dataman.enums.SecretLevel;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -45,13 +46,18 @@ public class ColumnValObj {
     /**
      * 字段是否自增
      */
-    @NotNull(message = "字段是否自增不能为空")
+//    @NotNull(message = "字段是否自增不能为空")
     private Boolean autoIncrement;
 
     /**
      * 字段默认值
      */
     private String defaultValue;
+
+    /**
+     * 字段密级
+     */
+    private SecretLevel secretLevel;
 
     /**
      * Decimal精度（仅DECIMAL类型使用）

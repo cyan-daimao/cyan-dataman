@@ -38,13 +38,13 @@ public class MetadataColumnDO {
      * 目录
      */
     @TableField(value = "data_catalog")
-    private String catalog;
+    private String dataCatalog;
 
     /**
      * 库
      */
     @TableField(value = "data_schema")
-    private String schema;
+    private String dataSchema;
 
     /**
      * 表名
@@ -89,15 +89,22 @@ public class MetadataColumnDO {
     private String defaultValue;
 
     /**
+     * 默认值
+     */
+    @TableField(value = "auto_increment")
+    private Boolean autoIncrement;
+
+    /**
      * 创建时间
      */
-    @TableField(value = "create_time")
-    private LocalDateTime createTime;
+    @TableField(value = "created_at")
+    private LocalDateTime createdAt;
+
     /**
      * 修改时间
      */
-    @TableField(value = "update_time")
-    private LocalDateTime updateTime;
+    @TableField(value = "updated_at")
+    private LocalDateTime updatedAt;
 
     /**
      * 删除时间

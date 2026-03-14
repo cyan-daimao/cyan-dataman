@@ -9,6 +9,7 @@ import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
+import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataColumnInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataTableInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO;
@@ -90,8 +91,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
         if (CollUtils.isNotEmpty(table.getTable().getColumns())) {
             List<MetadataColumnDO> columnDOs = MetadataColumnInfraConvert.INSTANCE.toMetadataColumnDOList(table.getTable().getColumns());
             columnDOs.forEach(col -> {
-                col.setCatalog(metadataTableDO.getDataCatalog());
-                col.setSchema(metadataTableDO.getDataSchema());
+                col.setDataCatalog(metadataTableDO.getDataCatalog());
+                col.setDataSchema(metadataTableDO.getDataSchema());
                 col.setTbl(metadataTableDO.getTbl());
                 metadataColumnMapper.insert(col);
             });
@@ -104,7 +105,13 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     @Override
     public MetadataTable findById(String id) {
         MetadataTableDO metadataTableDO = metadataTableMapper.selectById(id);
-        return MetadataTableInfraConvert.INSTANCE.toMetadataTable(metadataTableDO);
+        LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()
+                .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl());
+        List<MetadataColumnDO> metadataColumnDOS = metadataColumnMapper.selectList(queryWrapper);
+        List<ColumnValObj> cols = MetadataTableInfraConvert.INSTANCE.toMetadataColumns(metadataColumnDOS);
+        MetadataTable metadataTable = MetadataTableInfraConvert.INSTANCE.toMetadataTable(metadataTableDO);
+        metadataTable.getTable().setColumns(cols);
+        return metadataTable;
     }
 
     /**
@@ -148,8 +155,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     private void updateColumns(MetadataTable table, MetadataTableDO metadataTableDO) {
         // 删除旧字段
         metadataColumnMapper.delete(new LambdaQueryWrapper<MetadataColumnDO>()
-                .eq(MetadataColumnDO::getCatalog, metadataTableDO.getDataCatalog())
-                .eq(MetadataColumnDO::getSchema, metadataTableDO.getDataSchema())
+                .eq(MetadataColumnDO::getDataCatalog, metadataTableDO.getDataCatalog())
+                .eq(MetadataColumnDO::getDataSchema, metadataTableDO.getDataSchema())
                 .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl()));
         // 保存新字段
         saveColumns(table, metadataTableDO);

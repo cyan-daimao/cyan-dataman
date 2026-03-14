@@ -4,8 +4,6 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.cyan.dataman.enums.ColumnDataType;
-import com.cyan.dataman.enums.SecretLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -79,13 +77,13 @@ public class MetadataIndexDO {
     /**
      * 创建时间
      */
-    @TableField(value = "create_time")
-    private LocalDateTime createTime;
+    @TableField(value = "created_at")
+    private LocalDateTime createdAt;
     /**
      * 修改时间
      */
-    @TableField(value = "update_time")
-    private LocalDateTime updateTime;
+    @TableField(value = "updated_at")
+    private LocalDateTime updatedAt;
 
     /**
      * 删除时间
