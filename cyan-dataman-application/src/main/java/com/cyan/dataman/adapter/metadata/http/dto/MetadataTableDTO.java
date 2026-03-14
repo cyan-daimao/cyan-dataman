@@ -3,6 +3,7 @@ package com.cyan.dataman.adapter.metadata.http.dto;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.enums.HeatLevel;
+import com.cyan.dataman.enums.OnlineStatus;
 import com.cyan.dataman.enums.SecretLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -63,6 +64,11 @@ public class MetadataTableDTO {
      * 描述
      */
     private String comment;
+
+    /**
+     * 上线状态
+     */
+    private OnlineStatus onlineStatus;
 
     /**
      * 访问次数

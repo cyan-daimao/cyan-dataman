@@ -61,6 +61,11 @@ public class MetadataTableBO {
     private String comment;
 
     /**
+     * 在线状态
+     */
+    private OnlineStatus onlineStatus;
+
+    /**
      * 访问次数
      */
     private String accessCount;
@@ -79,11 +84,6 @@ public class MetadataTableBO {
      * 秘密等级
      */
     private SecretLevel secretLevel;
-
-    /**
-     * 在线状态
-     */
-    private OnlineStatus onlineStatus;
 
     /**
      * 创建时间

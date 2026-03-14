@@ -105,6 +105,9 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     @Override
     public MetadataTable findById(String id) {
         MetadataTableDO metadataTableDO = metadataTableMapper.selectById(id);
+        if (metadataTableDO == null){
+            return null;
+        }
         LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()
                 .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl());
         List<MetadataColumnDO> metadataColumnDOS = metadataColumnMapper.selectList(queryWrapper);
