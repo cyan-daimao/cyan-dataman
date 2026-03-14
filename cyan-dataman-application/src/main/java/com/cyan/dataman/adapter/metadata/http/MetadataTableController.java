@@ -44,6 +44,8 @@ public class MetadataTableController {
                                                  @RequestParam(required = false) String owner,
                                                  @RequestParam(required = false) Long current,
                                                  @RequestParam(required = false) Long size) {
+        current = current == null ? 1L : current;
+        size = size == null ? 10L : size;
         MetadataTablePageQuery query = new MetadataTablePageQuery()
                 .setOrName(content)
                 .setOrComment(content)

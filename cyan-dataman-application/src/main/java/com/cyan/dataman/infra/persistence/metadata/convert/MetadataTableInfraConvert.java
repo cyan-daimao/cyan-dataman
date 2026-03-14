@@ -23,5 +23,7 @@ public interface MetadataTableInfraConvert {
     @Mapping(target = "name",source = "tbl")
     MetadataTable toMetadataTable(MetadataTableDO metadataTableDO);
 
+    @Mapping(source = "layerCode",target = "dataSchema")
+    @Mapping(source = "name",target = "tbl")
     MetadataTableDO toMetadataTableDO(MetadataTable table);
 }

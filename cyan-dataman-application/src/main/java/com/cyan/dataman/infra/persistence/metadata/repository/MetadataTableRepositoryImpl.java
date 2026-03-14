@@ -70,6 +70,7 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     @Override
     public MetadataTable save(MetadataTable table) {
         MetadataTableDO metadataTableDO = MetadataTableInfraConvert.INSTANCE.toMetadataTableDO(table);
+        metadataTableDO.setDataCatalog("iceberg");
         metadataTableMapper.insert(metadataTableDO);
         return findById(metadataTableDO.getId()+"");
     }

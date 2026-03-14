@@ -10,6 +10,7 @@ import com.cyan.dataman.domain.metadata.MetadataTable;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
+import com.cyan.dataman.enums.DatasourceType;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.client.GravitinoClient;
@@ -59,6 +60,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     @Override
     public MetadataTableBO save(MetadataTableCmd cmd) {
         MetadataTable metadataTable = MetadataTableAppConvert.INSTANCE.toMetadataTable(cmd);
+        metadataTable.setDatasourceType(DatasourceType.ICEBERG);
         metadataTable = metadataTable.save(metadataTableRepository);
         return MetadataTableAppConvert.INSTANCE.toMetadataTableBO(metadataTable);
     }

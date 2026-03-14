@@ -57,7 +57,6 @@ public class MetadataTableCmd {
     /**
      * 热度
      */
-    @NotNull(message = "热度不能为空")
     private HeatLevel heatLevel;
 
     /**
