@@ -5,8 +5,6 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.cyan.dataman.enums.ColumnDataType;
-import com.cyan.dataman.enums.HeatLevel;
-import com.cyan.dataman.enums.OnlineStatus;
 import com.cyan.dataman.enums.SecretLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -39,13 +37,13 @@ public class MetadataColumnDO {
     /**
      * 目录
      */
-    @TableField(value = "catalog")
+    @TableField(value = "data_catalog")
     private String catalog;
 
     /**
      * 库
      */
-    @TableField(value = "schema")
+    @TableField(value = "data_schema")
     private String schema;
 
     /**

@@ -13,6 +13,7 @@ import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.enums.ColumnDataType;
 import com.cyan.dataman.enums.DatasourceType;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
@@ -20,8 +21,10 @@ import org.apache.gravitino.client.GravitinoClient;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.TableCatalog;
 import org.apache.gravitino.rel.TableChange;
+import org.apache.gravitino.rel.types.Type;
 import org.apache.gravitino.rel.types.Types;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,6 +81,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
      * 创建表
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public MetadataTableBO save(MetadataTableCmd cmd) {
         MetadataTableBO one = findOne(new MetadataTableOneQuery().setName(cmd.getName()));
         Assert.isTrue(one==null, new SilentException("表已存在"));
@@ -85,10 +89,10 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         metadataTable.setDatasourceType(DatasourceType.ICEBERG);
         metadataTable.setLayerCode(cmd.getLayerCode().getCode().toLowerCase());
         metadataTable.getTable().setSchema(cmd.getLayerCode().getCode().toLowerCase());
-        // 先在Gravitino中创建表
-        createTableInGravitino(metadataTable);
         // 保存到数据库
         metadataTable = metadataTable.save(metadataTableRepository);
+        // 在Gravitino中创建表
+        createTableInGravitino(metadataTable);
         return MetadataTableAppConvert.INSTANCE.toMetadataTableBO(metadataTable);
     }
 
@@ -118,7 +122,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     private org.apache.gravitino.rel.Column toGravitinoColumn(ColumnValObj columnValObj) {
         return org.apache.gravitino.rel.Column.of(
                 columnValObj.getName(),
-                Types.StringType.get(),
+                toGravitinoType(columnValObj.getType(), columnValObj.getPrecision(), columnValObj.getScale()),
                 columnValObj.getComment(),
                 columnValObj.getNullable(),
                 columnValObj.getAutoIncrement(),
@@ -187,7 +191,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                 // 添加新字段
                 changes.add(TableChange.addColumn(
                         new String[]{newCol.getName()},
-                        toGravitinoType(newCol.getType()),
+                        toGravitinoType(newCol.getType(), newCol.getPrecision(), newCol.getScale()),
                         newCol.getComment(),
                         true
                 ));
@@ -213,17 +217,25 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     /**
      * 将字段类型转换为Gravitino类型
      */
-    private org.apache.gravitino.rel.types.Type toGravitinoType(org.apache.gravitino.rel.types.Type.Name typeName) {
-        return switch (typeName) {
-            case STRING -> Types.StringType.get();
+    private Type toGravitinoType(ColumnDataType columnDataType, Integer precision, Integer scale) {
+        return switch (columnDataType) {
+            case BOOLEAN -> Types.BooleanType.get();
             case INTEGER -> Types.IntegerType.get();
             case LONG -> Types.LongType.get();
             case FLOAT -> Types.FloatType.get();
             case DOUBLE -> Types.DoubleType.get();
-            case BOOLEAN -> Types.BooleanType.get();
+            case DECIMAL -> {
+                int p = precision != null && precision > 0 ? precision : 10;
+                int s = scale != null && scale >= 0 ? scale : 0;
+                yield Types.DecimalType.of(p, s);
+            }
+            case STRING -> Types.StringType.get();
             case DATE -> Types.DateType.get();
             case TIMESTAMP -> Types.TimestampType.withoutTimeZone();
-            default -> Types.StringType.get();
+            case TIMESTAMP_TZ -> Types.TimestampType.withTimeZone();
+            case TIME -> Types.TimeType.get();
+            case BINARY -> Types.BinaryType.get();
+            case UUID -> Types.UUIDType.get();
         };
     }
 

@@ -20,7 +20,7 @@ public interface MetadataColumnInfraConvert {
     MetadataColumnInfraConvert INSTANCE = Mappers.getMapper(MetadataColumnInfraConvert.class);
 
     @Mapping(target = "col", source = "name")
-    @Mapping(target = "dataType", expression = "java(com.cyan.dataman.enums.ColumnDataType.getByCode(columnValObj.getType().name()))")
+    @Mapping(target = "dataType", source = "type")
     MetadataColumnDO toMetadataColumnDO(ColumnValObj columnValObj);
 
     List<MetadataColumnDO> toMetadataColumnDOList(List<ColumnValObj> columnValObjs);

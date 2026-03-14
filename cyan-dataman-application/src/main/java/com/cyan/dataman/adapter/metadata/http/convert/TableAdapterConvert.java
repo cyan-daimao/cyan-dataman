@@ -4,6 +4,7 @@ import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import com.cyan.dataman.adapter.metadata.http.dto.TableDTO;
+import com.cyan.dataman.enums.ColumnDataType;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.expressions.Expression;
@@ -40,7 +41,7 @@ public interface TableAdapterConvert {
                             }
                             return new ColumnValObj()
                                     .setName(column.name())
-                                    .setType(column.dataType().name())
+                                    .setType(convertToColumnDataType(column.dataType().name()))
                                     .setDefaultValue(defaultValue)
                                     .setNullable(column.nullable())
                                     .setAutoIncrement(column.autoIncrement())
@@ -63,5 +64,26 @@ public interface TableAdapterConvert {
                 .setComment(table.comment())
                 .setColumns(columns)
                 .setIndexes(indexes);
+    }
+
+    /**
+     * 将Gravitino类型名转换为ColumnDataType
+     */
+    private ColumnDataType convertToColumnDataType(org.apache.gravitino.rel.types.Type.Name typeName) {
+        return switch (typeName) {
+            case BOOLEAN -> ColumnDataType.BOOLEAN;
+            case INTEGER -> ColumnDataType.INTEGER;
+            case LONG -> ColumnDataType.LONG;
+            case FLOAT -> ColumnDataType.FLOAT;
+            case DOUBLE -> ColumnDataType.DOUBLE;
+            case DECIMAL -> ColumnDataType.DECIMAL;
+            case STRING -> ColumnDataType.STRING;
+            case DATE -> ColumnDataType.DATE;
+            case TIMESTAMP -> ColumnDataType.TIMESTAMP;
+            case TIME -> ColumnDataType.TIME;
+            case BINARY -> ColumnDataType.BINARY;
+            case UUID -> ColumnDataType.UUID;
+            default -> ColumnDataType.STRING;
+        };
     }
 }
