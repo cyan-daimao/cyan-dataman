@@ -30,6 +30,7 @@ public interface MetadataTableInfraConvert {
 
     @Mapping(source = "layerCode",target = "dataSchema")
     @Mapping(source = "name",target = "tbl")
+    @Mapping(source = "table.catalog",target = "dataCatalog")
     MetadataTableDO toMetadataTableDO(MetadataTable table);
 
     List<ColumnValObj> toMetadataColumns(List<MetadataColumnDO> metadataColumnDOS);

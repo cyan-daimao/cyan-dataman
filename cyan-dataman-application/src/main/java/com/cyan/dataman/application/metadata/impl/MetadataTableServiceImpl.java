@@ -134,6 +134,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
      * 更新表
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public MetadataTableBO update(String id, MetadataTableCmd cmd) {
         MetadataTable existingTable = metadataTableRepository.findById(id);
         if (existingTable == null) {
@@ -144,10 +145,10 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         metadataTable.setDatasourceType(DatasourceType.ICEBERG);
         metadataTable.setLayerCode(cmd.getLayerCode().getCode().toLowerCase());
         metadataTable.getTable().setSchema(cmd.getLayerCode().getCode().toLowerCase());
-        // 在Gravitino中更新表
-        updateTableInGravitino(existingTable, metadataTable);
         // 更新数据库
         metadataTable = metadataTable.update(metadataTableRepository);
+        // 在Gravitino中更新表
+        updateTableInGravitino(existingTable, metadataTable);
         return MetadataTableAppConvert.INSTANCE.toMetadataTableBO(metadataTable);
     }
 

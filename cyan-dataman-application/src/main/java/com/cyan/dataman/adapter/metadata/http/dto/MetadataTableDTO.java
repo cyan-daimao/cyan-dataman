@@ -3,6 +3,7 @@ package com.cyan.dataman.adapter.metadata.http.dto;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.enums.HeatLevel;
+import com.cyan.dataman.enums.SecretLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -77,6 +78,11 @@ public class MetadataTableDTO {
      * 热度等级
      */
     private HeatLevel heatLevel;
+
+    /**
+     * 密级
+     */
+    private SecretLevel secretLevel;
 
     /**
      * 创建时间
