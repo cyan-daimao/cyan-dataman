@@ -66,7 +66,17 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     @Override
     public List<MetadataTable> list(MetadataTableListQuery query) {
         LambdaQueryWrapper<MetadataTableDO> queryWrapper = new LambdaQueryWrapper<MetadataTableDO>()
-                .in(CollUtils.isNotEmpty(query.getIds()), MetadataTableDO::getId, query.getIds());
+                .in(CollUtils.isNotEmpty(query.getIds()), MetadataTableDO::getId, query.getIds())
+                .like(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
+                .like(StrUtils.isNotBlank(query.getComment()), MetadataTableDO::getComment, query.getComment());
+        // 内容搜索（同时匹配表名或描述）
+        if (StringUtils.isNotBlank(query.getContent())) {
+            queryWrapper.and(q ->
+                    q.like(MetadataTableDO::getTbl, query.getContent())
+                            .or()
+                            .like(MetadataTableDO::getComment, query.getContent())
+            );
+        }
         List<MetadataTableDO> metadataTables = metadataTableMapper.selectList(queryWrapper);
         return Optional.ofNullable(metadataTables).orElse(List.of()).stream().map(MetadataTableInfraConvert.INSTANCE::toMetadataTable).toList();
     }

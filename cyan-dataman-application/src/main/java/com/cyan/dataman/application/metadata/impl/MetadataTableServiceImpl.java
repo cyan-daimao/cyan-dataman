@@ -3,18 +3,23 @@ package com.cyan.dataman.application.metadata.impl;
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.Page;
 import com.cyan.arch.common.api.SilentException;
+import com.cyan.dataman.adapter.metadata.http.dto.SubjectTableTreeDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.application.metadata.convert.MetadataTableAppConvert;
+import com.cyan.dataman.domain.metadata.MetadataSubject;
 import com.cyan.dataman.domain.metadata.MetadataTable;
+import com.cyan.dataman.domain.metadata.query.MetadataSubjectListQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
+import com.cyan.dataman.domain.metadata.repository.MetadataSubjectRepository;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.enums.ColumnDataType;
 import com.cyan.dataman.enums.DatasourceType;
+import io.micrometer.common.util.StringUtils;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.client.GravitinoClient;
@@ -28,9 +33,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -43,10 +50,14 @@ import java.util.stream.Collectors;
 @Service
 public class MetadataTableServiceImpl implements MetadataTableService {
     private final MetadataTableRepository metadataTableRepository;
+    private final MetadataSubjectRepository metadataSubjectRepository;
     private final GravitinoClient gravitinoClient;
 
-    public MetadataTableServiceImpl(MetadataTableRepository metadataTableRepository, GravitinoClient gravitinoClient) {
+    public MetadataTableServiceImpl(MetadataTableRepository metadataTableRepository, 
+                                    MetadataSubjectRepository metadataSubjectRepository,
+                                    GravitinoClient gravitinoClient) {
         this.metadataTableRepository = metadataTableRepository;
+        this.metadataSubjectRepository = metadataSubjectRepository;
         this.gravitinoClient = gravitinoClient;
     }
 
@@ -270,5 +281,156 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         Page<MetadataTable> page = metadataTableRepository.page(query);
         List<MetadataTableBO> data = Optional.ofNullable(page.getData()).orElse(List.of()).stream().map(MetadataTableAppConvert.INSTANCE::toMetadataTableBO).toList();
         return new Page<>(data, page.getCurrent(), page.getSize(), page.getTotal());
+    }
+
+    /**
+     * 获取主题-表树形结构
+     *
+     * @param content 搜索内容（表名或表描述）
+     * @return 树形结构
+     */
+    @Override
+    public List<SubjectTableTreeDTO> getSubjectTableTree(String content) {
+        // 1. 获取所有主题
+        List<MetadataSubject> allSubjects = metadataSubjectRepository.list(new MetadataSubjectListQuery());
+
+        // 2. 获取表列表（支持搜索）
+        MetadataTableListQuery tableQuery = new MetadataTableListQuery();
+        if (StringUtils.isNotBlank(content)) {
+            tableQuery.setContent(content);
+        }
+        List<MetadataTable> allTables = metadataTableRepository.list(tableQuery);
+
+        // 3. 构建主题 Map（key: subjectCode）
+        Map<String, MetadataSubject> subjectCodeMap = Optional.ofNullable(allSubjects).orElse(List.of())
+                .stream()
+                .collect(Collectors.toMap(MetadataSubject::getSubjectCode, Function.identity(), (a, b) -> a));
+
+        // 4. 构建主题 ID -> 主题对象 Map
+        Map<String, MetadataSubject> subjectIdMap = Optional.ofNullable(allSubjects).orElse(List.of())
+                .stream()
+                .collect(Collectors.toMap(MetadataSubject::getId, Function.identity(), (a, b) -> a));
+
+        // 5. 根据搜索条件确定需要显示的主题
+        Set<String> visibleSubjectCodes = new HashSet<>();
+        if (StringUtils.isNotBlank(content)) {
+            // 搜索模式：只显示包含匹配表的主题及其祖先
+            for (MetadataTable table : Optional.ofNullable(allTables).orElse(List.of())) {
+                if (table.getSubjectCode() != null) {
+                    visibleSubjectCodes.add(table.getSubjectCode());
+                    // 添加祖先主题
+                    addAncestorSubjects(table.getSubjectCode(), subjectCodeMap, subjectIdMap, visibleSubjectCodes);
+                }
+            }
+        } else {
+            // 非搜索模式：显示所有主题
+            visibleSubjectCodes.addAll(subjectCodeMap.keySet());
+        }
+
+        // 6. 过滤主题并构建树形结构
+        List<MetadataSubject> filteredSubjects = Optional.ofNullable(allSubjects).orElse(List.of())
+                .stream()
+                .filter(s -> visibleSubjectCodes.contains(s.getSubjectCode()))
+                .collect(Collectors.toList());
+
+        // 7. 构建主题树
+        List<SubjectTableTreeDTO> subjectTree = buildSubjectTree(filteredSubjects, allTables, visibleSubjectCodes);
+
+        return subjectTree;
+    }
+
+    /**
+     * 添加祖先主题到可见集合
+     */
+    private void addAncestorSubjects(String subjectCode, Map<String, MetadataSubject> subjectCodeMap, 
+                                      Map<String, MetadataSubject> subjectIdMap, Set<String> visibleSubjectCodes) {
+        MetadataSubject subject = subjectCodeMap.get(subjectCode);
+        if (subject == null) return;
+        
+        String parentId = subject.getParentId();
+        while (parentId != null && !"0".equals(parentId)) {
+            MetadataSubject parent = subjectIdMap.get(parentId);
+            if (parent != null) {
+                visibleSubjectCodes.add(parent.getSubjectCode());
+                parentId = parent.getParentId();
+            } else {
+                break;
+            }
+        }
+    }
+
+    /**
+     * 构建主题树形结构
+     */
+    private List<SubjectTableTreeDTO> buildSubjectTree(List<MetadataSubject> subjects, 
+                                                        List<MetadataTable> tables,
+                                                        Set<String> visibleSubjectCodes) {
+        // 构建主题 ID -> 主题对象 Map
+        Map<String, MetadataSubject> subjectIdMap = subjects.stream()
+                .collect(Collectors.toMap(MetadataSubject::getId, Function.identity(), (a, b) -> a));
+
+        // 按 subjectCode 分组表
+        Map<String, List<MetadataTable>> tablesBySubject = Optional.ofNullable(tables).orElse(List.of())
+                .stream()
+                .filter(t -> t.getSubjectCode() != null && visibleSubjectCodes.contains(t.getSubjectCode()))
+                .collect(Collectors.groupingBy(MetadataTable::getSubjectCode));
+
+        // 构建树节点
+        Map<String, SubjectTableTreeDTO> nodeMap = new java.util.HashMap<>();
+        for (MetadataSubject subject : subjects) {
+            SubjectTableTreeDTO node = new SubjectTableTreeDTO()
+                    .setKey("subject-" + subject.getId())
+                    .setTitle(subject.getSubjectName())
+                    .setType("subject")
+                    .setSubjectCode(subject.getSubjectCode())
+                    .setLeaf(false);
+            nodeMap.put(subject.getId(), node);
+        }
+
+        // 构建父子关系
+        List<SubjectTableTreeDTO> rootNodes = new ArrayList<>();
+        for (MetadataSubject subject : subjects) {
+            SubjectTableTreeDTO node = nodeMap.get(subject.getId());
+            String parentId = subject.getParentId();
+
+            if (parentId == null || "0".equals(parentId)) {
+                // 一级主题
+                rootNodes.add(node);
+            } else {
+                // 子主题，添加到父节点
+                SubjectTableTreeDTO parentNode = nodeMap.get(parentId);
+                if (parentNode != null) {
+                    if (parentNode.getChildren() == null) {
+                        parentNode.setChildren(new ArrayList<>());
+                    }
+                    parentNode.getChildren().add(node);
+                }
+            }
+        }
+
+        // 为每个主题节点添加表作为子节点
+        for (MetadataSubject subject : subjects) {
+            SubjectTableTreeDTO node = nodeMap.get(subject.getId());
+            List<MetadataTable> subjectTables = tablesBySubject.get(subject.getSubjectCode());
+            if (subjectTables != null && !subjectTables.isEmpty()) {
+                if (node.getChildren() == null) {
+                    node.setChildren(new ArrayList<>());
+                }
+                for (MetadataTable table : subjectTables) {
+                    SubjectTableTreeDTO tableNode = new SubjectTableTreeDTO()
+                            .setKey("table-" + table.getId())
+                            .setTitle(table.getName() + (table.getComment() != null ? " (" + table.getComment() + ")" : ""))
+                            .setType("table")
+                            .setTableId(table.getId())
+                            .setTableName(table.getName())
+                            .setLeaf(true);
+                    node.getChildren().add(tableNode);
+                }
+            }
+            // 更新 isLeaf 状态
+            node.setLeaf(node.getChildren() == null || node.getChildren().isEmpty());
+        }
+
+        return rootNodes;
     }
 }

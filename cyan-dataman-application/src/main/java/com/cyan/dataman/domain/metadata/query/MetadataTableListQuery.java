@@ -22,4 +22,19 @@ public class MetadataTableListQuery {
      * 主键
      */
     private List<String> ids;
+
+    /**
+     * 表名（模糊搜索）
+     */
+    private String name;
+
+    /**
+     * 表描述（模糊搜索）
+     */
+    private String comment;
+
+    /**
+     * 搜索内容（同时匹配表名或描述）
+     */
+    private String content;
 }

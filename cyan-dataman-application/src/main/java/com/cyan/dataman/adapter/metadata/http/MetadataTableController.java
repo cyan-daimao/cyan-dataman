@@ -4,6 +4,7 @@ import com.cyan.arch.common.api.Page;
 import com.cyan.arch.common.api.Response;
 import com.cyan.dataman.adapter.metadata.http.convert.MetadataTableAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableDTO;
+import com.cyan.dataman.adapter.metadata.http.dto.SubjectTableTreeDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
@@ -96,6 +97,19 @@ public class MetadataTableController {
     public Response<Void> delete(@PathVariable String id) {
         metadataTableService.delete(id);
         return Response.success();
+    }
+
+    /**
+     * 获取主题-表树形结构
+     *
+     * @param content 搜索内容（表名或表描述），为空时返回全部树
+     * @return 树形结构
+     */
+    @GetMapping("/tree")
+    public Response<List<SubjectTableTreeDTO>> getSubjectTableTree(
+            @RequestParam(required = false) String content) {
+        List<SubjectTableTreeDTO> tree = metadataTableService.getSubjectTableTree(content);
+        return Response.success(tree);
     }
 
 }

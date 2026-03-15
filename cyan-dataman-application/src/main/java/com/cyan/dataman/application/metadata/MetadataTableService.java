@@ -1,6 +1,7 @@
 package com.cyan.dataman.application.metadata;
 
 import com.cyan.arch.common.api.Page;
+import com.cyan.dataman.adapter.metadata.http.dto.SubjectTableTreeDTO;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
@@ -52,5 +53,13 @@ public interface MetadataTableService {
      * 删除表
      */
     void delete(String id);
+
+    /**
+     * 获取主题-表树形结构
+     *
+     * @param content 搜索内容（表名或表描述）
+     * @return 树形结构
+     */
+    List<SubjectTableTreeDTO> getSubjectTableTree(String content);
 
 }
