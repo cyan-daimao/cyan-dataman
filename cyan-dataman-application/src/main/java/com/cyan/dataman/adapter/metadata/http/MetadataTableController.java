@@ -98,12 +98,4 @@ public class MetadataTableController {
         return Response.success();
     }
 
-    /**
-     * 获取表树
-     * @param search 搜索内容可以是表名或主题名
-     */
-    @GetMapping("/tree")
-    public Response<List<MetadataTableDTO>> tree(@RequestParam(required = false) String search) {
-        return Response.success();
-    }
 }
