@@ -28,6 +28,9 @@ public interface MetadataTableService {
      */
     List<MetadataTableBO> list(MetadataTableListQuery query);
 
+    /**
+     * 获取表
+     */
     MetadataTableBO findOne(MetadataTableOneQuery query);
 
     /**
