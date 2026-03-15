@@ -44,6 +44,16 @@ public class SubjectTableTreeDTO {
     private String tableId;
 
     /**
+     * 目录（仅表节点有值）
+     */
+    private String catalog;
+
+    /**
+     * 模式（仅表节点有值）
+     */
+    private String schema;
+
+    /**
      * 表名（仅表节点有值）
      */
     private String tableName;

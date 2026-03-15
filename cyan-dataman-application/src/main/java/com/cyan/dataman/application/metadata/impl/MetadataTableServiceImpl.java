@@ -334,9 +334,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                 .collect(Collectors.toList());
 
         // 7. 构建主题树
-        List<SubjectTableTreeDTO> subjectTree = buildSubjectTree(filteredSubjects, allTables, visibleSubjectCodes);
-
-        return subjectTree;
+        return buildSubjectTree(filteredSubjects, allTables, visibleSubjectCodes);
     }
 
     /**
@@ -423,6 +421,8 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                             .setType("table")
                             .setTableId(table.getId())
                             .setTableName(table.getName())
+                            .setCatalog(table.getTable() != null ? table.getTable().getCatalog() : null)
+                            .setSchema(table.getTable() != null ? table.getTable().getSchema() : null)
                             .setLeaf(true);
                     node.getChildren().add(tableNode);
                 }
