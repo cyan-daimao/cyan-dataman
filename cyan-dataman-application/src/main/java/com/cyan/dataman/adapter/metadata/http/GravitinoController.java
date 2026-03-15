@@ -97,7 +97,7 @@ public class GravitinoController {
     /**
      * 获取表数据
      */
-    @GetMapping("/catalogs/{catalog}/schemas/{schema}/tables/{table}/data")
+    @GetMapping("/catalogs/{catalog}/schemas/{schema}/tables/{table}/preview")
     public Response<List<Map<String, Object>>> listTableData(@PathVariable String catalog, @PathVariable String schema, @PathVariable String table) throws SQLException {
         String sql = "select * from %s.%s.%s limit 100".formatted(catalog, schema, table);
         List<Map<String, Object>> data = StarRocksUtil.queryForList(sql);
