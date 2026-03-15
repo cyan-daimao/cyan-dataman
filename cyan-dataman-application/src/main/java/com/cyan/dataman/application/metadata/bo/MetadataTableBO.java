@@ -88,12 +88,12 @@ public class MetadataTableBO {
     /**
      * 创建时间
      */
-    private LocalDateTime createTime;
+    private LocalDateTime createdAt;
 
     /**
      * 修改时间
      */
-    private LocalDateTime updateTime;
+    private LocalDateTime updatedAt;
 
     /**
      * 删除时间
