@@ -37,6 +37,23 @@
             <artifactId>arch-base</artifactId>
         </dependency>
 
+        <!-- Iceberg Spark 运行时依赖（核心） -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-spark-runtime-4.0_2.13</artifactId>
+            <version>1.10.1</version>
+        </dependency>
+        <!-- Source: https://mvnrepository.com/artifact/org.apache.spark/spark-sql -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_2.13</artifactId>
+            <version>4.0.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_2.13</artifactId>
+            <version>4.0.2</version>
+        </dependency>
         <!-- Gravitino 客户端依赖 -->
         <dependency>
             <groupId>org.apache.gravitino</groupId>
@@ -48,6 +65,7 @@
             <artifactId>iceberg-core</artifactId>
             <version>1.10.1</version>
         </dependency>
+
         <!-- Iceberg AWS S3 -->
         <!-- Iceberg AWS S3 -->
         <dependency>

@@ -12,6 +12,7 @@ import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import org.apache.iceberg.ExpireSnapshots;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.actions.ActionsProvider;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.FileInfo;
@@ -137,6 +138,7 @@ public class MetadataTableController {
                 "s3.region", "cn-north-1"
         ));
         Table table = restCatalog.loadTable(TableIdentifier.of("ods", "ods_user_test"));
+
         Iterable<Snapshot> snapshots = table.snapshots();
         ArrayList<Snapshot> snapshotList = new ArrayList<>();
         for (Snapshot snapshot : snapshots) {
@@ -152,7 +154,7 @@ public class MetadataTableController {
             }
         }
         expireSnapshots.cleanExpiredMetadata(true).cleanExpiredFiles(true).commit();
-    table.refresh();
+        table.refresh();
         FileIO fileIO = table.io();
         SupportsPrefixOperations prefixOperations = (SupportsPrefixOperations) fileIO;
         String location = table.location();
