@@ -1,0 +1,13 @@
+----------------------------------------------------------------
+Thu Jan 15 21:33:42 CST 2026:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.1.0 - (1808820): instance a816c00e-019b-c1dc-a728-0000056247b0 
+on database directory /Users/cy/Workspace/code/java/cyan-dataman/metastore_db with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@76ed5528 
+Loaded from file:/Users/cy/.m2/repository/org/apache/derby/derby/10.14.1.0/derby-10.14.1.0.jar
+java.vendor=Microsoft
+java.runtime.version=21.0.8+9-LTS
+user.dir=/Users/cy/Workspace/code/java/cyan-dataman
+os.name=Mac OS X
+os.arch=aarch64
+os.version=15.6
+derby.system.home=null
+Database Class Loader started - derby.database.classpath=''

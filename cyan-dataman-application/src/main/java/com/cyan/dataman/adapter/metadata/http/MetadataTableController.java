@@ -9,14 +9,23 @@ import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
+import org.apache.iceberg.ExpireSnapshots;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.Table;
+import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.io.FileInfo;
+import org.apache.iceberg.io.SupportsPrefixOperations;
+import org.apache.iceberg.rest.RESTCatalog;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
- *
  * 元数据接口
  *
  * @author cy.Y
@@ -110,6 +119,57 @@ public class MetadataTableController {
             @RequestParam(required = false) String content) {
         List<SubjectTableTreeDTO> tree = metadataTableService.getSubjectTableTree(content);
         return Response.success(tree);
+    }
+
+    /**
+     * 获取表快照
+     */
+    @GetMapping("/{fullName}/snapshot")
+    public Response<Object> snapshot(@PathVariable String fullName) {
+        RESTCatalog restCatalog = new RESTCatalog();
+        restCatalog.initialize("iceberg", Map.of(
+                "type", "rest",
+                "uri", "http://iceberg-gravitino.cyan.com/iceberg/", // Gravitino Iceberg REST 地址
+                "s3.endpoint", "http://rustfs.cyan.com",
+                // S3 认证配置（必填，否则无法访问对象存储）
+                "s3.access-key-id", "rustfsadmin",
+                "s3.secret-access-key", "rustfsadmin",
+                "s3.region", "cn-north-1"
+        ));
+        Table table = restCatalog.loadTable(TableIdentifier.of("ods", "ods_user_test"));
+        Iterable<Snapshot> snapshots = table.snapshots();
+        ArrayList<Snapshot> snapshotList = new ArrayList<>();
+        for (Snapshot snapshot : snapshots) {
+            snapshotList.add(snapshot);
+        }
+        snapshotList.sort((s1, s2) -> Long.compare(s2.timestampMillis(), s1.timestampMillis()));
+        // 使快照过期
+        ExpireSnapshots expireSnapshots = table.expireSnapshots();
+        for (int i = 0; i < snapshotList.size(); i++) {
+            Snapshot snapshot = snapshotList.get(i);
+            if (i > 0) {
+                expireSnapshots.expireSnapshotId(snapshot.snapshotId());
+            }
+        }
+        expireSnapshots.cleanExpiredMetadata(true).cleanExpiredFiles(true).commit();
+    table.refresh();
+        FileIO fileIO = table.io();
+        SupportsPrefixOperations prefixOperations = (SupportsPrefixOperations) fileIO;
+        String location = table.location();
+        Iterable<FileInfo> fileInfos = prefixOperations.listPrefix(location + "/metadata");
+        for (FileInfo fileInfo : fileInfos) {
+            //删除metadata.json文件
+            String sequenceNumber = String.format("%05d", snapshotList.getFirst().sequenceNumber() + 1);
+            if (fileInfo.location().endsWith(".metadata.json") && !fileInfo.location().startsWith(location + "/metadata/" + sequenceNumber)) {
+                fileIO.deleteFile(fileInfo.location());
+            }
+            String avroUuid = fileInfo.location().replaceAll(location + "/metadata/", "").replaceAll("-m0.avro", "");
+            if (fileInfo.location().endsWith(".avro") && !snapshotList.getFirst().manifestListLocation().contains(avroUuid)) {
+                //删除.avro文件
+                fileIO.deleteFile(fileInfo.location());
+            }
+        }
+        return Response.success();
     }
 
 }
