@@ -9,14 +9,8 @@ import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
-import org.apache.iceberg.ExpireSnapshots;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.io.FileIO;
-import org.apache.iceberg.io.FileInfo;
-import org.apache.iceberg.io.SupportsPrefixOperations;
-import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.actions.SparkActions;
 import org.apache.spark.sql.SparkSession;
@@ -25,9 +19,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -133,58 +125,31 @@ public class MetadataTableController {
      */
     @GetMapping("/{fullName}/snapshot")
     public Response<Object> snapshot(@PathVariable String fullName) {
-        RESTCatalog restCatalog = new RESTCatalog();
-        restCatalog.initialize("iceberg", Map.of(
-                "type", "rest",
-                "uri", "http://iceberg-gravitino.cyan.com/iceberg/", // Gravitino Iceberg REST 地址
-                "s3.endpoint", "http://rustfs.cyan.com",
-                // S3 认证配置（必填，否则无法访问对象存储）
-                "s3.access-key-id", "rustfsadmin",
-                "s3.secret-access-key", "rustfsadmin",
-                "s3.region", "cn-north-1"
-        ));
-        Table table = restCatalog.loadTable(TableIdentifier.of("ods", "ods_user_test"));
 
-        Iterable<Snapshot> snapshots = table.snapshots();
-        ArrayList<Snapshot> snapshotList = new ArrayList<>();
-        for (Snapshot snapshot : snapshots) {
-            snapshotList.add(snapshot);
-        }
-        snapshotList.sort((s1, s2) -> Long.compare(s2.timestampMillis(), s1.timestampMillis()));
-        // 使快照过期
-        ExpireSnapshots expireSnapshots = table.expireSnapshots();
-        for (int i = 0; i < snapshotList.size(); i++) {
-            Snapshot snapshot = snapshotList.get(i);
-            if (i > 0) {
-                expireSnapshots.expireSnapshotId(snapshot.snapshotId());
-            }
-        }
-        expireSnapshots.cleanExpiredMetadata(true).cleanExpiredFiles(true).commit();
-        table.refresh();
-        FileIO fileIO = table.io();
-        SupportsPrefixOperations prefixOperations = (SupportsPrefixOperations) fileIO;
-        String location = table.location();
-        Iterable<FileInfo> fileInfos = prefixOperations.listPrefix(location + "/metadata");
-        for (FileInfo fileInfo : fileInfos) {
-            //删除metadata.json文件
-            String sequenceNumber = String.format("%05d", snapshotList.getFirst().sequenceNumber() + 1);
-            if (fileInfo.location().endsWith(".metadata.json") && !fileInfo.location().startsWith(location + "/metadata/" + sequenceNumber)) {
-                fileIO.deleteFile(fileInfo.location());
-            }
-            String avroUuid = fileInfo.location().replaceAll(location + "/metadata/", "").replaceAll("-m0.avro", "");
-            if (fileInfo.location().endsWith(".avro") && !snapshotList.getFirst().manifestListLocation().contains(avroUuid)) {
-                //删除.avro文件
-                fileIO.deleteFile(fileInfo.location());
-            }
-        }
         return Response.success();
     }
 
+    /**
+     * 快照清理
+     */
     @GetMapping("/{fullName}/snapshot/maintenance")
     public Response<Object> maintenance(@PathVariable String fullName) throws NoSuchTableException, ParseException {
         Table table = Spark3Util.loadIcebergTable(sparkSession, "rest.ods.ods_user_test");
-        //清理孤立文件
-        SparkActions.get(sparkSession).deleteOrphanFiles(table).execute();
+        SparkActions actions = SparkActions.get(sparkSession);
+        Iterable<Snapshot> snapshots = table.snapshots();
+
+
+        // 1. 使旧快照过期（删除不再需要的数据文件和元数据文件）
+        long olderThan = System.currentTimeMillis() - 1000; // 保留最近1秒的快照
+
+        // 2. 合并 /data 下的小文件
+        actions.rewriteDataFiles(table).option("target-file-size-bytes", Long.toString(128 * 1024 * 1024)).execute();
+
+        actions.expireSnapshots(table).expireOlderThan(olderThan).retainLast(1).execute();
+
+        // 3. 删除孤儿文件
+        actions.deleteOrphanFiles(table).olderThan(olderThan).execute();
+
         return Response.success();
     }
 }

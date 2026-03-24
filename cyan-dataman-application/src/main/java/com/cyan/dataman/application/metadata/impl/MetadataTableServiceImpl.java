@@ -31,13 +31,7 @@ import org.apache.gravitino.rel.types.Types;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -53,7 +47,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     private final MetadataSubjectRepository metadataSubjectRepository;
     private final GravitinoClient gravitinoClient;
 
-    public MetadataTableServiceImpl(MetadataTableRepository metadataTableRepository, 
+    public MetadataTableServiceImpl(MetadataTableRepository metadataTableRepository,
                                     MetadataSubjectRepository metadataSubjectRepository,
                                     GravitinoClient gravitinoClient) {
         this.metadataTableRepository = metadataTableRepository;
@@ -95,7 +89,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     @Transactional(rollbackFor = Exception.class)
     public MetadataTableBO save(MetadataTableCmd cmd) {
         MetadataTableBO one = findOne(new MetadataTableOneQuery().setName(cmd.getName()));
-        Assert.isTrue(one==null, new SilentException("表已存在"));
+        Assert.isTrue(one == null, new SilentException("表已存在"));
         MetadataTable metadataTable = MetadataTableAppConvert.INSTANCE.toMetadataTable(cmd);
         metadataTable.setDatasourceType(DatasourceType.ICEBERG);
         metadataTable.setLayerCode(cmd.getLayerCode().getCode().toLowerCase());
@@ -123,7 +117,11 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                 NameIdentifier.of(table.getTable().getSchema(), table.getTable().getName()),
                 columns,
                 table.getComment(),
-                null
+                //默认保留10个metadata.json文件
+                Map.of(
+                        "write.metadata.delete-after-commit.enabled", "true",
+                        "write.metadata.previous-versions-max", "10"
+                )
         );
     }
 
@@ -172,7 +170,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         NameIdentifier tableIdent = NameIdentifier.of(oldTable.getTable().getSchema(), oldTable.getTable().getName());
 
         List<TableChange> changes = new ArrayList<>();
-        
+
         // 更新表注释
         if (!oldTable.getComment().equals(newTable.getComment())) {
             changes.add(TableChange.updateComment(newTable.getComment()));
@@ -181,7 +179,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         // 获取旧表的字段信息
         Table existingGravitinoTable = tableCatalog.loadTable(tableIdent);
         Map<String, org.apache.gravitino.rel.Column> oldColumns = Arrays.stream(Optional.ofNullable(existingGravitinoTable.columns())
-                .orElse(new org.apache.gravitino.rel.Column[0]))
+                        .orElse(new org.apache.gravitino.rel.Column[0]))
                 .collect(Collectors.toMap(org.apache.gravitino.rel.Column::name, Function.identity()));
 
         // 获取新表的字段信息
@@ -340,11 +338,11 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     /**
      * 添加祖先主题到可见集合
      */
-    private void addAncestorSubjects(String subjectCode, Map<String, MetadataSubject> subjectCodeMap, 
-                                      Map<String, MetadataSubject> subjectIdMap, Set<String> visibleSubjectCodes) {
+    private void addAncestorSubjects(String subjectCode, Map<String, MetadataSubject> subjectCodeMap,
+                                     Map<String, MetadataSubject> subjectIdMap, Set<String> visibleSubjectCodes) {
         MetadataSubject subject = subjectCodeMap.get(subjectCode);
         if (subject == null) return;
-        
+
         String parentId = subject.getParentId();
         while (parentId != null && !"0".equals(parentId)) {
             MetadataSubject parent = subjectIdMap.get(parentId);
@@ -360,9 +358,9 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     /**
      * 构建主题树形结构
      */
-    private List<SubjectTableTreeDTO> buildSubjectTree(List<MetadataSubject> subjects, 
-                                                        List<MetadataTable> tables,
-                                                        Set<String> visibleSubjectCodes) {
+    private List<SubjectTableTreeDTO> buildSubjectTree(List<MetadataSubject> subjects,
+                                                       List<MetadataTable> tables,
+                                                       Set<String> visibleSubjectCodes) {
         // 构建主题 ID -> 主题对象 Map
         Map<String, MetadataSubject> subjectIdMap = subjects.stream()
                 .collect(Collectors.toMap(MetadataSubject::getId, Function.identity(), (a, b) -> a));
