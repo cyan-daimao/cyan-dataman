@@ -123,7 +123,7 @@ public class MetadataTableController {
     /**
      * 获取表快照
      */
-    @GetMapping("/{fullName}/snapshot")
+    @GetMapping("/{fullName}/snapshots")
     public Response<List<TableSnapshotValObj>> snapshot(@PathVariable String fullName) {
         String[] split = fullName.split("\\.");
         List<TableSnapshotValObj> snapshots = metadataTableService.snapshots(split[0], split[1]);
@@ -133,7 +133,7 @@ public class MetadataTableController {
     /**
      * 快照回滚
      */
-    @GetMapping("/{fullName}/snapshot/{snapshotId}/rollback")
+    @GetMapping("/{fullName}/snapshots/{snapshotId}/rollback")
     public Response<Void> rollback(@PathVariable String fullName, @PathVariable String snapshotId) {
         String[] split = fullName.split("\\.");
         metadataTableService.rollback(split[0], split[1], snapshotId);
@@ -143,7 +143,7 @@ public class MetadataTableController {
     /**
      * 快照清理
      */
-    @PostMapping("/{fullName}/snapshot/maintenance")
+    @PostMapping("/{fullName}/snapshots/maintenance")
     public Response<Void> maintenance(@PathVariable String fullName) throws NoSuchTableException, ParseException {
         Table table = Spark3Util.loadIcebergTable(sparkSession, fullName);
         SparkActions actions = SparkActions.get(sparkSession);
