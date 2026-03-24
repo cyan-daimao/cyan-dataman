@@ -361,7 +361,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                 snapshots.sort((o1, o2) -> Math.toIntExact(o2.timestampMillis() - o1.timestampMillis()));
                 return snapshots.stream().map(snapshot -> new TableSnapshotValObj()
                         .setSnapshotId(Convert.toStr(snapshot.snapshotId()))
-                        .setCreatedTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(snapshot.timestampMillis()), ZoneId.systemDefault()))
+                        .setCreatedAt(LocalDateTime.ofInstant(Instant.ofEpochMilli(snapshot.timestampMillis()), ZoneId.systemDefault()))
                         .setOperation(snapshot.operation())
                         .setSequenceNumber(Convert.toStr(snapshot.sequenceNumber()))
                         .setTotalRecords(snapshot.summary().get("total-records"))

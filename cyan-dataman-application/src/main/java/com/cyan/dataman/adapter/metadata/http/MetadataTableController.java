@@ -126,7 +126,15 @@ public class MetadataTableController {
     @GetMapping("/{fullName}/snapshots")
     public Response<List<TableSnapshotValObj>> snapshot(@PathVariable String fullName) {
         String[] split = fullName.split("\\.");
-        List<TableSnapshotValObj> snapshots = metadataTableService.snapshots(split[0], split[1]);
+        String schema, tbl;
+        if (split.length>2){
+           schema = split[1];
+           tbl = split[2];
+        }else{
+            schema = split[0];
+            tbl = split[1];
+        }
+        List<TableSnapshotValObj> snapshots = metadataTableService.snapshots(schema, tbl);
         return Response.success(snapshots);
     }
 
@@ -136,16 +144,33 @@ public class MetadataTableController {
     @GetMapping("/{fullName}/snapshots/{snapshotId}/rollback")
     public Response<Void> rollback(@PathVariable String fullName, @PathVariable String snapshotId) {
         String[] split = fullName.split("\\.");
-        metadataTableService.rollback(split[0], split[1], snapshotId);
+        String schema, tbl;
+        if (split.length>2){
+            schema = split[1];
+            tbl = split[2];
+        }else{
+            schema = split[0];
+            tbl = split[1];
+        }
+        metadataTableService.rollback(schema, tbl, snapshotId);
         return Response.success();
     }
 
     /**
      * 快照清理
      */
-    @PostMapping("/{fullName}/snapshots/maintenance")
+    @PostMapping("/{fullName}/maintenance")
     public Response<Void> maintenance(@PathVariable String fullName) throws NoSuchTableException, ParseException {
-        Table table = Spark3Util.loadIcebergTable(sparkSession, fullName);
+        String[] split = fullName.split("\\.");
+        String schema, tbl;
+        if (split.length>2){
+            schema = split[1];
+            tbl = split[2];
+        }else{
+            schema = split[0];
+            tbl = split[1];
+        }
+        Table table = Spark3Util.loadIcebergTable(sparkSession, "%s.%s".formatted(schema,tbl));
         SparkActions actions = SparkActions.get(sparkSession);
 
         // 保留最近1秒的快照

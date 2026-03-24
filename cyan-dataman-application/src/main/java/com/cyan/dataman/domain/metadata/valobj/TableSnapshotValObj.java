@@ -37,7 +37,7 @@ public class TableSnapshotValObj {
      * 创建时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
-    private LocalDateTime createdTime;
+    private LocalDateTime createdAt;
 
     /**
      * 快照元数据文件
