@@ -364,6 +364,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                         .setCreatedAt(LocalDateTime.ofInstant(Instant.ofEpochMilli(snapshot.timestampMillis()), ZoneId.systemDefault()))
                         .setOperation(snapshot.operation())
                         .setSequenceNumber(Convert.toStr(snapshot.sequenceNumber()))
+                        .setManifestListLocation(snapshot.manifestListLocation())
                         .setTotalRecords(snapshot.summary().get("total-records"))
                         .setAddedRecords(snapshot.summary().get("added-records"))).toList();
             }
