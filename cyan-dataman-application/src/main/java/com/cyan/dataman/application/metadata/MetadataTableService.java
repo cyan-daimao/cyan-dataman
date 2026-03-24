@@ -7,6 +7,7 @@ import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
+import com.cyan.dataman.domain.metadata.valobj.TableSnapshotValObj;
 
 import java.util.List;
 
@@ -62,4 +63,13 @@ public interface MetadataTableService {
      */
     List<SubjectTableTreeDTO> getSubjectTableTree(String content);
 
+    /**
+     * 获取表快照
+     */
+    List<TableSnapshotValObj> snapshots(String schema, String tbl);
+
+    /**
+     * 回滚
+     */
+    void rollback(String schema, String tbl, String snapshotId);
 }

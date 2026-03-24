@@ -9,7 +9,7 @@ import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
-import org.apache.iceberg.Snapshot;
+import com.cyan.dataman.domain.metadata.valobj.TableSnapshotValObj;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.actions.SparkActions;
@@ -124,28 +124,38 @@ public class MetadataTableController {
      * 获取表快照
      */
     @GetMapping("/{fullName}/snapshot")
-    public Response<Object> snapshot(@PathVariable String fullName) {
+    public Response<List<TableSnapshotValObj>> snapshot(@PathVariable String fullName) {
+        String[] split = fullName.split("\\.");
+        List<TableSnapshotValObj> snapshots = metadataTableService.snapshots(split[0], split[1]);
+        return Response.success(snapshots);
+    }
 
+    /**
+     * 快照回滚
+     */
+    @GetMapping("/{fullName}/snapshot/{snapshotId}/rollback")
+    public Response<Void> rollback(@PathVariable String fullName, @PathVariable String snapshotId) {
+        String[] split = fullName.split("\\.");
+        metadataTableService.rollback(split[0], split[1], snapshotId);
         return Response.success();
     }
 
     /**
      * 快照清理
      */
-    @GetMapping("/{fullName}/snapshot/maintenance")
-    public Response<Object> maintenance(@PathVariable String fullName) throws NoSuchTableException, ParseException {
-        Table table = Spark3Util.loadIcebergTable(sparkSession, "rest.ods.ods_user_test");
+    @PostMapping("/{fullName}/snapshot/maintenance")
+    public Response<Void> maintenance(@PathVariable String fullName) throws NoSuchTableException, ParseException {
+        Table table = Spark3Util.loadIcebergTable(sparkSession, fullName);
         SparkActions actions = SparkActions.get(sparkSession);
-        Iterable<Snapshot> snapshots = table.snapshots();
 
+        // 保留最近1秒的快照
+        long olderThan = System.currentTimeMillis() - 1000;
 
-        // 1. 使旧快照过期（删除不再需要的数据文件和元数据文件）
-        long olderThan = System.currentTimeMillis() - 1000; // 保留最近1秒的快照
+        // 1. 过期快照（先删快照，再删文件，顺序不能乱）
+        actions.expireSnapshots(table).expireOlderThan(olderThan).retainLast(10).execute();
 
-        // 2. 合并 /data 下的小文件
+        // 2. 合并小文件
         actions.rewriteDataFiles(table).option("target-file-size-bytes", Long.toString(128 * 1024 * 1024)).execute();
-
-        actions.expireSnapshots(table).expireOlderThan(olderThan).retainLast(1).execute();
 
         // 3. 删除孤儿文件
         actions.deleteOrphanFiles(table).olderThan(olderThan).execute();

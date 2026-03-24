@@ -3,6 +3,8 @@ package com.cyan.dataman.application.metadata.impl;
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.Page;
 import com.cyan.arch.common.api.SilentException;
+import com.cyan.arch.common.util.CollUtils;
+import com.cyan.arch.common.util.Convert;
 import com.cyan.dataman.adapter.metadata.http.dto.SubjectTableTreeDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
@@ -17,6 +19,7 @@ import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataSubjectRepository;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.TableSnapshotValObj;
 import com.cyan.dataman.enums.ColumnDataType;
 import com.cyan.dataman.enums.DatasourceType;
 import io.micrometer.common.util.StringUtils;
@@ -28,9 +31,17 @@ import org.apache.gravitino.rel.TableCatalog;
 import org.apache.gravitino.rel.TableChange;
 import org.apache.gravitino.rel.types.Type;
 import org.apache.gravitino.rel.types.Types;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.spark.Spark3Util;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
+import org.apache.spark.sql.catalyst.parser.ParseException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -46,13 +57,15 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     private final MetadataTableRepository metadataTableRepository;
     private final MetadataSubjectRepository metadataSubjectRepository;
     private final GravitinoClient gravitinoClient;
+    private final SparkSession sparkSession;
 
     public MetadataTableServiceImpl(MetadataTableRepository metadataTableRepository,
                                     MetadataSubjectRepository metadataSubjectRepository,
-                                    GravitinoClient gravitinoClient) {
+                                    GravitinoClient gravitinoClient, SparkSession sparkSession) {
         this.metadataTableRepository = metadataTableRepository;
         this.metadataSubjectRepository = metadataSubjectRepository;
         this.gravitinoClient = gravitinoClient;
+        this.sparkSession = sparkSession;
     }
 
     /**
@@ -336,6 +349,48 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     }
 
     /**
+     * 获取表快照
+     */
+    @Override
+    public List<TableSnapshotValObj> snapshots(String schema, String tbl) {
+        try {
+            org.apache.iceberg.Table table = Spark3Util.loadIcebergTable(sparkSession, "%s.%s".formatted(schema, tbl));
+            List<Snapshot> snapshots = new ArrayList<>();
+            if (CollUtils.isNotEmpty((Collection<?>) table.snapshots())) {
+                table.snapshots().forEach(snapshots::add);
+                snapshots.sort((o1, o2) -> Math.toIntExact(o2.timestampMillis() - o1.timestampMillis()));
+                return snapshots.stream().map(snapshot -> new TableSnapshotValObj()
+                        .setSnapshotId(Convert.toStr(snapshot.snapshotId()))
+                        .setCreatedTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(snapshot.timestampMillis()), ZoneId.systemDefault()))
+                        .setOperation(snapshot.operation())
+                        .setSequenceNumber(Convert.toStr(snapshot.sequenceNumber()))
+                        .setTotalRecords(snapshot.summary().get("total-records"))
+                        .setAddedRecords(snapshot.summary().get("added-records"))).toList();
+            }
+        } catch (ParseException | NoSuchTableException e) {
+            throw new RuntimeException(e);
+        }
+        return List.of();
+    }
+
+    /**
+     * 回滚
+     *
+     */
+    @Override
+    public void rollback(String schema, String tbl, String snapshotId) {
+        try {
+            org.apache.iceberg.Table table = Spark3Util.loadIcebergTable(sparkSession, "%s.%s".formatted(schema, tbl));
+//            List<Snapshot> snapshots = new ArrayList<>();
+//            table.snapshots().forEach(snapshots::add);
+            table.manageSnapshots().setCurrentSnapshot(Convert.toLong(snapshotId)).commit();
+            table.refresh();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * 添加祖先主题到可见集合
      */
     private void addAncestorSubjects(String subjectCode, Map<String, MetadataSubject> subjectCodeMap,
@@ -361,9 +416,6 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     private List<SubjectTableTreeDTO> buildSubjectTree(List<MetadataSubject> subjects,
                                                        List<MetadataTable> tables,
                                                        Set<String> visibleSubjectCodes) {
-        // 构建主题 ID -> 主题对象 Map
-        Map<String, MetadataSubject> subjectIdMap = subjects.stream()
-                .collect(Collectors.toMap(MetadataSubject::getId, Function.identity(), (a, b) -> a));
 
         // 按 subjectCode 分组表
         Map<String, List<MetadataTable>> tablesBySubject = Optional.ofNullable(tables).orElse(List.of())
