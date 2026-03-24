@@ -5,7 +5,6 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.rest.RESTCatalog;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
-import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
@@ -14,7 +13,7 @@ import java.util.Map;
  * @author cy.Y
  * @since v1.0.0
  */
-@Component
+//@Component
 public class IcebergUtil {
 
     private final RESTCatalog restCatalog;

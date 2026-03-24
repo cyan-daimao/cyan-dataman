@@ -65,19 +65,11 @@
             <artifactId>iceberg-core</artifactId>
             <version>1.10.1</version>
         </dependency>
-
-        <!-- Iceberg AWS S3 -->
         <!-- Iceberg AWS S3 -->
         <dependency>
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-aws</artifactId>
             <version>1.10.1</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>software.amazon.awssdk</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <!-- Iceberg AWS 扩展（核心依赖） -->
         <dependency>
@@ -85,12 +77,15 @@
             <artifactId>iceberg-aws-bundle</artifactId>
             <version>1.10.1</version> <!-- 必须与你的 iceberg-core 版本一致 -->
         </dependency>
-
-        <!-- AWS S3 SDK（Iceberg 依赖的底层包） -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aws</artifactId>
+            <version>3.4.1</version>
+        </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-            <version>2.29.45</version> <!-- 适配 Iceberg 1.10.1 的稳定版本 -->
+            <artifactId>bundle</artifactId>
+            <version>2.25.20</version>
         </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>
@@ -101,7 +96,22 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope> <!-- 运行时依赖，编译期无需 -->
         </dependency>
-
+        <!--javax,jakarta适配spark-->
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>4.0.1</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>5.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <version>2.1.1</version>
+        </dependency>
     </dependencies>
 
     <build>

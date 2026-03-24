@@ -12,12 +12,16 @@ import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import org.apache.iceberg.ExpireSnapshots;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.actions.ActionsProvider;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.FileInfo;
 import org.apache.iceberg.io.SupportsPrefixOperations;
 import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.spark.Spark3Util;
+import org.apache.iceberg.spark.actions.SparkActions;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
+import org.apache.spark.sql.catalyst.parser.ParseException;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
@@ -36,9 +40,11 @@ import java.util.Optional;
 @RequestMapping("/api/v1/metadata/tables")
 public class MetadataTableController {
     private final MetadataTableService metadataTableService;
+    private final SparkSession sparkSession;
 
-    public MetadataTableController(MetadataTableService metadataTableService) {
+    public MetadataTableController(MetadataTableService metadataTableService, SparkSession sparkSession) {
         this.metadataTableService = metadataTableService;
+        this.sparkSession = sparkSession;
     }
 
     /**
@@ -174,4 +180,11 @@ public class MetadataTableController {
         return Response.success();
     }
 
+    @GetMapping("/{fullName}/snapshot/maintenance")
+    public Response<Object> maintenance(@PathVariable String fullName) throws NoSuchTableException, ParseException {
+        Table table = Spark3Util.loadIcebergTable(sparkSession, "rest.ods.ods_user_test");
+        //清理孤立文件
+        SparkActions.get(sparkSession).deleteOrphanFiles(table).execute();
+        return Response.success();
+    }
 }
