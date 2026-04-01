@@ -138,7 +138,7 @@ public class MetadataSubject {
      * 保存
      */
     public MetadataSubject save(MetadataSubjectRepository metadataSubjectRepository) {
-        Assert.notBlank(this.id, new SilentException("保存接口，不能存在主题id"));
+        Assert.isBlank(this.id, new SilentException("保存接口，不能存在主题id"));
         validate(metadataSubjectRepository);
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
