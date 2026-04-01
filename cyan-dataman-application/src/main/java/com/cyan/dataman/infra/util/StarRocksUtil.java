@@ -19,8 +19,9 @@ import java.util.Map;
 public class StarRocksUtil {
 
     // 数据库连接参数（建议从配置文件读取）
-    private static final String URL = "jdbc:mysql://10.0.0.2:30040/?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
+    private static final String URL = "jdbc:mysql://10.0.0.2:32132/?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
     private static final String USERNAME = "root";
+    private static final String PASSWORD = "123456";
 
     static {
         try {
@@ -103,7 +104,7 @@ public class StarRocksUtil {
      * 获取数据库连接
      */
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL, USERNAME, "");
+        return DriverManager.getConnection(URL, USERNAME, PASSWORD);
     }
 
     /**
