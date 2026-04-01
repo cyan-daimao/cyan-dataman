@@ -1,8 +1,8 @@
 spring:
   config:
     import:
-      - "nacos:arch-base.yaml?group=DEFAULT_GROUP&namespace=dev"
-      - "nacos:cyan-dataman.yaml?group=DEFAULT_GROUP&namespace=dev"
+      - "nacos:arch-base.yaml?group=DEFAULT_GROUP&namespace=prod"
+      - "nacos:cyan-dataman.yaml?group=DEFAULT_GROUP&namespace=prod"
   cloud:
     nacos:
       # 通用配置（配置中心和注册中心可共享）
