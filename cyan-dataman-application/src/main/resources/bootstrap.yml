@@ -1,7 +1,7 @@
 # 基础应用配置
 spring:
   profiles:
-    active: dev  # 默认环境
+    active: prod
   application:
     name:  cyan-dataman
   main:
