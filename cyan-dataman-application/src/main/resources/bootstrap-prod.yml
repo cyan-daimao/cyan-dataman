@@ -27,7 +27,7 @@ spring:
 # Gravitino 配置
 gravitino:
   server:
-    url: http://gravitino.gravitno.svc.cluster.local:80  # Gravitino 服务地址
+    url: http://gravitino.gravitno.svc.cluster.local:8090  # Gravitino 服务地址
   catalog:
     name: iceberg       # 要创建/使用的catalog名称
     type: ICEBERG               # catalog类型
