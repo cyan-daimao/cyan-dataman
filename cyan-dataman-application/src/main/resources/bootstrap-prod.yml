@@ -40,4 +40,4 @@ rustfs:
   secretKey: rustfsadmin
 
 iceberg:
-  uri: http://gravitino-iceberg-rest-server.grvitino.cluster.local:9001/iceberg
+  uri: http://gravitino-iceberg-rest-server.gravitino.cluster.local:9001/iceberg
