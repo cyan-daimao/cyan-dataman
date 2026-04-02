@@ -32,3 +32,12 @@ gravitino:
     name: iceberg       # 要创建/使用的catalog名称
     type: ICEBERG               # catalog类型
     comment: "Iceberg catalog managed by Gravitino"
+
+
+rustfs:
+  endpoint: http://10.0.0.2:9000
+  accessKey: rustfsadmin
+  secretKey: rustfsadmin
+
+iceberg:
+  uri: http://gravitino-iceberg-rest-server-svc.cluster.local:9001/iceberg
