@@ -1,7 +1,5 @@
 package com.cyan.dataman.adapter.ds.http.dto;
 
-import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
-import com.cyan.dataman.domain.ds.valobj.IndexValObj;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -34,10 +32,10 @@ public class TableSchemaDTO {
     /**
      * 字段列表
      */
-    private List<ColumnValObj> columns;
+    private List<ColumnDTO> columns;
 
     /**
      * 索引列表
      */
-    private List<IndexValObj> indexes;
+    private List<IndexDTO> indexes;
 }

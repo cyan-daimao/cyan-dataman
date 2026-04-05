@@ -15,6 +15,7 @@ import com.cyan.dataman.domain.ds.repository.DsConfigRepository;
 import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
 import com.cyan.dataman.domain.ds.valobj.DatabaseValObj;
 import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
+import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.infra.util.DsJdbcUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -96,6 +97,13 @@ public class DsConfigServiceImpl implements DsConfigService {
         DsConfig dsConfig = dsConfigRepository.findById(id);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         dsJdbcUtil.testConnection(dsConfig);
+    }
+
+    @Override
+    public DatasourceType getDatasourceType(String id) {
+        DsConfig dsConfig = dsConfigRepository.findById(id);
+        Assert.notNull(dsConfig, new SilentException("数据源不存在"));
+        return dsConfig.getDatasourceType();
     }
 
     @Override

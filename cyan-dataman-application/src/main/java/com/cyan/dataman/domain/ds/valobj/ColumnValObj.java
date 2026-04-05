@@ -1,5 +1,7 @@
 package com.cyan.dataman.domain.ds.valobj;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -16,6 +18,16 @@ import lombok.experimental.Accessors;
 @NoArgsConstructor
 @Data
 @Accessors(chain = true)
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "databaseType",
+        visible = true
+)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = MysqlColumnValObj.class, name = "MYSQL"),
+        @JsonSubTypes.Type(value = PgsqlColumnValObj.class, name = "POSTGRESQL")
+})
 public abstract class ColumnValObj {
 
     /**
@@ -62,11 +74,9 @@ public abstract class ColumnValObj {
     protected Integer scale;
 
     /**
-     * 获取数据库类型标识
-     *
-     * @return 数据库类型
+     * 数据库类型标识（用于序列化/反序列化）
      */
-    public abstract String getDatabaseType();
+    protected String databaseType;
 
     /**
      * 获取类型枚举代码

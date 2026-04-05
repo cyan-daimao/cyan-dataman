@@ -7,6 +7,7 @@ import com.cyan.dataman.application.ds.cmd.TableSchemaCmd;
 import com.cyan.dataman.domain.ds.query.DsConfigListQuery;
 import com.cyan.dataman.domain.ds.valobj.DatabaseValObj;
 import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
+import com.cyan.dataman.enums.DatasourceType;
 
 import java.util.List;
 
@@ -47,6 +48,11 @@ public interface DsConfigService {
      * 测试数据源连接
      */
     void testConnection(String id);
+
+    /**
+     * 获取数据源类型
+     */
+    DatasourceType getDatasourceType(String id);
 
     /**
      * 获取数据库列表

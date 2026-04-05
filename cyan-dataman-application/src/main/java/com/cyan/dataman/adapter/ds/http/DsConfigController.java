@@ -4,6 +4,7 @@ import com.cyan.arch.common.api.Response;
 import com.cyan.dataman.adapter.ds.http.convert.DsConfigAdapterConvert;
 import com.cyan.dataman.adapter.ds.http.dto.DatabaseDTO;
 import com.cyan.dataman.adapter.ds.http.dto.DsConfigDTO;
+import com.cyan.dataman.adapter.ds.http.dto.TableSchemaCmdDTO;
 import com.cyan.dataman.adapter.ds.http.dto.TableSchemaDTO;
 import com.cyan.dataman.application.ds.DsConfigService;
 import com.cyan.dataman.application.ds.bo.DsConfigBO;
@@ -13,6 +14,7 @@ import com.cyan.dataman.application.ds.cmd.TableSchemaCmd;
 import com.cyan.dataman.domain.ds.query.DsConfigListQuery;
 import com.cyan.dataman.domain.ds.valobj.DatabaseValObj;
 import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
+import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.employee.login.filter.UserContextHolder;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
@@ -153,8 +155,10 @@ public class DsConfigController {
     public Response<Void> createTable(
             @PathVariable("ds") String dsId,
             @PathVariable("db") String dbName,
-            @RequestBody @Valid TableSchemaCmd cmd) {
-        dsConfigService.createTable(dsId, dbName, cmd);
+            @RequestBody @Valid TableSchemaCmdDTO cmd) {
+        DatasourceType dsType = dsConfigService.getDatasourceType(dsId);
+        TableSchemaCmd schemaCmd = convertToTableSchemaCmd(cmd, dsType);
+        dsConfigService.createTable(dsId, dbName, schemaCmd);
         return Response.success();
     }
 
@@ -166,8 +170,10 @@ public class DsConfigController {
             @PathVariable("ds") String dsId,
             @PathVariable("db") String dbName,
             @PathVariable("tbl") String tableName,
-            @RequestBody @Valid TableSchemaCmd cmd) {
-        dsConfigService.updateTable(dsId, dbName, tableName, cmd);
+            @RequestBody @Valid TableSchemaCmdDTO cmd) {
+        DatasourceType dsType = dsConfigService.getDatasourceType(dsId);
+        TableSchemaCmd schemaCmd = convertToTableSchemaCmd(cmd, dsType);
+        dsConfigService.updateTable(dsId, dbName, tableName, schemaCmd);
         return Response.success();
     }
 
@@ -181,5 +187,18 @@ public class DsConfigController {
             @PathVariable("tbl") String tableName) {
         dsConfigService.dropTable(dsId, dbName, tableName);
         return Response.success();
+    }
+
+    // ==================== 私有方法 ====================
+
+    /**
+     * 将 TableSchemaCmdDTO 转换为 TableSchemaCmd
+     */
+    private TableSchemaCmd convertToTableSchemaCmd(TableSchemaCmdDTO dto, DatasourceType dsType) {
+        return new TableSchemaCmd()
+                .setTableName(dto.getTableName())
+                .setTableComment(dto.getTableComment())
+                .setColumns(DsConfigAdapterConvert.INSTANCE.toColumnValObjList(dto.getColumns(), dsType))
+                .setIndexes(DsConfigAdapterConvert.INSTANCE.toIndexValObjList(dto.getIndexes()));
     }
 }

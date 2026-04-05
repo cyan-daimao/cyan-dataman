@@ -1,6 +1,7 @@
 package com.cyan.dataman.domain.ds.valobj;
 
 import com.cyan.dataman.enums.PostgresColumnType;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import lombok.*;
 import lombok.experimental.Accessors;
 
@@ -15,6 +16,7 @@ import lombok.experimental.Accessors;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Accessors(chain = true)
+@JsonTypeName("POSTGRESQL")
 public class PgsqlColumnValObj extends ColumnValObj {
 
     /**
@@ -116,11 +118,6 @@ public class PgsqlColumnValObj extends ColumnValObj {
      * 时区标识
      */
     private Boolean withTimeZone;
-
-    @Override
-    public String getDatabaseType() {
-        return "POSTGRESQL";
-    }
 
     @Override
     public String getTypeEnumCode() {

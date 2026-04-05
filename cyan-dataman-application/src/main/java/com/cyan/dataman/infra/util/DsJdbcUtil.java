@@ -658,8 +658,8 @@ public class DsJdbcUtil {
      */
     public ColumnValObj createColumnValObj(DatasourceType dsType) {
         return switch (dsType) {
-            case MYSQL -> new MysqlColumnValObj();
-            case POSTGRESQL -> new PgsqlColumnValObj();
+            case MYSQL -> new MysqlColumnValObj().setDatabaseType("MYSQL");
+            case POSTGRESQL -> new PgsqlColumnValObj().setDatabaseType("POSTGRESQL");
             default -> throw new SilentException("不支持的数据源类型: " + dsType);
         };
     }

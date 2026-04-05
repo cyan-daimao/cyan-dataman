@@ -1,6 +1,7 @@
 package com.cyan.dataman.domain.ds.valobj;
 
 import com.cyan.dataman.enums.MysqlColumnType;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import lombok.*;
 import lombok.experimental.Accessors;
 
@@ -15,6 +16,7 @@ import lombok.experimental.Accessors;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Accessors(chain = true)
+@JsonTypeName("MYSQL")
 public class MysqlColumnValObj extends ColumnValObj {
 
     /**
@@ -107,11 +109,6 @@ public class MysqlColumnValObj extends ColumnValObj {
      * 排序规则
      */
     private String collation;
-
-    @Override
-    public String getDatabaseType() {
-        return "MYSQL";
-    }
 
     @Override
     public String getTypeEnumCode() {
