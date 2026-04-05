@@ -178,21 +178,21 @@ public class DsConfigServiceImpl implements DsConfigService {
         if (!hasCreatedAt) {
             result.add(dsJdbcUtil.createColumnValObj(dsConfig.getDatasourceType())
                     .setName("created_at")
-                    .setType("TIMESTAMP")
+                    .setType("datetime")
                     .setComment("创建时间")
                     .setNullable(true));
         }
         if (!hasUpdatedAt) {
             result.add(dsJdbcUtil.createColumnValObj(dsConfig.getDatasourceType())
                     .setName("updated_at")
-                    .setType("TIMESTAMP")
+                    .setType("datetime")
                     .setComment("更新时间")
                     .setNullable(true));
         }
         if (!hasDeletedAt) {
             result.add(dsJdbcUtil.createColumnValObj(dsConfig.getDatasourceType())
                     .setName("deleted_at")
-                    .setType("TIMESTAMP")
+                    .setType("datetime")
                     .setComment("删除时间")
                     .setNullable(true));
         }
