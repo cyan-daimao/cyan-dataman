@@ -17,7 +17,6 @@ public enum DatasourceType {
 
     POSTGRESQL("POSTGRESQL"),
 
-    ICEBERG("ICEBERG"),
     ;
 
     private final String code;
@@ -26,9 +25,8 @@ public enum DatasourceType {
     public static DatasourceType getByCode(String code) {
 
         return switch (code) {
-            case "MYSQL","jdbc-mysql" -> MYSQL;
-            case "POSTGRESQL","jdbc-postgresql" -> POSTGRESQL;
-            case "ICEBERG","lakehouse-iceberg" -> ICEBERG;
+            case "MYSQL", "jdbc-mysql" -> MYSQL;
+            case "POSTGRESQL", "jdbc-postgresql" -> POSTGRESQL;
             default -> null;
         };
     }

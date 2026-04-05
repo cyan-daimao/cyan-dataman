@@ -1,6 +1,7 @@
 package com.cyan.dataman.adapter.ds.http.dto;
 
 import com.cyan.dataman.enums.DatasourceType;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -38,7 +39,9 @@ public class DsConfigDTO {
 
     private String updateBy;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime createdAt;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime updatedAt;
 }
