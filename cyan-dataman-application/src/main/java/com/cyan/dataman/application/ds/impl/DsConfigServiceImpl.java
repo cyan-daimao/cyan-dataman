@@ -178,21 +178,21 @@ public class DsConfigServiceImpl implements DsConfigService {
         if (!hasCreatedAt) {
             result.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
                     .setName("created_at")
-                    .setType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
+                    .setColumnType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
                     .setComment("创建时间")
                     .setNullable(true));
         }
         if (!hasUpdatedAt) {
             result.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
                     .setName("updated_at")
-                    .setType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
+                    .setColumnType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
                     .setComment("更新时间")
                     .setNullable(true));
         }
         if (!hasDeletedAt) {
             result.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
                     .setName("deleted_at")
-                    .setType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
+                    .setColumnType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
                     .setComment("删除时间")
                     .setNullable(true));
         }

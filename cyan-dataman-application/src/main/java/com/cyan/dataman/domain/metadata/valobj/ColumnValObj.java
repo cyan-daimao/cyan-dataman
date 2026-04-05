@@ -1,9 +1,10 @@
 package com.cyan.dataman.domain.metadata.valobj;
 
 import com.cyan.dataman.enums.ColumnDataType;
+import com.cyan.dataman.enums.MysqlColumnType;
+import com.cyan.dataman.enums.PostgresColumnType;
 import com.cyan.dataman.enums.SecretLevel;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -26,10 +27,10 @@ public class ColumnValObj {
     private String name;
 
     /**
-     * 字段类型
+     * 字段类型（原始数据库类型字符串，如 VARCHAR(255), INT, BIGINT 等）
      */
-    @NotNull(message = "字段类型不能为空")
-    private ColumnDataType type;
+    @NotBlank(message = "字段类型不能为空")
+    private String type;
 
     /**
      * 字段注释
@@ -40,13 +41,11 @@ public class ColumnValObj {
     /**
      * 字段是否为空
      */
-    @NotNull(message = "字段是否为空不能为空")
     private Boolean nullable;
 
     /**
      * 字段是否自增
      */
-//    @NotNull(message = "字段是否自增不能为空")
     private Boolean autoIncrement;
 
     /**
@@ -60,12 +59,90 @@ public class ColumnValObj {
     private SecretLevel secretLevel;
 
     /**
-     * Decimal精度（仅DECIMAL类型使用）
+     * 精度（如 DECIMAL(10,2) 中的 10，或 VARCHAR(255) 中的 255）
      */
     private Integer precision;
 
     /**
-     * Decimal小数位数（仅DECIMAL类型使用）
+     * 小数位数（仅 DECIMAL 类型使用）
      */
     private Integer scale;
+
+    /**
+     * 获取 MySQL 字段类型枚举
+     */
+    public MysqlColumnType getMysqlType() {
+        return MysqlColumnType.getByCode(this.type);
+    }
+
+    /**
+     * 获取 PostgreSQL 字段类型枚举
+     */
+    public PostgresColumnType getPostgresType() {
+        return PostgresColumnType.getByCode(this.type);
+    }
+
+    /**
+     * 获取通用字段类型枚举（用于 Iceberg/Gravitino 兼容）
+     * 从 type 字符串解析
+     */
+    public ColumnDataType getColumnDataType() {
+        // 先尝试直接匹配
+        ColumnDataType direct = ColumnDataType.getByCode(this.type);
+        if (direct != null) {
+            return direct;
+        }
+        // 尝试从 MySQL 类型映射
+        MysqlColumnType mysqlType = getMysqlType();
+        if (mysqlType != null) {
+            return mapMysqlToColumnType(mysqlType);
+        }
+        // 尝试从 PostgreSQL 类型映射
+        PostgresColumnType pgType = getPostgresType();
+        if (pgType != null) {
+            return mapPostgresToColumnType(pgType);
+        }
+        // 默认返回 STRING
+        return ColumnDataType.STRING;
+    }
+
+    /**
+     * 使用 ColumnDataType 枚举设置字段类型
+     */
+    public ColumnValObj setColumnType(ColumnDataType columnDataType) {
+        this.type = columnDataType.getCode();
+        return this;
+    }
+
+    private ColumnDataType mapMysqlToColumnType(MysqlColumnType mysqlType) {
+        return switch (mysqlType) {
+            case TINYINT, BOOLEAN -> ColumnDataType.BOOLEAN;
+            case SMALLINT, MEDIUMINT, INT -> ColumnDataType.INTEGER;
+            case BIGINT -> ColumnDataType.LONG;
+            case FLOAT -> ColumnDataType.FLOAT;
+            case DOUBLE, DECIMAL -> ColumnDataType.DOUBLE;
+            case DATE -> ColumnDataType.DATE;
+            case TIME -> ColumnDataType.TIME;
+            case DATETIME, TIMESTAMP -> ColumnDataType.TIMESTAMP;
+            case BLOB, MEDIUMBLOB, LONGBLOB -> ColumnDataType.BINARY;
+            default -> ColumnDataType.STRING;
+        };
+    }
+
+    private ColumnDataType mapPostgresToColumnType(PostgresColumnType pgType) {
+        return switch (pgType) {
+            case BOOLEAN -> ColumnDataType.BOOLEAN;
+            case SMALLINT, INTEGER -> ColumnDataType.INTEGER;
+            case BIGINT -> ColumnDataType.LONG;
+            case REAL -> ColumnDataType.FLOAT;
+            case DOUBLE_PRECISION, NUMERIC, DECIMAL -> ColumnDataType.DOUBLE;
+            case DATE -> ColumnDataType.DATE;
+            case TIME, TIME_WITH_TIME_ZONE -> ColumnDataType.TIME;
+            case TIMESTAMP -> ColumnDataType.TIMESTAMP;
+            case TIMESTAMP_WITH_TIME_ZONE -> ColumnDataType.TIMESTAMP_TZ;
+            case BYTEA -> ColumnDataType.BINARY;
+            case UUID -> ColumnDataType.UUID;
+            default -> ColumnDataType.STRING;
+        };
+    }
 }

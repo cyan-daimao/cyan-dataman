@@ -144,7 +144,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     private org.apache.gravitino.rel.Column toGravitinoColumn(ColumnValObj columnValObj) {
         return org.apache.gravitino.rel.Column.of(
                 columnValObj.getName(),
-                toGravitinoType(columnValObj.getType(), columnValObj.getPrecision(), columnValObj.getScale()),
+                toGravitinoType(columnValObj.getColumnDataType(), columnValObj.getPrecision(), columnValObj.getScale()),
                 columnValObj.getComment(),
                 columnValObj.getNullable(),
                 columnValObj.getAutoIncrement(),
@@ -214,7 +214,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                 // 添加新字段
                 changes.add(TableChange.addColumn(
                         new String[]{newCol.getName()},
-                        toGravitinoType(newCol.getType(), newCol.getPrecision(), newCol.getScale()),
+                        toGravitinoType(newCol.getColumnDataType(), newCol.getPrecision(), newCol.getScale()),
                         newCol.getComment(),
                         true
                 ));

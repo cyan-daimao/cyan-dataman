@@ -17,22 +17,83 @@ export enum DatasourceType {
 }
 
 /**
- * 字段数据类型
+ * MySQL 字段类型枚举
  */
-export enum ColumnDataType {
-  BOOLEAN = 'BOOLEAN',
-  INTEGER = 'INTEGER',
-  LONG = 'LONG',
+export enum MysqlColumnType {
+  // 整数类型
+  TINYINT = 'TINYINT',
+  SMALLINT = 'SMALLINT',
+  MEDIUMINT = 'MEDIUMINT',
+  INT = 'INT',
+  BIGINT = 'BIGINT',
+  // 浮点类型
   FLOAT = 'FLOAT',
   DOUBLE = 'DOUBLE',
   DECIMAL = 'DECIMAL',
-  STRING = 'STRING',
+  // 字符串类型
+  CHAR = 'CHAR',
+  VARCHAR = 'VARCHAR',
+  TEXT = 'TEXT',
+  MEDIUMTEXT = 'MEDIUMTEXT',
+  LONGTEXT = 'LONGTEXT',
+  // 二进制类型
+  BLOB = 'BLOB',
+  MEDIUMBLOB = 'MEDIUMBLOB',
+  LONGBLOB = 'LONGBLOB',
+  // 日期时间类型
   DATE = 'DATE',
-  TIMESTAMP = 'TIMESTAMP',
-  TIMESTAMP_TZ = 'TIMESTAMP_TZ',
   TIME = 'TIME',
-  BINARY = 'BINARY',
+  DATETIME = 'DATETIME',
+  TIMESTAMP = 'TIMESTAMP',
+  YEAR = 'YEAR',
+  // 其他类型
+  BOOLEAN = 'BOOLEAN',
+  JSON = 'JSON',
+  ENUM = 'ENUM',
+  SET = 'SET',
+}
+
+/**
+ * PostgreSQL 字段类型枚举
+ */
+export enum PostgresColumnType {
+  // 整数类型
+  SMALLINT = 'SMALLINT',
+  INTEGER = 'INTEGER',
+  BIGINT = 'BIGINT',
+  SMALLSERIAL = 'SMALLSERIAL',
+  SERIAL = 'SERIAL',
+  BIGSERIAL = 'BIGSERIAL',
+  // 浮点类型
+  REAL = 'REAL',
+  DOUBLE_PRECISION = 'DOUBLE PRECISION',
+  NUMERIC = 'NUMERIC',
+  DECIMAL = 'DECIMAL',
+  // 字符串类型
+  CHAR = 'CHAR',
+  VARCHAR = 'VARCHAR',
+  TEXT = 'TEXT',
+  // 二进制类型
+  BYTEA = 'BYTEA',
+  // 日期时间类型
+  DATE = 'DATE',
+  TIME = 'TIME',
+  TIME_WITH_TIME_ZONE = 'TIME WITH TIME ZONE',
+  TIMESTAMP = 'TIMESTAMP',
+  TIMESTAMP_WITH_TIME_ZONE = 'TIMESTAMP WITH TIME ZONE',
+  // 布尔类型
+  BOOLEAN = 'BOOLEAN',
+  // JSON 类型
+  JSON = 'JSON',
+  JSONB = 'JSONB',
+  // UUID 类型
   UUID = 'UUID',
+  // 数组类型
+  ARRAY = 'ARRAY',
+  // 网络地址类型
+  CIDR = 'CIDR',
+  INET = 'INET',
+  MACADDR = 'MACADDR',
 }
 
 /**
@@ -114,10 +175,11 @@ export interface DatabaseCreateCmd {
 
 /**
  * 字段信息
+ * type 为原始数据库类型字符串，如 'VARCHAR(255)', 'INT', 'BIGINT' 等
  */
 export interface Column {
   name: string;
-  type: ColumnDataType;
+  type: string;  // 原始数据库类型字符串
   comment: string;
   nullable: boolean;
   autoIncrement?: boolean;
@@ -155,6 +217,42 @@ export interface TableSchemaCmd {
   columns: Column[];
   indexes?: Index[];
 }
+
+// ==================== 工具函数 ====================
+
+/**
+ * 获取 MySQL 字段类型列表（用于下拉选择）
+ */
+export const getMysqlColumnTypeOptions = (): { label: string; value: string }[] => {
+  return Object.entries(MysqlColumnType).map(([key, value]) => ({
+    label: value,
+    value: value,
+  }));
+};
+
+/**
+ * 获取 PostgreSQL 字段类型列表（用于下拉选择）
+ */
+export const getPostgresColumnTypeOptions = (): { label: string; value: string }[] => {
+  return Object.entries(PostgresColumnType).map(([key, value]) => ({
+    label: value,
+    value: value,
+  }));
+};
+
+/**
+ * 根据数据源类型获取字段类型选项
+ */
+export const getColumnTypeOptions = (datasourceType: DatasourceType): { label: string; value: string }[] => {
+  switch (datasourceType) {
+    case DatasourceType.MYSQL:
+      return getMysqlColumnTypeOptions();
+    case DatasourceType.POSTGRESQL:
+      return getPostgresColumnTypeOptions();
+    default:
+      return [];
+  }
+};
 
 // ==================== API 函数 ====================
 
@@ -338,6 +436,11 @@ export const tableApi = {
  * | POST | /api/v1/ds/{ds}/dbs/{db}/tables | 创建表 |
  * | PUT | /api/v1/ds/{ds}/dbs/{db}/tables/{tbl} | 更新表结构 |
  * | DELETE | /api/v1/ds/{ds}/dbs/{db}/tables/{tbl} | 删除表 |
+ * 
+ * ### 字段类型说明
+ * - Column.type 使用原始数据库类型字符串，如 'VARCHAR(255)', 'INT(11)', 'DECIMAL(10,2)' 等
+ * - 前端可根据数据源类型使用 MysqlColumnType 或 PostgresColumnType 枚举
+ * - 使用 getColumnTypeOptions(datasourceType) 获取对应的类型选项列表
  * 
  * ### 备注
  * - 创建表时会自动添加 `created_at`、`updated_at`、`deleted_at` 字段

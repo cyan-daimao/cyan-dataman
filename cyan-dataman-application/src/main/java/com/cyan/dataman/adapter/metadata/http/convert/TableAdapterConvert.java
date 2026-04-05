@@ -4,7 +4,6 @@ import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import com.cyan.dataman.adapter.metadata.http.dto.TableDTO;
-import com.cyan.dataman.enums.ColumnDataType;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.expressions.Expression;
@@ -41,7 +40,7 @@ public interface TableAdapterConvert {
                             }
                             return new ColumnValObj()
                                     .setName(column.name())
-                                    .setType(convertToColumnDataType(column.dataType().name()))
+                                    .setType(convertToDbTypeString(column.dataType().name()))
                                     .setDefaultValue(defaultValue)
                                     .setNullable(column.nullable())
                                     .setAutoIncrement(column.autoIncrement())
@@ -67,23 +66,23 @@ public interface TableAdapterConvert {
     }
 
     /**
-     * 将Gravitino类型名转换为ColumnDataType
+     * 将Gravitino类型名转换为数据库类型字符串
      */
-    private ColumnDataType convertToColumnDataType(org.apache.gravitino.rel.types.Type.Name typeName) {
+    private String convertToDbTypeString(org.apache.gravitino.rel.types.Type.Name typeName) {
         return switch (typeName) {
-            case BOOLEAN -> ColumnDataType.BOOLEAN;
-            case INTEGER -> ColumnDataType.INTEGER;
-            case LONG -> ColumnDataType.LONG;
-            case FLOAT -> ColumnDataType.FLOAT;
-            case DOUBLE -> ColumnDataType.DOUBLE;
-            case DECIMAL -> ColumnDataType.DECIMAL;
-            case STRING -> ColumnDataType.STRING;
-            case DATE -> ColumnDataType.DATE;
-            case TIMESTAMP -> ColumnDataType.TIMESTAMP;
-            case TIME -> ColumnDataType.TIME;
-            case BINARY -> ColumnDataType.BINARY;
-            case UUID -> ColumnDataType.UUID;
-            default -> ColumnDataType.STRING;
+            case BOOLEAN -> "BOOLEAN";
+            case INTEGER -> "INTEGER";
+            case LONG -> "BIGINT";
+            case FLOAT -> "FLOAT";
+            case DOUBLE -> "DOUBLE";
+            case DECIMAL -> "DECIMAL";
+            case STRING -> "VARCHAR(255)";
+            case DATE -> "DATE";
+            case TIMESTAMP -> "TIMESTAMP";
+            case TIME -> "TIME";
+            case BINARY -> "BLOB";
+            case UUID -> "UUID";
+            default -> "VARCHAR(255)";
         };
     }
 }
