@@ -138,14 +138,19 @@ public class DsJdbcUtil {
             while (columnRs.next()) {
                 String dbTypeName = columnRs.getString("TYPE_NAME");
                 int columnSize = columnRs.getInt("COLUMN_SIZE");
-                String fullType = buildFullTypeName(dbTypeName, columnSize);
+                int decimalDigits = columnRs.getInt("DECIMAL_DIGITS");
+                
+                // 解析类型名称（去掉括号中的长度信息）
+                String pureTypeName = extractPureTypeName(dbTypeName);
                 
                 ColumnValObj column = createColumnValObj(dsConfig.getDatasourceType())
                         .setName(columnRs.getString("COLUMN_NAME"))
-                        .setType(fullType)
+                        .setType(pureTypeName)
                         .setComment(columnRs.getString("REMARKS"))
                         .setNullable(columnRs.getInt("NULLABLE") == DatabaseMetaData.columnNullable)
-                        .setDefaultValue(columnRs.getString("COLUMN_DEF"));
+                        .setDefaultValue(columnRs.getString("COLUMN_DEF"))
+                        .setPrecision(columnSize > 0 ? columnSize : null)
+                        .setScale(decimalDigits > 0 ? decimalDigits : null);
                 columns.add(column);
             }
 
@@ -195,18 +200,16 @@ public class DsJdbcUtil {
     }
 
     /**
-     * 构建完整类型名称（带长度）
+     * 提取纯类型名称（去掉括号中的长度信息）
+     * 例如：VARCHAR(255) -> VARCHAR, DECIMAL(10,2) -> DECIMAL
      */
-    private String buildFullTypeName(String typeName, int columnSize) {
+    private String extractPureTypeName(String typeName) {
         if (typeName == null) {
-            return "VARCHAR(255)";
+            return "VARCHAR";
         }
-        // 对于需要长度的类型，添加长度信息
-        String upperType = typeName.toUpperCase();
-        if (upperType.contains("VARCHAR") || upperType.contains("CHAR")) {
-            if (columnSize > 0 && !typeName.contains("(")) {
-                return typeName + "(" + columnSize + ")";
-            }
+        int parenIndex = typeName.indexOf('(');
+        if (parenIndex > 0) {
+            return typeName.substring(0, parenIndex);
         }
         return typeName;
     }
