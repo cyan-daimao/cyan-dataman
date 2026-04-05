@@ -522,7 +522,7 @@ public class DsJdbcUtil {
     private String buildColumnDefinition(DatasourceType dsType, ColumnValObj column) {
         StringBuilder def = new StringBuilder();
         String colName = column.getName();
-        String dbType = column.getType();
+        String dbType = buildFullTypeFromColumn(column);
         
         if (dsType == DatasourceType.MYSQL) {
             def.append("  `").append(colName).append("` ").append(dbType);
@@ -530,13 +530,13 @@ public class DsJdbcUtil {
             def.append("  \"").append(colName).append("\" ").append(dbType);
         }
 
-        if (Boolean.TRUE.equals(column.getNullable())) {
-            def.append(" NULL");
-        } else {
+        // MySQL 中显式写 NULL 是语法错误，所以 nullable=true 时不写（默认就是 NULL）
+        if (Boolean.FALSE.equals(column.getNullable())) {
             def.append(" NOT NULL");
         }
 
-        if (column.getDefaultValue() != null) {
+        // 只有 defaultValue 非空时才添加 DEFAULT 子句
+        if (column.getDefaultValue() != null && !column.getDefaultValue().isEmpty()) {
             def.append(" DEFAULT '").append(escapeString(column.getDefaultValue())).append("'");
         }
 
@@ -558,7 +558,7 @@ public class DsJdbcUtil {
     private String buildColumnDefinitionForAlter(DatasourceType dsType, ColumnValObj column) {
         StringBuilder def = new StringBuilder();
         String colName = column.getName();
-        String dbType = column.getType();
+        String dbType = buildFullTypeFromColumn(column);
         
         if (dsType == DatasourceType.MYSQL) {
             def.append("`").append(colName).append("` ").append(dbType);
@@ -566,17 +566,79 @@ public class DsJdbcUtil {
             def.append("\"").append(colName).append("\" ").append(dbType);
         }
 
-        if (Boolean.TRUE.equals(column.getNullable())) {
-            def.append(" NULL");
-        } else {
+        // MySQL 中显式写 NULL 是语法错误，所以 nullable=true 时不写（默认就是 NULL）
+        if (Boolean.FALSE.equals(column.getNullable())) {
             def.append(" NOT NULL");
         }
 
-        if (column.getDefaultValue() != null) {
+        // 只有 defaultValue 非空时才添加 DEFAULT 子句
+        if (column.getDefaultValue() != null && !column.getDefaultValue().isEmpty()) {
             def.append(" DEFAULT '").append(escapeString(column.getDefaultValue())).append("'");
         }
 
         return def.toString();
+    }
+
+    /**
+     * 根据 ColumnValObj 构建完整的类型定义（包含长度/精度）
+     */
+    private String buildFullTypeFromColumn(ColumnValObj column) {
+        String type = column.getType();
+        if (type == null || type.isEmpty()) {
+            return "VARCHAR(255)";
+        }
+        
+        String upperType = type.toUpperCase();
+        Integer precision = column.getPrecision();
+        Integer scale = column.getScale();
+        
+        // 如果类型已经包含括号，直接返回
+        if (type.contains("(")) {
+            return type;
+        }
+        
+        // 需要长度的类型
+        if (needsLength(upperType)) {
+            if (precision != null && precision > 0) {
+                return type + "(" + precision + ")";
+            }
+            // 默认长度
+            return type + "(255)";
+        }
+        
+        // 需要精度的类型（DECIMAL 等）
+        if (needsPrecision(upperType)) {
+            if (precision != null && precision > 0) {
+                if (scale != null && scale > 0) {
+                    return type + "(" + precision + "," + scale + ")";
+                }
+                return type + "(" + precision + ")";
+            }
+            // 默认精度
+            return type + "(10,2)";
+        }
+        
+        return type;
+    }
+
+    /**
+     * 判断类型是否需要长度参数
+     */
+    private boolean needsLength(String upperType) {
+        return upperType.equals("VARCHAR") 
+                || upperType.equals("CHAR")
+                || upperType.equals("NVARCHAR")
+                || upperType.equals("NCHAR")
+                || upperType.equals("VARBINARY")
+                || upperType.equals("BINARY");
+    }
+
+    /**
+     * 判断类型是否需要精度参数
+     */
+    private boolean needsPrecision(String upperType) {
+        return upperType.equals("DECIMAL") 
+                || upperType.equals("NUMERIC");
     }
 
     /**
