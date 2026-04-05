@@ -488,7 +488,13 @@ public class DsJdbcUtil {
         if (dsType == DatasourceType.MYSQL) {
             return String.format("ALTER TABLE `%s` ADD COLUMN %s", tableName, columnDef);
         } else if (dsType == DatasourceType.POSTGRESQL) {
-            return String.format("ALTER TABLE \"%s\" ADD COLUMN %s", tableName, columnDef);
+            String sql = String.format("ALTER TABLE \"%s\" ADD COLUMN %s", tableName, columnDef);
+            // PostgreSQL 字段注释需要单独语句
+            if (column.getComment() != null && !column.getComment().isEmpty()) {
+                sql += String.format("; COMMENT ON COLUMN \"%s\".\"%s\" IS '%s'", 
+                        tableName, column.getName(), escapeString(column.getComment()));
+            }
+            return sql;
         }
         throw new SilentException("不支持的数据源类型: " + dsType);
     }
@@ -503,7 +509,7 @@ public class DsJdbcUtil {
         } else if (dsType == DatasourceType.POSTGRESQL) {
             // PostgreSQL 需要分开处理类型和 nullable
             String colName = column.getName();
-            String dbType = column.getType();
+            String dbType = buildFullTypeFromColumn(column);
             List<String> alterStmts = new ArrayList<>();
             alterStmts.add(String.format("ALTER TABLE \"%s\" ALTER COLUMN \"%s\" TYPE %s", tableName, colName, dbType));
             if (column.getNullable() != null) {
@@ -512,6 +518,11 @@ public class DsJdbcUtil {
                 } else {
                     alterStmts.add(String.format("ALTER TABLE \"%s\" ALTER COLUMN \"%s\" SET NOT NULL", tableName, colName));
                 }
+            }
+            // PostgreSQL 字段注释
+            if (column.getComment() != null && !column.getComment().isEmpty()) {
+                alterStmts.add(String.format("COMMENT ON COLUMN \"%s\".\"%s\" IS '%s'", 
+                        tableName, colName, escapeString(column.getComment())));
             }
             return String.join("; ", alterStmts);
         }
@@ -668,6 +679,11 @@ public class DsJdbcUtil {
         // 只有 defaultValue 非空时才添加 DEFAULT 子句
         if (column.getDefaultValue() != null && !column.getDefaultValue().isEmpty()) {
             def.append(" DEFAULT '").append(escapeString(column.getDefaultValue())).append("'");
+        }
+
+        // MySQL 字段注释
+        if (dsType == DatasourceType.MYSQL && column.getComment() != null && !column.getComment().isEmpty()) {
+            def.append(" COMMENT '").append(escapeString(column.getComment())).append("'");
         }
 
         return def.toString();
