@@ -36,13 +36,56 @@ public interface DsConfigAdapterConvert {
 
     TableSchemaDTO toTableSchemaDTO(TableSchemaValObj valObj);
 
-    ColumnDTO toColumnDTO(ColumnValObj valObj);
-
     IndexDTO toIndexDTO(IndexValObj valObj);
 
-    List<ColumnDTO> toColumnDTOList(List<ColumnValObj> valObjs);
-
     List<IndexDTO> toIndexDTOList(List<IndexValObj> valObjs);
+
+    // ==================== ColumnValObj -> ColumnDTO 转换 ====================
+
+    /**
+     * 将 ColumnValObj 转换为 ColumnDTO（支持多态）
+     */
+    default ColumnDTO toColumnDTO(ColumnValObj valObj) {
+        if (valObj == null) {
+            return null;
+        }
+        ColumnDTO dto = new ColumnDTO()
+                .setName(valObj.getName())
+                .setType(valObj.getType())
+                .setComment(valObj.getComment())
+                .setNullable(valObj.getNullable())
+                .setAutoIncrement(valObj.getAutoIncrement())
+                .setDefaultValue(valObj.getDefaultValue())
+                .setPrecision(valObj.getPrecision())
+                .setScale(valObj.getScale());
+        
+        // 处理 MySQL 特有字段
+        if (valObj instanceof MysqlColumnValObj mysqlCol) {
+            dto.setUnsigned(mysqlCol.getUnsigned())
+               .setZerofill(mysqlCol.getZerofill())
+               .setCharset(mysqlCol.getCharset())
+               .setCollation(mysqlCol.getCollation());
+        }
+        // 处理 PostgreSQL 特有字段
+        else if (valObj instanceof PgsqlColumnValObj pgsqlCol) {
+            dto.setArrayDimensions(pgsqlCol.getArrayDimensions())
+               .setWithTimeZone(pgsqlCol.getWithTimeZone());
+        }
+        
+        return dto;
+    }
+
+    /**
+     * 批量转换 ColumnValObj 为 ColumnDTO
+     */
+    default List<ColumnDTO> toColumnDTOList(List<ColumnValObj> valObjs) {
+        if (valObjs == null) {
+            return null;
+        }
+        return valObjs.stream()
+                .map(this::toColumnDTO)
+                .toList();
+    }
 
     // ==================== DTO -> ColumnValObj 转换 ====================
 

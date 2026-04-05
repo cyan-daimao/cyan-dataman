@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -135,22 +136,63 @@ public class DsJdbcUtil {
             // 获取字段信息
             List<ColumnValObj> columns = new ArrayList<>();
             ResultSet columnRs = metaData.getColumns(dbName, null, tableName, null);
+            
+            // 对于 MySQL，额外查询字段注释（JDBC 驱动可能无法正确返回）
+            Map<String, String> columnComments = getColumnComments(conn, dsConfig.getDatasourceType(), dbName, tableName);
+            
             while (columnRs.next()) {
                 String dbTypeName = columnRs.getString("TYPE_NAME");
                 int columnSize = columnRs.getInt("COLUMN_SIZE");
                 int decimalDigits = columnRs.getInt("DECIMAL_DIGITS");
+                String columnName = columnRs.getString("COLUMN_NAME");
                 
                 // 解析类型名称（去掉括号中的长度信息）
                 String pureTypeName = extractPureTypeName(dbTypeName);
                 
+                // 设置精度
+                Integer precision = null;
+                Integer scale = null;
+                if (columnSize > 0) {
+                    // 整数类型和字符串类型都有精度（长度）
+                    if (isIntegerType(pureTypeName) || needsLength(pureTypeName)) {
+                        precision = columnSize;
+                    }
+                    // DECIMAL 类型有精度和标度
+                    if (needsPrecision(pureTypeName)) {
+                        precision = columnSize;
+                        if (decimalDigits > 0) {
+                            scale = decimalDigits;
+                        }
+                    }
+                }
+                
+                // 优先使用额外查询获取的注释，否则使用 JDBC 返回的
+                String comment = columnComments.get(columnName);
+                if (comment == null || comment.isEmpty()) {
+                    comment = columnRs.getString("REMARKS");
+                }
+                
+                // 判断是否有无符号标识（MySQL）
+                boolean unsigned = false;
+                if (dsConfig.getDatasourceType() == DatasourceType.MYSQL && dbTypeName != null) {
+                    unsigned = dbTypeName.toUpperCase().contains("UNSIGNED");
+                }
+                
                 ColumnValObj column = createColumnValObj(dsConfig.getDatasourceType())
-                        .setName(columnRs.getString("COLUMN_NAME"))
+                        .setName(columnName)
                         .setType(pureTypeName)
-                        .setComment(columnRs.getString("REMARKS"))
+                        .setComment(comment != null ? comment : "")
                         .setNullable(columnRs.getInt("NULLABLE") == DatabaseMetaData.columnNullable)
                         .setDefaultValue(columnRs.getString("COLUMN_DEF"))
-                        .setPrecision(columnSize > 0 ? columnSize : null)
-                        .setScale(decimalDigits > 0 ? decimalDigits : null);
+                        .setPrecision(precision)
+                        .setScale(scale);
+                
+                // 设置 MySQL 特有属性
+                if (column instanceof MysqlColumnValObj mysqlColumn && unsigned) {
+                    mysqlColumn.setUnsigned(true);
+                    mysqlColumn.setType(mysqlColumn.getType().replace("UNSIGNED", "").trim());
+                }
+                
                 columns.add(column);
             }
 
@@ -212,6 +254,47 @@ public class DsJdbcUtil {
             return typeName.substring(0, parenIndex);
         }
         return typeName;
+    }
+
+    /**
+     * 获取字段注释（通过查询 information_schema）
+     */
+    private Map<String, String> getColumnComments(Connection conn, DatasourceType dsType, String dbName, String tableName) {
+        Map<String, String> comments = new HashMap<>();
+        try {
+            String sql;
+            if (dsType == DatasourceType.MYSQL) {
+                sql = "SELECT COLUMN_NAME, COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?";
+            } else if (dsType == DatasourceType.POSTGRESQL) {
+                sql = "SELECT a.attname as column_name, col_description(a.attrelid, a.attnum) as column_comment " +
+                        "FROM pg_attribute a " +
+                        "JOIN pg_class c ON a.attrelid = c.oid " +
+                        "JOIN pg_namespace n ON c.relnamespace = n.oid " +
+                        "WHERE n.nspname = 'public' AND c.relname = ? AND a.attnum > 0 AND NOT a.attisdropped";
+            } else {
+                return comments;
+            }
+            
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                if (dsType == DatasourceType.MYSQL) {
+                    stmt.setString(1, dbName);
+                    stmt.setString(2, tableName);
+                } else {
+                    stmt.setString(1, tableName);
+                }
+                ResultSet rs = stmt.executeQuery();
+                while (rs.next()) {
+                    String columnName = rs.getString("column_name");
+                    String comment = rs.getString("column_comment");
+                    if (comment != null && !comment.isEmpty()) {
+                        comments.put(columnName, comment);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            log.warn("获取字段注释失败: {}", e.getMessage());
+        }
+        return comments;
     }
 
     /**
@@ -529,6 +612,10 @@ public class DsJdbcUtil {
         
         if (dsType == DatasourceType.MYSQL) {
             def.append("  `").append(colName).append("` ").append(dbType);
+            // MySQL 无符号
+            if (column instanceof MysqlColumnValObj mysqlColumn && Boolean.TRUE.equals(mysqlColumn.getUnsigned())) {
+                def.append(" UNSIGNED");
+            }
         } else if (dsType == DatasourceType.POSTGRESQL) {
             def.append("  \"").append(colName).append("\" ").append(dbType);
         }
@@ -565,6 +652,10 @@ public class DsJdbcUtil {
         
         if (dsType == DatasourceType.MYSQL) {
             def.append("`").append(colName).append("` ").append(dbType);
+            // MySQL 无符号
+            if (column instanceof MysqlColumnValObj mysqlColumn && Boolean.TRUE.equals(mysqlColumn.getUnsigned())) {
+                def.append(" UNSIGNED");
+            }
         } else if (dsType == DatasourceType.POSTGRESQL) {
             def.append("\"").append(colName).append("\" ").append(dbType);
         }
@@ -600,16 +691,23 @@ public class DsJdbcUtil {
             return type;
         }
         
-        // 需要长度的类型
+        // 整数类型（只有精度，无标度）
+        if (isIntegerType(upperType)) {
+            if (precision != null && precision > 0) {
+                return type + "(" + precision + ")";
+            }
+            return type;
+        }
+        
+        // 字符串类型（需要长度）
         if (needsLength(upperType)) {
             if (precision != null && precision > 0) {
                 return type + "(" + precision + ")";
             }
-            // 默认长度
             return type + "(255)";
         }
         
-        // 需要精度的类型（DECIMAL 等）
+        // DECIMAL 类型（精度+标度）
         if (needsPrecision(upperType)) {
             if (precision != null && precision > 0) {
                 if (scale != null && scale > 0) {
@@ -617,11 +715,22 @@ public class DsJdbcUtil {
                 }
                 return type + "(" + precision + ")";
             }
-            // 默认精度
             return type + "(10,2)";
         }
         
         return type;
+    }
+
+    /**
+     * 判断是否为整数类型
+     */
+    private boolean isIntegerType(String upperType) {
+        return upperType.equals("BIGINT") 
+                || upperType.equals("INT")
+                || upperType.equals("INTEGER")
+                || upperType.equals("SMALLINT")
+                || upperType.equals("TINYINT")
+                || upperType.equals("MEDIUMINT");
     }
 
     /**
