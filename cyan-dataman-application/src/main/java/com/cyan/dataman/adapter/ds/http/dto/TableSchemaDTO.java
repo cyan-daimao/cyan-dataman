@@ -1,7 +1,7 @@
 package com.cyan.dataman.adapter.ds.http.dto;
 
-import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
-import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
+import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
+import com.cyan.dataman.domain.ds.valobj.IndexValObj;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

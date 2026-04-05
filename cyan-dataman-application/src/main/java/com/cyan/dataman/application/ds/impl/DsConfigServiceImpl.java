@@ -12,6 +12,7 @@ import com.cyan.dataman.domain.ds.DsConfig;
 import com.cyan.dataman.domain.ds.query.DsConfigFindQuery;
 import com.cyan.dataman.domain.ds.query.DsConfigListQuery;
 import com.cyan.dataman.domain.ds.repository.DsConfigRepository;
+import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
 import com.cyan.dataman.domain.ds.valobj.DatabaseValObj;
 import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
 import com.cyan.dataman.infra.util.DsJdbcUtil;
@@ -134,7 +135,7 @@ public class DsConfigServiceImpl implements DsConfigService {
         TableSchemaValObj tableSchema = new TableSchemaValObj()
                 .setTableName(cmd.getTableName())
                 .setTableComment(cmd.getTableComment())
-                .setColumns(addDefaultColumns(cmd.getColumns()))
+                .setColumns(addDefaultColumns(dsConfig, cmd.getColumns()))
                 .setIndexes(cmd.getIndexes());
         
         dsJdbcUtil.createTable(dsConfig, dbName, tableSchema);
@@ -149,7 +150,7 @@ public class DsConfigServiceImpl implements DsConfigService {
         TableSchemaValObj tableSchema = new TableSchemaValObj()
                 .setTableName(cmd.getTableName())
                 .setTableComment(cmd.getTableComment())
-                .setColumns(addDefaultColumns(cmd.getColumns()))
+                .setColumns(addDefaultColumns(dsConfig, cmd.getColumns()))
                 .setIndexes(cmd.getIndexes());
         
         dsJdbcUtil.updateTable(dsConfig, dbName, tableName, tableSchema);
@@ -166,9 +167,8 @@ public class DsConfigServiceImpl implements DsConfigService {
     /**
      * 添加默认字段
      */
-    private List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> addDefaultColumns(
-            List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> columns) {
-        List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> result = new java.util.ArrayList<>(columns);
+    private List<ColumnValObj> addDefaultColumns(DsConfig dsConfig, List<ColumnValObj> columns) {
+        List<ColumnValObj> result = new java.util.ArrayList<>(columns);
         
         // 检查是否存在默认字段，不存在则添加
         boolean hasCreatedAt = columns.stream().anyMatch(c -> "created_at".equalsIgnoreCase(c.getName()));
@@ -176,23 +176,23 @@ public class DsConfigServiceImpl implements DsConfigService {
         boolean hasDeletedAt = columns.stream().anyMatch(c -> "deleted_at".equalsIgnoreCase(c.getName()));
         
         if (!hasCreatedAt) {
-            result.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+            result.add(dsJdbcUtil.createColumnValObj(dsConfig.getDatasourceType())
                     .setName("created_at")
-                    .setColumnType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
+                    .setType("TIMESTAMP")
                     .setComment("创建时间")
                     .setNullable(true));
         }
         if (!hasUpdatedAt) {
-            result.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+            result.add(dsJdbcUtil.createColumnValObj(dsConfig.getDatasourceType())
                     .setName("updated_at")
-                    .setColumnType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
+                    .setType("TIMESTAMP")
                     .setComment("更新时间")
                     .setNullable(true));
         }
         if (!hasDeletedAt) {
-            result.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+            result.add(dsJdbcUtil.createColumnValObj(dsConfig.getDatasourceType())
                     .setName("deleted_at")
-                    .setColumnType(com.cyan.dataman.enums.ColumnDataType.TIMESTAMP)
+                    .setType("TIMESTAMP")
                     .setComment("删除时间")
                     .setNullable(true));
         }

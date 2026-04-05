@@ -1,7 +1,7 @@
 package com.cyan.dataman.application.ds.cmd;
 
-import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
-import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
+import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
+import com.cyan.dataman.domain.ds.valobj.IndexValObj;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;

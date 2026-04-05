@@ -1,7 +1,5 @@
 package com.cyan.dataman.domain.ds.valobj;
 
-import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
-import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

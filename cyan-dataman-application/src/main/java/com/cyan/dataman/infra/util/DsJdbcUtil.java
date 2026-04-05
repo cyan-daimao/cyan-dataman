@@ -2,10 +2,12 @@ package com.cyan.dataman.infra.util;
 
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.domain.ds.DsConfig;
+import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
+import com.cyan.dataman.domain.ds.valobj.IndexValObj;
+import com.cyan.dataman.domain.ds.valobj.MysqlColumnValObj;
+import com.cyan.dataman.domain.ds.valobj.PgsqlColumnValObj;
 import com.cyan.dataman.domain.ds.valobj.DatabaseValObj;
 import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
-import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
-import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
 import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.enums.MysqlColumnType;
 import com.cyan.dataman.enums.PostgresColumnType;
@@ -138,7 +140,7 @@ public class DsJdbcUtil {
                 int columnSize = columnRs.getInt("COLUMN_SIZE");
                 String fullType = buildFullTypeName(dbTypeName, columnSize);
                 
-                ColumnValObj column = new ColumnValObj()
+                ColumnValObj column = createColumnValObj(dsConfig.getDatasourceType())
                         .setName(columnRs.getString("COLUMN_NAME"))
                         .setType(fullType)
                         .setComment(columnRs.getString("REMARKS"))
@@ -647,6 +649,19 @@ public class DsJdbcUtil {
             return "";
         }
         return str.replace("'", "''");
+    }
+
+    // ==================== 工厂方法 ====================
+
+    /**
+     * 根据数据源类型创建对应的 ColumnValObj 子类实例
+     */
+    public ColumnValObj createColumnValObj(DatasourceType dsType) {
+        return switch (dsType) {
+            case MYSQL -> new MysqlColumnValObj();
+            case POSTGRESQL -> new PgsqlColumnValObj();
+            default -> throw new SilentException("不支持的数据源类型: " + dsType);
+        };
     }
 
     // ==================== 类型枚举获取方法 ====================
