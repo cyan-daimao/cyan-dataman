@@ -29,9 +29,10 @@ public class DsJdbcUtil {
      * 测试数据源连接
      */
     public void testConnection(DsConfig dsConfig) {
-        try (Connection ignored = getConnection(dsConfig)) {
-            // 连接成功
-        } catch (SQLException e) {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            Connection ignored = getConnection(dsConfig);
+        } catch (Exception e) {
             throw new SilentException("数据源连接失败: " + e.getMessage());
         }
     }

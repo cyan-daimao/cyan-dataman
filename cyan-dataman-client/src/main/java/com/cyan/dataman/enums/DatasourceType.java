@@ -12,11 +12,11 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum DatasourceType {
-
     MYSQL("MYSQL"),
 
     POSTGRESQL("POSTGRESQL"),
 
+    ICEBERG("ICEBERG"),
     ;
 
     private final String code;
@@ -25,8 +25,9 @@ public enum DatasourceType {
     public static DatasourceType getByCode(String code) {
 
         return switch (code) {
-            case "MYSQL", "jdbc-mysql" -> MYSQL;
-            case "POSTGRESQL", "jdbc-postgresql" -> POSTGRESQL;
+            case "MYSQL","jdbc-mysql" -> MYSQL;
+            case "POSTGRESQL","jdbc-postgresql" -> POSTGRESQL;
+            case "ICEBERG","lakehouse-iceberg" -> ICEBERG;
             default -> null;
         };
     }
