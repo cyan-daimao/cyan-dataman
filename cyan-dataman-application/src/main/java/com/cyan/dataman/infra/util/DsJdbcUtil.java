@@ -638,7 +638,13 @@ public class DsJdbcUtil {
 
         // 只有 defaultValue 非空时才添加 DEFAULT 子句
         if (column.getDefaultValue() != null && !column.getDefaultValue().isEmpty()) {
-            def.append(" DEFAULT '").append(escapeString(column.getDefaultValue())).append("'");
+            String defaultValue = column.getDefaultValue();
+            // 判断是否为SQL函数或关键字（如 CURRENT_TIMESTAMP、NULL 等），这些不需要引号包裹
+            if (isSqlFunctionOrKeyword(defaultValue)) {
+                def.append(" DEFAULT ").append(defaultValue);
+            } else {
+                def.append(" DEFAULT '").append(escapeString(defaultValue)).append("'");
+            }
         }
 
         if (dsType == DatasourceType.MYSQL && Boolean.TRUE.equals(column.getAutoIncrement())) {
@@ -678,7 +684,13 @@ public class DsJdbcUtil {
 
         // 只有 defaultValue 非空时才添加 DEFAULT 子句
         if (column.getDefaultValue() != null && !column.getDefaultValue().isEmpty()) {
-            def.append(" DEFAULT '").append(escapeString(column.getDefaultValue())).append("'");
+            String defaultValue = column.getDefaultValue();
+            // 判断是否为SQL函数或关键字（如 CURRENT_TIMESTAMP、NULL 等），这些不需要引号包裹
+            if (isSqlFunctionOrKeyword(defaultValue)) {
+                def.append(" DEFAULT ").append(defaultValue);
+            } else {
+                def.append(" DEFAULT '").append(escapeString(defaultValue)).append("'");
+            }
         }
 
         // MySQL 字段注释
@@ -839,6 +851,28 @@ public class DsJdbcUtil {
             return "";
         }
         return str.replace("'", "''");
+    }
+
+    /**
+     * 判断默认值是否为SQL函数或关键字
+     * 这些值不需要用单引号包裹，如 CURRENT_TIMESTAMP、NULL 等
+     */
+    private boolean isSqlFunctionOrKeyword(String defaultValue) {
+        String upper = defaultValue.toUpperCase().trim();
+        // MySQL和PostgreSQL常见的SQL函数和关键字
+        return upper.equals("CURRENT_TIMESTAMP") ||
+               upper.equals("CURRENT_DATE") ||
+               upper.equals("CURRENT_TIME") ||
+               upper.equals("NULL") ||
+               upper.equals("NOW()") ||
+               upper.equals("UUID()") ||
+               // 匹配带有精度的函数，如 CURRENT_TIMESTAMP(6)
+               upper.matches("CURRENT_TIMESTAMP\\(\\d+\\)") ||
+               upper.matches("CURRENT_TIME\\(\\d+\\)") ||
+               // PostgreSQL 的序列函数
+               upper.matches("NEXTVAL\\('.*'\\)") ||
+               // 其他以函数形式结尾的表达式
+               upper.endsWith("()");
     }
 
     // ==================== 工厂方法 ====================
