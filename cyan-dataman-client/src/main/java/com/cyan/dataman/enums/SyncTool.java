@@ -17,4 +17,13 @@ public enum SyncTool {
     ;
 
     private final String code;
+
+    public static SyncTool getByCode(String code) {
+        for (SyncTool value : values()) {
+            if (value.code.equals(code)) {
+                return value;
+            }
+        }
+        return null;
+    }
 }

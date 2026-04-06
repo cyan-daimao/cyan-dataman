@@ -62,6 +62,12 @@ public class CdcConfigDO {
     private String icebergTableName;
 
     /**
+     * 目标 Iceberg Schema 名
+     */
+    @TableField("iceberg_schema_name")
+    private String icebergSchemaName;
+
+    /**
      * 同步工具
      */
     @TableField("sync_tool")
