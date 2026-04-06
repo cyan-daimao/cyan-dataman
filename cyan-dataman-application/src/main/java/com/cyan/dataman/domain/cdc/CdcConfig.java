@@ -1,0 +1,150 @@
+package com.cyan.dataman.domain.cdc;
+
+import com.cyan.arch.common.api.Assert;
+import com.cyan.arch.common.api.SilentException;
+import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
+import com.cyan.dataman.enums.SyncTool;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.experimental.Accessors;
+
+import java.time.LocalDateTime;
+
+/**
+ * CDC 配置实体
+ *
+ * @author cy.Y
+ * @since 1.0.0
+ */
+@AllArgsConstructor
+@NoArgsConstructor
+@Data
+@Accessors(chain = true)
+public class CdcConfig {
+
+    /**
+     * 主键
+     */
+    private String id;
+
+    /**
+     * CDC 配置名称（唯一标识）
+     */
+    private String name;
+
+    /**
+     * 数据源 ID
+     */
+    private String dsId;
+
+    /**
+     * 数据库名
+     */
+    private String dbName;
+
+    /**
+     * 表名
+     */
+    private String tableName;
+
+    /**
+     * 目标 Iceberg 表名
+     */
+    private String icebergTableName;
+
+    /**
+     * 同步工具
+     */
+    private SyncTool syncTool;
+
+    /**
+     * 同步 SQL
+     */
+    private String syncSql;
+
+    /**
+     * 是否启用
+     */
+    private Boolean enabled;
+
+    /**
+     * 描述
+     */
+    private String description;
+
+    /**
+     * 创建人
+     */
+    private String createBy;
+
+    /**
+     * 修改人
+     */
+    private String updateBy;
+
+    /**
+     * 创建时间
+     */
+    private LocalDateTime createdAt;
+
+    /**
+     * 更新时间
+     */
+    private LocalDateTime updatedAt;
+
+    /**
+     * 逻辑删除
+     */
+    private LocalDateTime deletedAt;
+
+    /**
+     * 验证
+     */
+    private void validate() {
+        Assert.notBlank(this.name, new SilentException("CDC 配置名称不能为空"));
+        Assert.notBlank(this.dsId, new SilentException("数据源 ID 不能为空"));
+        Assert.notBlank(this.dbName, new SilentException("数据库名不能为空"));
+        Assert.notBlank(this.tableName, new SilentException("表名不能为空"));
+        Assert.notBlank(this.icebergTableName, new SilentException("目标 Iceberg 表名不能为空"));
+        Assert.notNull(this.syncTool, new SilentException("同步工具不能为空"));
+    }
+
+    /**
+     * 保存
+     */
+    public CdcConfig save(CdcConfigRepository repository) {
+        validate();
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        if (this.enabled == null) {
+            this.enabled = false;
+        }
+        return repository.save(this);
+    }
+
+    /**
+     * 更新
+     */
+    public CdcConfig update(CdcConfigRepository repository) {
+        validate();
+        this.updatedAt = LocalDateTime.now();
+        return repository.update(this);
+    }
+
+    /**
+     * 删除
+     */
+    public void delete(CdcConfigRepository repository) {
+        repository.deleteById(this.id);
+    }
+
+    /**
+     * 开启/关闭
+     */
+    public void toggle(CdcConfigRepository repository, Boolean enabled) {
+        this.enabled = enabled;
+        this.updatedAt = LocalDateTime.now();
+        repository.update(this);
+    }
+}
