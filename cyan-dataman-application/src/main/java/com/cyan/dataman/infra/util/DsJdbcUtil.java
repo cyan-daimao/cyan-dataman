@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -410,20 +411,45 @@ public class DsJdbcUtil {
             }
         }
 
-        // 2. 新增字段
-        for (ColumnValObj newCol : tableSchema.getColumns()) {
+        // 2. 新增字段（按新顺序处理，MySQL需要指定位置）
+        for (int i = 0; i < tableSchema.getColumns().size(); i++) {
+            ColumnValObj newCol = tableSchema.getColumns().get(i);
             if (!oldColumnMap.containsKey(newCol.getName())) {
-                String addColSql = buildAddColumnSql(dsType, tableSchema.getTableName(), newCol);
+                String afterColumn = i > 0 ? tableSchema.getColumns().get(i - 1).getName() : null;
+                String addColSql = buildAddColumnSql(dsType, tableSchema.getTableName(), newCol, afterColumn);
                 executeUpdate(url, dsConfig.getUsername(), dsConfig.getPassword(), addColSql);
             }
         }
 
-        // 3. 修改字段
-        for (ColumnValObj newCol : tableSchema.getColumns()) {
+        // 3. 修改字段（包括属性变化和顺序变化）
+        // 构建旧字段顺序映射：字段名 -> 在旧表中的索引位置
+        Map<String, Integer> oldColumnOrder = new LinkedHashMap<>();
+        if (oldSchema.getColumns() != null) {
+            for (int i = 0; i < oldSchema.getColumns().size(); i++) {
+                oldColumnOrder.put(oldSchema.getColumns().get(i).getName(), i);
+            }
+        }
+        
+        // 按新顺序处理字段，检测属性变化和顺序变化
+        for (int i = 0; i < tableSchema.getColumns().size(); i++) {
+            ColumnValObj newCol = tableSchema.getColumns().get(i);
             ColumnValObj oldCol = oldColumnMap.get(newCol.getName());
-            if (oldCol != null && isColumnChanged(oldCol, newCol)) {
-                String modifyColSql = buildModifyColumnSql(dsType, tableSchema.getTableName(), newCol);
-                executeUpdate(url, dsConfig.getUsername(), dsConfig.getPassword(), modifyColSql);
+            if (oldCol != null) {
+                boolean attributeChanged = isColumnChanged(oldCol, newCol);
+                boolean orderChanged = false;
+                
+                // 检测顺序变化：比较当前字段在新旧表中的位置
+                Integer oldIndex = oldColumnOrder.get(newCol.getName());
+                if (oldIndex != null && oldIndex != i) {
+                    orderChanged = true;
+                }
+                
+                // 如果属性或顺序发生变化，执行 MODIFY COLUMN
+                if (attributeChanged || orderChanged) {
+                    String afterColumn = i > 0 ? tableSchema.getColumns().get(i - 1).getName() : null;
+                    String modifyColSql = buildModifyColumnSql(dsType, tableSchema.getTableName(), newCol, afterColumn);
+                    executeUpdate(url, dsConfig.getUsername(), dsConfig.getPassword(), modifyColSql);
+                }
             }
         }
 
@@ -483,10 +509,16 @@ public class DsJdbcUtil {
     /**
      * 构建新增字段 SQL
      */
-    private String buildAddColumnSql(DatasourceType dsType, String tableName, ColumnValObj column) {
+    private String buildAddColumnSql(DatasourceType dsType, String tableName, ColumnValObj column, String afterColumn) {
         String columnDef = buildColumnDefinitionForAlter(dsType, column);
         if (dsType == DatasourceType.MYSQL) {
-            return String.format("ALTER TABLE `%s` ADD COLUMN %s", tableName, columnDef);
+            String positionClause = "";
+            if (afterColumn == null) {
+                positionClause = " FIRST";
+            } else {
+                positionClause = " AFTER `" + afterColumn + "`";
+            }
+            return String.format("ALTER TABLE `%s` ADD COLUMN %s%s", tableName, columnDef, positionClause);
         } else if (dsType == DatasourceType.POSTGRESQL) {
             String sql = String.format("ALTER TABLE \"%s\" ADD COLUMN %s", tableName, columnDef);
             // PostgreSQL 字段注释需要单独语句
@@ -502,10 +534,16 @@ public class DsJdbcUtil {
     /**
      * 构建修改字段 SQL
      */
-    private String buildModifyColumnSql(DatasourceType dsType, String tableName, ColumnValObj column) {
+    private String buildModifyColumnSql(DatasourceType dsType, String tableName, ColumnValObj column, String afterColumn) {
         if (dsType == DatasourceType.MYSQL) {
             String columnDef = buildColumnDefinitionForAlter(dsType, column);
-            return String.format("ALTER TABLE `%s` MODIFY COLUMN %s", tableName, columnDef);
+            String positionClause = "";
+            if (afterColumn == null) {
+                positionClause = " FIRST";
+            } else {
+                positionClause = " AFTER `" + afterColumn + "`";
+            }
+            return String.format("ALTER TABLE `%s` MODIFY COLUMN %s%s", tableName, columnDef, positionClause);
         } else if (dsType == DatasourceType.POSTGRESQL) {
             // PostgreSQL 需要分开处理类型和 nullable
             String colName = column.getName();
