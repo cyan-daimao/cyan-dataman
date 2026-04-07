@@ -4,6 +4,8 @@ import com.cyan.arch.common.api.Response;
 import com.cyan.dataman.adapter.ds.http.convert.DsConfigAdapterConvert;
 import com.cyan.dataman.adapter.ds.http.dto.DatabaseDTO;
 import com.cyan.dataman.adapter.ds.http.dto.DsConfigDTO;
+import com.cyan.dataman.adapter.ds.http.dto.SqlExecuteCmdDTO;
+import com.cyan.dataman.adapter.ds.http.dto.SqlResultDTO;
 import com.cyan.dataman.adapter.ds.http.dto.TableSchemaCmdDTO;
 import com.cyan.dataman.adapter.ds.http.dto.TableSchemaDTO;
 import com.cyan.dataman.application.ds.DsConfigService;
@@ -20,6 +22,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -121,6 +124,32 @@ public class DsConfigController {
     public Response<Void> createDatabase(@PathVariable("ds") String dsId, @RequestBody DatabaseCreateCmd cmd) {
         dsConfigService.createDatabase(dsId, cmd);
         return Response.success();
+    }
+
+    // ==================== SQL 执行 ====================
+
+    /**
+     * 执行 SQL 语句（自动判断 DQL 或 DML）
+     */
+    @PostMapping("/{ds}/dbs/{db}/execute")
+    public Response<SqlResultDTO> executeSql(
+            @PathVariable("ds") String dsId,
+            @PathVariable("db") String dbName,
+            @RequestBody @Valid SqlExecuteCmdDTO cmd) {
+        Map<String, Object> result = dsConfigService.executeSql(dsId, dbName, cmd.getSql(), cmd.getLimit());
+        
+        Boolean isQuery = (Boolean) result.get("isQuery");
+        if (Boolean.TRUE.equals(isQuery)) {
+            @SuppressWarnings("unchecked")
+            List<String> columns = (List<String>) result.get("columns");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> rows = (List<Map<String, Object>>) result.get("rows");
+            Integer rowCount = (Integer) result.get("rowCount");
+            return Response.success(SqlResultDTO.ofQuery(columns, rows, rowCount));
+        } else {
+            Integer affectedRows = (Integer) result.get("affectedRows");
+            return Response.success(SqlResultDTO.ofDml(affectedRows));
+        }
     }
 
     // ==================== 表管理 ====================

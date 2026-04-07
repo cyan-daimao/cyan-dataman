@@ -10,6 +10,7 @@ import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
 import com.cyan.dataman.enums.DatasourceType;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 数据源配置服务
@@ -88,4 +89,14 @@ public interface DsConfigService {
      * 删除表
      */
     void dropTable(String dsId, String dbName, String tableName);
+
+    /**
+     * 执行 SQL 语句（自动判断 DQL 或 DML）
+     * @param dsId 数据源ID
+     * @param dbName 数据库名
+     * @param sql SQL语句
+     * @param limit 结果行数限制（仅查询有效），null表示不限制
+     * @return 执行结果
+     */
+    Map<String, Object> executeSql(String dsId, String dbName, String sql, Integer limit);
 }

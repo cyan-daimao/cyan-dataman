@@ -584,6 +584,150 @@ public class DsJdbcUtil {
         executeUpdate(url, dsConfig.getUsername(), dsConfig.getPassword(), sql);
     }
 
+    // ==================== SQL 执行接口 ====================
+
+    /**
+     * 执行 DQL 查询语句
+     * @param dsConfig 数据源配置
+     * @param dbName 数据库名
+     * @param sql 查询SQL
+     * @param limit 结果行数限制，null表示不限制
+     * @return 查询结果，包含列名和数据行
+     */
+    public Map<String, Object> executeQuery(DsConfig dsConfig, String dbName, String sql, Integer limit) {
+        String url = buildUrlWithDb(dsConfig, dbName);
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<String> columns = new ArrayList<>();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        
+        try (Connection conn = DriverManager.getConnection(url, dsConfig.getUsername(), dsConfig.getPassword());
+             Statement stmt = conn.createStatement()) {
+            
+            // 设置最大行数限制
+            if (limit != null && limit > 0) {
+                stmt.setMaxRows(limit);
+            }
+            
+            ResultSet rs = stmt.executeQuery(sql);
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+            
+            // 获取列名
+            for (int i = 1; i <= columnCount; i++) {
+                columns.add(metaData.getColumnLabel(i));
+            }
+            
+            // 获取数据行
+            int rowCount = 0;
+            int maxRows = limit != null && limit > 0 ? limit : Integer.MAX_VALUE;
+            while (rs.next() && rowCount < maxRows) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    Object value = rs.getObject(i);
+                    row.put(columns.get(i - 1), value);
+                }
+                rows.add(row);
+                rowCount++;
+            }
+            
+            result.put("columns", columns);
+            result.put("rows", rows);
+            result.put("rowCount", rows.size());
+        } catch (SQLException e) {
+            throw new SilentException("执行查询SQL失败: " + e.getMessage() + ", SQL: " + sql);
+        }
+        
+        return result;
+    }
+
+    /**
+     * 执行 DML 语句（INSERT/UPDATE/DELETE）
+     * @param dsConfig 数据源配置
+     * @param dbName 数据库名
+     * @param sql DML SQL语句
+     * @return 影响的行数
+     */
+    public int executeDml(DsConfig dsConfig, String dbName, String sql) {
+        String url = buildUrlWithDb(dsConfig, dbName);
+        
+        try (Connection conn = DriverManager.getConnection(url, dsConfig.getUsername(), dsConfig.getPassword());
+             Statement stmt = conn.createStatement()) {
+            return stmt.executeUpdate(sql);
+        } catch (SQLException e) {
+            throw new SilentException("执行DML SQL失败: " + e.getMessage() + ", SQL: " + sql);
+        }
+    }
+
+    /**
+     * 执行 SQL 语句（自动判断 DQL 或 DML）
+     * @param dsConfig 数据源配置
+     * @param dbName 数据库名
+     * @param sql SQL语句
+     * @param limit 结果行数限制（仅查询有效），null表示不限制
+     * @return 执行结果
+     */
+    public Map<String, Object> executeSql(DsConfig dsConfig, String dbName, String sql, Integer limit) {
+        String url = buildUrlWithDb(dsConfig, dbName);
+        String trimmedSql = sql.trim().toUpperCase();
+        
+        // 判断是否为查询语句
+        boolean isQuery = trimmedSql.startsWith("SELECT") || 
+                          trimmedSql.startsWith("SHOW") || 
+                          trimmedSql.startsWith("DESC") ||
+                          trimmedSql.startsWith("DESCRIBE") ||
+                          trimmedSql.startsWith("EXPLAIN") ||
+                          trimmedSql.startsWith("WITH");
+        
+        Map<String, Object> result = new LinkedHashMap<>();
+        
+        try (Connection conn = DriverManager.getConnection(url, dsConfig.getUsername(), dsConfig.getPassword());
+             Statement stmt = conn.createStatement()) {
+            
+            if (isQuery) {
+                // 执行查询
+                if (limit != null && limit > 0) {
+                    stmt.setMaxRows(limit);
+                }
+                
+                ResultSet rs = stmt.executeQuery(sql);
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+                
+                List<String> columns = new ArrayList<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    columns.add(metaData.getColumnLabel(i));
+                }
+                
+                List<Map<String, Object>> rows = new ArrayList<>();
+                int rowCount = 0;
+                int maxRows = limit != null && limit > 0 ? limit : Integer.MAX_VALUE;
+                while (rs.next() && rowCount < maxRows) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+                        Object value = rs.getObject(i);
+                        row.put(columns.get(i - 1), value);
+                    }
+                    rows.add(row);
+                    rowCount++;
+                }
+                
+                result.put("isQuery", true);
+                result.put("columns", columns);
+                result.put("rows", rows);
+                result.put("rowCount", rows.size());
+            } else {
+                // 执行更新
+                int affectedRows = stmt.executeUpdate(sql);
+                result.put("isQuery", false);
+                result.put("affectedRows", affectedRows);
+            }
+        } catch (SQLException e) {
+            throw new SilentException("执行SQL失败: " + e.getMessage() + ", SQL: " + sql);
+        }
+        
+        return result;
+    }
+
     /**
      * 创建索引
      */

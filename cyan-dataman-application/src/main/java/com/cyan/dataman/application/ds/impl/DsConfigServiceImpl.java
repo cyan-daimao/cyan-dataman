@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 数据源配置服务实现
@@ -170,6 +171,13 @@ public class DsConfigServiceImpl implements DsConfigService {
         DsConfig dsConfig = dsConfigRepository.findById(dsId);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         dsJdbcUtil.dropTable(dsConfig, dbName, tableName);
+    }
+
+    @Override
+    public Map<String, Object> executeSql(String dsId, String dbName, String sql, Integer limit) {
+        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+        Assert.notNull(dsConfig, new SilentException("数据源不存在"));
+        return dsJdbcUtil.executeSql(dsConfig, dbName, sql, limit);
     }
 
     /**
