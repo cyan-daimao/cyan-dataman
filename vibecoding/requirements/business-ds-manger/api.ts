@@ -290,6 +290,32 @@ export interface TableSchemaCmd {
     indexes?: Index[];
 }
 
+/**
+ * SQL 执行参数
+ */
+export interface SqlExecuteCmd {
+    /** SQL语句 */
+    sql: string;
+    /** 结果行数限制（仅对查询有效），null表示不限制 */
+    limit?: number;
+}
+
+/**
+ * SQL 执行结果
+ */
+export interface SqlResult {
+    /** 是否为查询语句 */
+    isQuery: boolean;
+    /** 列名列表（仅查询语句有效） */
+    columns?: string[];
+    /** 数据行列表（仅查询语句有效） */
+    rows?: Record<string, unknown>[];
+    /** 返回行数（仅查询语句有效） */
+    rowCount?: number;
+    /** 影响行数（仅DML语句有效） */
+    affectedRows?: number;
+}
+
 // ==================== API 函数 ====================
 
 const BASE_URL = '/api/v1/ds';
@@ -417,6 +443,19 @@ export const tableApi = {
     },
 };
 
+/**
+ * SQL 执行 API
+ */
+export const sqlExecuteApi = {
+    /**
+     * 执行 SQL 语句（自动判断 DQL 或 DML）
+     * POST /api/v1/ds/{ds}/dbs/{db}/execute
+     */
+    execute: async (dsId: string, dbName: string, data: SqlExecuteCmd): Promise<ApiResponse<SqlResult>> => {
+        return datamanRequest.post(`${BASE_URL}/${dsId}/dbs/${dbName}/execute`, data);
+    },
+};
+
 // ==================== API 接口汇总表 ====================
 
 /**
@@ -447,7 +486,13 @@ export const tableApi = {
  * | PUT | /api/v1/ds/{ds}/dbs/{db}/tables/{tbl} | 更新表结构 |
  * | DELETE | /api/v1/ds/{ds}/dbs/{db}/tables/{tbl} | 删除表 |
  *
+ * ### SQL 执行
+ * | 方法 | 路径 | 说明 |
+ * |------|------|------|
+ * | POST | /api/v1/ds/{ds}/dbs/{db}/execute | 执行SQL语句（自动判断DQL/DML） |
+ *
  * ### 备注
  * - 创建表时会自动添加 `created_at`、`updated_at`、`deleted_at` 字段
  * - 所有接口返回统一的 `ApiResponse<T>` 结构
+ * - SQL执行接口会自动判断语句类型：SELECT/SHOW/DESC/DESCRIBE/EXPLAIN/WITH 为查询，其他为DML
  */
