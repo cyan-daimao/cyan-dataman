@@ -46,11 +46,11 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
         LambdaQueryWrapper<MetadataTableDO> queryWrapper = new LambdaQueryWrapper<MetadataTableDO>()
                 .eq(StrUtils.isNotBlank(query.getSubjectCode()), MetadataTableDO::getSubjectCode, query.getSubjectCode())
                 .eq(StrUtils.isNotBlank(query.getOwner()), MetadataTableDO::getOwner, query.getOwner());
-        if (StringUtils.isNotBlank(query.getName()) || StringUtils.isNotBlank(query.getComment())) {
-            queryWrapper.and(q ->
-                    q.like(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
-                            .or()
-                            .like(StrUtils.isNotBlank(query.getComment()), MetadataTableDO::getComment, query.getComment())
+        if (StringUtils.isNotBlank(query.getContent())) {
+            queryWrapper.and(q -> q
+                    .like(MetadataTableDO::getTbl, query.getContent())
+                    .or()
+                    .like(MetadataTableDO::getComment, query.getContent())
             );
         }
 
@@ -115,7 +115,7 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     @Override
     public MetadataTable findById(String id) {
         MetadataTableDO metadataTableDO = metadataTableMapper.selectById(id);
-        if (metadataTableDO == null){
+        if (metadataTableDO == null) {
             return null;
         }
         LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()

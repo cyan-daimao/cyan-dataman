@@ -44,21 +44,17 @@ public class MetadataTableController {
      *
      * @param content     搜索内容可以是表名或表描述
      * @param subjectCode 主题编码
-     * @param owner       负责人
      */
     @GetMapping
     public Response<Page<MetadataTableDTO>> page(@RequestParam(required = false) String content,
                                                  @RequestParam(required = false) String subjectCode,
-                                                 @RequestParam(required = false) String owner,
                                                  @RequestParam(required = false) Long current,
                                                  @RequestParam(required = false) Long size) {
         current = current == null ? 1L : current;
         size = size == null ? 10L : size;
         MetadataTablePageQuery query = new MetadataTablePageQuery()
-                .setOrName(content)
-                .setOrComment(content)
-                .setSubjectCode(subjectCode)
-                .setOwner(owner);
+                .setContent(content)
+                .setSubjectCode(subjectCode);
         query.setCurrent(current)
                 .setSize(size);
         Page<MetadataTableBO> metadataTables = metadataTableService.page(query);

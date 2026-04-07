@@ -25,20 +25,15 @@ public class MetadataTablePageQuery extends Pagination {
     private String name;
     
     /**
-     * 或条件的表名字
+     * 表名或描述
      */
-    private String orName;
+    private String content;
 
     /**
      * 表描述
      */
     private String comment;
     
-    /**
-     * 或条件的描述
-     */
-    private String orComment;
-
     /**
      * 表拥有者
      */
