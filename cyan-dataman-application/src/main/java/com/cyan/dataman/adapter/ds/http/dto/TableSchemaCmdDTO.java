@@ -31,6 +31,7 @@ public class TableSchemaCmdDTO {
     /**
      * 表注释
      */
+    @NotBlank(message = "表注释不能为空")
     private String tableComment;
 
     /**

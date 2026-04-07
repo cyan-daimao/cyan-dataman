@@ -1,0 +1,43 @@
+spring:
+  config:
+    import:
+      - "nacos:arch-base.yaml?group=DEFAULT_GROUP&namespace=pre"
+      - "nacos:cyan-dataman.yaml?group=DEFAULT_GROUP&namespace=pre"
+  cloud:
+    nacos:
+      # 通用配置（配置中心和注册中心可共享）
+      server-addr: 10.0.0.2:8848  # Nacos服务器地址
+      username: nacos  # Nacos登录账号
+      password: nacos  # Nacos登录密码
+      # 配置中心专项配置
+      config:
+        file-extension: yaml
+        namespace: pre
+      # 注册中心专项配置
+      discovery:
+        ephemeral: true
+        namespace: pre
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 123456
+    url: jdbc:mysql://10.0.0.2:3306/cyan_dataman
+
+
+# Gravitino 配置
+gravitino:
+  server:
+    url: http://gravitino.gravitino.svc.cluster.local:8090  # Gravitino 服务地址
+  catalog:
+    name: iceberg       # 要创建/使用的catalog名称
+    type: ICEBERG               # catalog类型
+    comment: "Iceberg catalog managed by Gravitino"
+
+
+rustfs:
+  endpoint: http://10.0.0.2:9000
+  accessKey: rustfsadmin
+  secretKey: rustfsadmin
+
+iceberg:
+  uri: http://gravitino-iceberg-rest-server.gravitino.svc.cluster.local:9001/iceberg
