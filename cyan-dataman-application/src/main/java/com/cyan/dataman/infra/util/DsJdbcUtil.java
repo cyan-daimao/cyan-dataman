@@ -58,19 +58,55 @@ public class DsJdbcUtil {
      */
     public List<DatabaseValObj> listDatabases(DsConfig dsConfig) {
         List<DatabaseValObj> databases = new ArrayList<>();
+        DatasourceType dsType = dsConfig.getDatasourceType();
         try (Connection conn = getConnection(dsConfig)) {
             DatabaseMetaData metaData = conn.getMetaData();
             ResultSet rs = metaData.getCatalogs();
+            
+            // 获取数据库注释（不同数据源查询方式不同）
+            Map<String, String> dbComments = getDatabaseComments(conn, dsType);
+            
             while (rs.next()) {
                 String dbName = rs.getString("TABLE_CAT");
+                String comment = dbComments.getOrDefault(dbName, dbName);
                 databases.add(new DatabaseValObj()
                         .setName(dbName)
-                        .setComment(dbName));
+                        .setComment(comment));
             }
         } catch (SQLException e) {
             throw new SilentException("获取数据库列表失败: " + e.getMessage());
         }
         return databases;
+    }
+
+    /**
+     * 获取数据库注释（通过查询系统表）
+     */
+    private Map<String, String> getDatabaseComments(Connection conn, DatasourceType dsType) {
+        Map<String, String> comments = new HashMap<>();
+        try {
+            String sql;
+            if (dsType == DatasourceType.MYSQL) {
+                // MySQL 数据库注释存储在 information_schema.SCHEMATA 中，但该表没有注释列
+                // MySQL 实际上不支持数据库级别的注释，这里返回数据库名作为注释
+                return comments;
+            } else if (dsType == DatasourceType.POSTGRESQL) {
+                sql = "SELECT datname, shobj_description(oid, 'pg_database') as comment FROM pg_database WHERE datistemplate = false";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    ResultSet rs = stmt.executeQuery();
+                    while (rs.next()) {
+                        String dbName = rs.getString("datname");
+                        String comment = rs.getString("comment");
+                        if (comment != null && !comment.isEmpty()) {
+                            comments.put(dbName, comment);
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            log.warn("获取数据库注释失败: {}", e.getMessage());
+        }
+        return comments;
     }
 
     /**
@@ -103,19 +139,68 @@ public class DsJdbcUtil {
     /**
      * 获取表列表
      */
-    public List<String> listTables(DsConfig dsConfig, String dbName) {
-        List<String> tables = new ArrayList<>();
+    public List<TableSchemaValObj> listTables(DsConfig dsConfig, String dbName) {
+        List<TableSchemaValObj> tables = new ArrayList<>();
         String url = buildUrlWithDb(dsConfig, dbName);
         try (Connection conn = DriverManager.getConnection(url, dsConfig.getUsername(), dsConfig.getPassword())) {
             DatabaseMetaData metaData = conn.getMetaData();
             ResultSet rs = metaData.getTables(dbName, null, "%", new String[]{"TABLE"});
+            
+            // 获取表注释（通过查询 information_schema）
+            Map<String, String> tableComments = getTableComments(conn, dsConfig.getDatasourceType(), dbName);
+            
             while (rs.next()) {
-                tables.add(rs.getString("TABLE_NAME"));
+                String tableName = rs.getString("TABLE_NAME");
+                // 优先使用额外查询获取的注释，否则使用 JDBC 返回的
+                String comment = tableComments.get(tableName);
+                if (comment == null || comment.isEmpty()) {
+                    comment = rs.getString("REMARKS");
+                }
+                tables.add(new TableSchemaValObj()
+                        .setTableName(tableName)
+                        .setTableComment(comment != null ? comment : ""));
             }
         } catch (SQLException e) {
             throw new SilentException("获取表列表失败: " + e.getMessage());
         }
         return tables;
+    }
+
+    /**
+     * 获取表注释（通过查询 information_schema）
+     */
+    private Map<String, String> getTableComments(Connection conn, DatasourceType dsType, String dbName) {
+        Map<String, String> comments = new HashMap<>();
+        try {
+            String sql;
+            if (dsType == DatasourceType.MYSQL) {
+                sql = "SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'";
+            } else if (dsType == DatasourceType.POSTGRESQL) {
+                sql = "SELECT c.relname as table_name, obj_description(c.oid) as table_comment " +
+                        "FROM pg_class c " +
+                        "JOIN pg_namespace n ON c.relnamespace = n.oid " +
+                        "WHERE n.nspname = 'public' AND c.relkind = 'r'";
+            } else {
+                return comments;
+            }
+            
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                if (dsType == DatasourceType.MYSQL) {
+                    stmt.setString(1, dbName);
+                }
+                ResultSet rs = stmt.executeQuery();
+                while (rs.next()) {
+                    String tableName = rs.getString("table_name");
+                    String comment = rs.getString("table_comment");
+                    if (comment != null && !comment.isEmpty()) {
+                        comments.put(tableName, comment);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            log.warn("获取表注释失败: {}", e.getMessage());
+        }
+        return comments;
     }
 
     /**

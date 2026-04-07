@@ -122,7 +122,7 @@ public class DsConfigServiceImpl implements DsConfigService {
     }
 
     @Override
-    public List<String> listTables(String dsId, String dbName) {
+    public List<TableSchemaValObj> listTables(String dsId, String dbName) {
         DsConfig dsConfig = dsConfigRepository.findById(dsId);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         return dsJdbcUtil.listTables(dsConfig, dbName);

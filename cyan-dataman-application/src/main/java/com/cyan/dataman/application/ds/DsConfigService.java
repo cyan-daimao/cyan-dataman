@@ -66,9 +66,9 @@ public interface DsConfigService {
     void createDatabase(String dsId, DatabaseCreateCmd cmd);
 
     /**
-     * 获取表列表
+     * 获取表列表（包含表名和注释）
      */
-    List<String> listTables(String dsId, String dbName);
+    List<TableSchemaValObj> listTables(String dsId, String dbName);
 
     /**
      * 获取表结构详情

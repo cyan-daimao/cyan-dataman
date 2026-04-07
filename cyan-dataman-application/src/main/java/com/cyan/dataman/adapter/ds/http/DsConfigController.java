@@ -158,11 +158,14 @@ public class DsConfigController {
      * 获取数据库下的表列表
      */
     @GetMapping("/{ds}/dbs/{db}/tables")
-    public Response<List<String>> listTables(
+    public Response<List<TableSchemaDTO>> listTables(
             @PathVariable("ds") String dsId,
             @PathVariable("db") String dbName) {
-        List<String> tables = dsConfigService.listTables(dsId, dbName);
-        return Response.success(tables);
+        List<TableSchemaValObj> tables = dsConfigService.listTables(dsId, dbName);
+        List<TableSchemaDTO> dtos = Optional.ofNullable(tables).orElse(List.of()).stream()
+                .map(DsConfigAdapterConvert.INSTANCE::toTableSchemaDTO)
+                .toList();
+        return Response.success(dtos);
     }
 
     /**
