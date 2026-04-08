@@ -72,4 +72,16 @@ public class DsConfigRepositoryImpl implements DsConfigRepository {
     public void deleteById(String id) {
         dsConfigMapper.deleteById(id);
     }
+
+    /**
+     * 根据名称获取数据源配置
+     *
+     */
+    @Override
+    public DsConfig findByName(String ds) {
+        LambdaQueryWrapper<DsConfigDO> queryWrapper = new LambdaQueryWrapper<DsConfigDO>()
+                .eq(DsConfigDO::getName, ds);
+        DsConfigDO dsConfigDO = dsConfigMapper.selectOne(queryWrapper);
+        return DsConfigInfraConvert.INSTANCE.toDsConfig(dsConfigDO);
+    }
 }

@@ -66,10 +66,20 @@ public class DsConfigServiceImpl implements DsConfigService {
         return DsConfigAppConvert.INSTANCE.toDsConfigBO(dsConfig);
     }
 
+    /**
+     * 通过名称获取数据源配置
+     *
+     */
+    @Override
+    public DsConfigBO findByName(String ds) {
+        DsConfig dsConfig = dsConfigRepository.findByName(ds);
+        return DsConfigAppConvert.INSTANCE.toDsConfigBO(dsConfig);
+    }
+
     @Override
     @Transactional
-    public DsConfigBO update(String id, DsConfigCmd cmd) {
-        DsConfig existing = dsConfigRepository.findById(id);
+    public DsConfigBO update(String dsName, DsConfigCmd cmd) {
+        DsConfig existing = dsConfigRepository.findByName(dsName);
         Assert.notNull(existing, new SilentException("数据源不存在"));
 
         // 检查名称是否重复
@@ -79,7 +89,7 @@ public class DsConfigServiceImpl implements DsConfigService {
         }
 
         DsConfig dsConfig = DsConfigAppConvert.INSTANCE.toDsConfig(cmd);
-        dsConfig.setId(id);
+        dsConfig.setId(existing.getId());
         dsConfig.setCreateBy(existing.getCreateBy());
         dsConfig = dsConfig.update(dsConfigRepository);
         return DsConfigAppConvert.INSTANCE.toDsConfigBO(dsConfig);
@@ -87,58 +97,58 @@ public class DsConfigServiceImpl implements DsConfigService {
 
     @Override
     @Transactional
-    public void delete(String id) {
-        DsConfig dsConfig = dsConfigRepository.findById(id);
+    public void delete(String dsName) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         dsConfig.delete(dsConfigRepository);
     }
 
     @Override
-    public void testConnection(String id) {
-        DsConfig dsConfig = dsConfigRepository.findById(id);
+    public void testConnection(String dsName) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         dsJdbcUtil.testConnection(dsConfig);
     }
 
     @Override
-    public DatasourceType getDatasourceType(String id) {
-        DsConfig dsConfig = dsConfigRepository.findById(id);
+    public DatasourceType getDatasourceType(String dsName) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         return dsConfig.getDatasourceType();
     }
 
     @Override
-    public List<DatabaseValObj> listDatabases(String dsId) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+    public List<DatabaseValObj> listDatabases(String dsName) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         return dsJdbcUtil.listDatabases(dsConfig);
     }
 
     @Override
-    public void createDatabase(String dsId, DatabaseCreateCmd cmd) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+    public void createDatabase(String dsName, DatabaseCreateCmd cmd) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         dsJdbcUtil.createDatabase(dsConfig, cmd.getName(), cmd.getCharset(), cmd.getCollation());
     }
 
     @Override
-    public List<TableSchemaValObj> listTables(String dsId, String dbName) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+    public List<TableSchemaValObj> listTables(String dsName, String dbName) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         return dsJdbcUtil.listTables(dsConfig, dbName);
     }
 
     @Override
-    public TableSchemaValObj getTableSchema(String dsId, String dbName, String tableName) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+    public TableSchemaValObj getTableSchema(String dsName, String dbName, String tableName) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         return dsJdbcUtil.getTableSchema(dsConfig, dbName, tableName);
     }
 
     @Override
     @Transactional
-    public void createTable(String dsId, String dbName, TableSchemaCmd cmd) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+    public void createTable(String dsName, String dbName, TableSchemaCmd cmd) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         
         TableSchemaValObj tableSchema = new TableSchemaValObj()
@@ -152,8 +162,8 @@ public class DsConfigServiceImpl implements DsConfigService {
 
     @Override
     @Transactional
-    public void updateTable(String dsId, String dbName, String tableName, TableSchemaCmd cmd) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+    public void updateTable(String dsName, String dbName, String tableName, TableSchemaCmd cmd) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         
         TableSchemaValObj tableSchema = new TableSchemaValObj()
@@ -167,15 +177,15 @@ public class DsConfigServiceImpl implements DsConfigService {
 
     @Override
     @Transactional
-    public void dropTable(String dsId, String dbName, String tableName) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+    public void dropTable(String dsName, String dbName, String tableName) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         dsJdbcUtil.dropTable(dsConfig, dbName, tableName);
     }
 
     @Override
-    public Map<String, Object> executeSql(String dsId, String dbName, String sql, Integer limit) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
+    public Map<String, Object> executeSql(String dsName, String dbName, String sql, Integer limit) {
+        DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源不存在"));
         return dsJdbcUtil.executeSql(dsConfig, dbName, sql, limit);
     }

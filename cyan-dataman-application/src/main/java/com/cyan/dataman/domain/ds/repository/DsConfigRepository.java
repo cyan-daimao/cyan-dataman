@@ -43,4 +43,9 @@ public interface DsConfigRepository {
      * 删除数据源配置
      */
     void deleteById(String id);
+
+    /**
+     * 根据名称获取数据源配置
+     */
+    DsConfig findByName(String ds);
 }

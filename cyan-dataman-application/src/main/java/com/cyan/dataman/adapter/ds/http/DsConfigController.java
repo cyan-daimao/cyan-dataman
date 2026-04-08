@@ -70,36 +70,36 @@ public class DsConfigController {
      * 获取数据源配置
      */
     @GetMapping("/{ds}")
-    public Response<DsConfigDTO> findById(@PathVariable("ds") String dsId) {
-        DsConfigBO bo = dsConfigService.findById(dsId);
+    public Response<DsConfigDTO> findByName(@PathVariable("ds") String ds) {
+        DsConfigBO bo = dsConfigService.findByName(ds);
         return Response.success(DsConfigAdapterConvert.INSTANCE.toDsConfigDTO(bo));
     }
 
     /**
      * 更新数据源配置
      */
-    @PutMapping("/{ds}")
-    public Response<DsConfigDTO> update(@PathVariable("ds") String dsId, @RequestBody @Valid DsConfigCmd cmd) {
+    @PutMapping("/{dsName}")
+    public Response<DsConfigDTO> update(@PathVariable("dsName") String dsName, @RequestBody @Valid DsConfigCmd cmd) {
         cmd.setUpdateBy(UserContextHolder.getCurrentEmployee().getPassport());
-        DsConfigBO bo = dsConfigService.update(dsId, cmd);
+        DsConfigBO bo = dsConfigService.update(dsName, cmd);
         return Response.success(DsConfigAdapterConvert.INSTANCE.toDsConfigDTO(bo));
     }
 
     /**
      * 删除数据源配置
      */
-    @DeleteMapping("/{ds}")
-    public Response<Void> delete(@PathVariable("ds") String dsId) {
-        dsConfigService.delete(dsId);
+    @DeleteMapping("/{dsName}")
+    public Response<Void> delete(@PathVariable("dsName") String dsName) {
+        dsConfigService.delete(dsName);
         return Response.success();
     }
 
     /**
      * 测试数据源连接
      */
-    @PostMapping("/{ds}/test")
-    public Response<Void> testConnection(@PathVariable("ds") String dsId) {
-        dsConfigService.testConnection(dsId);
+    @PostMapping("/{dsName}/test")
+    public Response<Void> testConnection(@PathVariable("dsName") String dsName) {
+        dsConfigService.testConnection(dsName);
         return Response.success();
     }
 
@@ -108,9 +108,9 @@ public class DsConfigController {
     /**
      * 获取数据源下的数据库列表
      */
-    @GetMapping("/{ds}/dbs")
-    public Response<List<DatabaseDTO>> listDatabases(@PathVariable("ds") String dsId) {
-        List<DatabaseValObj> databases = dsConfigService.listDatabases(dsId);
+    @GetMapping("/{dsName}/dbs")
+    public Response<List<DatabaseDTO>> listDatabases(@PathVariable("dsName") String dsName) {
+        List<DatabaseValObj> databases = dsConfigService.listDatabases(dsName);
         List<DatabaseDTO> dtos = Optional.ofNullable(databases).orElse(List.of()).stream()
                 .map(DsConfigAdapterConvert.INSTANCE::toDatabaseDTO)
                 .toList();
@@ -120,9 +120,9 @@ public class DsConfigController {
     /**
      * 创建数据库
      */
-    @PostMapping("/{ds}/dbs")
-    public Response<Void> createDatabase(@PathVariable("ds") String dsId, @RequestBody DatabaseCreateCmd cmd) {
-        dsConfigService.createDatabase(dsId, cmd);
+    @PostMapping("/{dsName}/dbs")
+    public Response<Void> createDatabase(@PathVariable("dsName") String dsName, @RequestBody DatabaseCreateCmd cmd) {
+        dsConfigService.createDatabase(dsName, cmd);
         return Response.success();
     }
 
@@ -131,12 +131,12 @@ public class DsConfigController {
     /**
      * 执行 SQL 语句（自动判断 DQL 或 DML）
      */
-    @PostMapping("/{ds}/dbs/{db}/execute")
+    @PostMapping("/{dsName}/dbs/{db}/execute")
     public Response<SqlResultDTO> executeSql(
-            @PathVariable("ds") String dsId,
+            @PathVariable("dsName") String dsName,
             @PathVariable("db") String dbName,
             @RequestBody @Valid SqlExecuteCmdDTO cmd) {
-        Map<String, Object> result = dsConfigService.executeSql(dsId, dbName, cmd.getSql(), cmd.getLimit());
+        Map<String, Object> result = dsConfigService.executeSql(dsName, dbName, cmd.getSql(), cmd.getLimit());
         
         Boolean isQuery = (Boolean) result.get("isQuery");
         if (Boolean.TRUE.equals(isQuery)) {
@@ -157,11 +157,11 @@ public class DsConfigController {
     /**
      * 获取数据库下的表列表
      */
-    @GetMapping("/{ds}/dbs/{db}/tables")
+    @GetMapping("/{dsName}/dbs/{db}/tables")
     public Response<List<TableSchemaDTO>> listTables(
-            @PathVariable("ds") String dsId,
+            @PathVariable("dsName") String dsName,
             @PathVariable("db") String dbName) {
-        List<TableSchemaValObj> tables = dsConfigService.listTables(dsId, dbName);
+        List<TableSchemaValObj> tables = dsConfigService.listTables(dsName, dbName);
         List<TableSchemaDTO> dtos = Optional.ofNullable(tables).orElse(List.of()).stream()
                 .map(DsConfigAdapterConvert.INSTANCE::toTableSchemaDTO)
                 .toList();
@@ -171,53 +171,53 @@ public class DsConfigController {
     /**
      * 获取表详情
      */
-    @GetMapping("/{ds}/dbs/{db}/tables/{tbl}")
+    @GetMapping("/{dsName}/dbs/{db}/tables/{tbl}")
     public Response<TableSchemaDTO> getTableSchema(
-            @PathVariable("ds") String dsId,
+            @PathVariable("dsName") String dsName,
             @PathVariable("db") String dbName,
             @PathVariable("tbl") String tableName) {
-        TableSchemaValObj schema = dsConfigService.getTableSchema(dsId, dbName, tableName);
+        TableSchemaValObj schema = dsConfigService.getTableSchema(dsName, dbName, tableName);
         return Response.success(DsConfigAdapterConvert.INSTANCE.toTableSchemaDTO(schema));
     }
 
     /**
      * 创建表
      */
-    @PostMapping("/{ds}/dbs/{db}/tables")
+    @PostMapping("/{dsName}/dbs/{db}/tables")
     public Response<Void> createTable(
-            @PathVariable("ds") String dsId,
+            @PathVariable("dsName") String dsName,
             @PathVariable("db") String dbName,
             @RequestBody @Valid TableSchemaCmdDTO cmd) {
-        DatasourceType dsType = dsConfigService.getDatasourceType(dsId);
+        DatasourceType dsType = dsConfigService.getDatasourceType(dsName);
         TableSchemaCmd schemaCmd = convertToTableSchemaCmd(cmd, dsType);
-        dsConfigService.createTable(dsId, dbName, schemaCmd);
+        dsConfigService.createTable(dsName, dbName, schemaCmd);
         return Response.success();
     }
 
     /**
      * 更新表结构
      */
-    @PutMapping("/{ds}/dbs/{db}/tables/{tbl}")
+    @PutMapping("/{dsName}/dbs/{db}/tables/{tbl}")
     public Response<Void> updateTable(
-            @PathVariable("ds") String dsId,
+            @PathVariable("dsName") String dsName,
             @PathVariable("db") String dbName,
             @PathVariable("tbl") String tableName,
             @RequestBody @Valid TableSchemaCmdDTO cmd) {
-        DatasourceType dsType = dsConfigService.getDatasourceType(dsId);
+        DatasourceType dsType = dsConfigService.getDatasourceType(dsName);
         TableSchemaCmd schemaCmd = convertToTableSchemaCmd(cmd, dsType);
-        dsConfigService.updateTable(dsId, dbName, tableName, schemaCmd);
+        dsConfigService.updateTable(dsName, dbName, tableName, schemaCmd);
         return Response.success();
     }
 
     /**
      * 删除表
      */
-    @DeleteMapping("/{ds}/dbs/{db}/tables/{tbl}")
+    @DeleteMapping("/{dsName}/dbs/{db}/tables/{tbl}")
     public Response<Void> dropTable(
-            @PathVariable("ds") String dsId,
+            @PathVariable("dsName") String dsName,
             @PathVariable("db") String dbName,
             @PathVariable("tbl") String tableName) {
-        dsConfigService.dropTable(dsId, dbName, tableName);
+        dsConfigService.dropTable(dsName, dbName, tableName);
         return Response.success();
     }
 
