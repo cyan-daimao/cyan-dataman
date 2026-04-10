@@ -42,4 +42,19 @@ public interface CdcConfigRepository {
      * 删除
      */
     void deleteById(String id);
+
+    /**
+     * 按数据源查询所有 CDC 配置
+     */
+    List<CdcConfig> findByDatasource(String dsId);
+
+    /**
+     * 按数据源查询已启用的 CDC 配置
+     */
+    List<CdcConfig> findEnabledByDatasource(String dsId);
+
+    /**
+     * 获取下一个可用的 serverId
+     */
+    int findNextServerId();
 }

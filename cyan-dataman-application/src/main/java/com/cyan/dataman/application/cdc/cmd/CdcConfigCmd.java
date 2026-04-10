@@ -23,10 +23,10 @@ public class CdcConfigCmd {
     private String name;
 
     /**
-     * 数据源 ID
+     * 数据源名称
      */
-    @NotBlank(message = "数据源 ID 不能为空")
-    private String dsId;
+    @NotBlank(message = "数据源名称不能为空")
+    private String dsName;
 
     /**
      * 数据库名

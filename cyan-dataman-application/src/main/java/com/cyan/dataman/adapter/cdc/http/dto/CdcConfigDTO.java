@@ -1,5 +1,6 @@
 package com.cyan.dataman.adapter.cdc.http.dto;
 
+import com.cyan.dataman.enums.RunningStatus;
 import com.cyan.dataman.enums.SyncTool;
 import lombok.Data;
 import lombok.experimental.Accessors;
@@ -65,6 +66,21 @@ public class CdcConfigDTO {
      * 描述
      */
     private String description;
+
+    /**
+     * Debezium 连接器名称
+     */
+    private String connectorName;
+
+    /**
+     * 连接器运行状态
+     */
+    private RunningStatus runningStatus;
+
+    /**
+     * 状态消息
+     */
+    private String msg;
 
     /**
      * 创建人

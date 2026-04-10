@@ -14,7 +14,12 @@ import lombok.experimental.Accessors;
 public class CdcConfigListQuery {
 
     /**
-     * 数据源 ID
+     * 数据源名称（API 层使用）
+     */
+    private String dsName;
+
+    /**
+     * 数据源 ID（内部查询使用，由服务层从 dsName 解析）
      */
     private String dsId;
 

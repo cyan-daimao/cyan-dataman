@@ -40,3 +40,11 @@ rustfs:
 
 iceberg:
   uri: http://iceberg-rest.cyan.com/iceberg
+
+# Debezium 连接地址
+debezium:
+  url: http://debezium-connect.cyan.com
+
+# Kafka 地址
+kafka:
+  url: kafka:9092

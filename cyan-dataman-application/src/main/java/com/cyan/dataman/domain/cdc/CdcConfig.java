@@ -3,6 +3,7 @@ package com.cyan.dataman.domain.cdc;
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
+import com.cyan.dataman.enums.RunningStatus;
 import com.cyan.dataman.enums.SyncTool;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -72,6 +73,26 @@ public class CdcConfig {
      * 描述
      */
     private String description;
+
+    /**
+     * Debezium 连接器名称
+     */
+    private String connectorName;
+
+    /**
+     * Debezium server ID（唯一）
+     */
+    private Integer serverId;
+
+    /**
+     * 连接器运行状态
+     */
+    private RunningStatus runningStatus;
+
+    /**
+     * 状态消息
+     */
+    private String msg;
 
     /**
      * 创建人

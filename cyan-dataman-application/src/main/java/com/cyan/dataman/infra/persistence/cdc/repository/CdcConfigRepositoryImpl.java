@@ -73,4 +73,25 @@ public class CdcConfigRepositoryImpl implements CdcConfigRepository {
     public void deleteById(String id) {
         cdcConfigMapper.deleteById(id);
     }
+
+    @Override
+    public List<CdcConfig> findByDatasource(String dsId) {
+        List<CdcConfigDO> dosList = cdcConfigMapper.findByDatasource(dsId);
+        return dosList.stream()
+                .map(CdcConfigInfraConvert.INSTANCE::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<CdcConfig> findEnabledByDatasource(String dsId) {
+        List<CdcConfigDO> dosList = cdcConfigMapper.findEnabledByDatasource(dsId);
+        return dosList.stream()
+                .map(CdcConfigInfraConvert.INSTANCE::toDomain)
+                .toList();
+    }
+
+    @Override
+    public int findNextServerId() {
+        return cdcConfigMapper.findNextServerId();
+    }
 }

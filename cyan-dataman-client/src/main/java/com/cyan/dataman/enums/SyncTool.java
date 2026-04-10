@@ -14,6 +14,7 @@ import lombok.Getter;
 public enum SyncTool {
     SPARK("SPARK"),
     FLINK("FLINK"),
+    DEBEZIUM("DEBEZIUM"),
     ;
 
     private final String code;

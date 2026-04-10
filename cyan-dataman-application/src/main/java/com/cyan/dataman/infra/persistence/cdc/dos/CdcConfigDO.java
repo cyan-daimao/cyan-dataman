@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.cyan.dataman.enums.RunningStatus;
 import com.cyan.dataman.enums.SyncTool;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -90,6 +91,30 @@ public class CdcConfigDO {
      */
     @TableField("description")
     private String description;
+
+    /**
+     * Debezium 连接器名称
+     */
+    @TableField("connector_name")
+    private String connectorName;
+
+    /**
+     * Debezium server ID
+     */
+    @TableField("server_id")
+    private Integer serverId;
+
+    /**
+     * 连接器运行状态
+     */
+    @TableField("running_status")
+    private RunningStatus runningStatus;
+
+    /**
+     * 状态消息
+     */
+    @TableField("msg")
+    private String msg;
 
     /**
      * 创建人
