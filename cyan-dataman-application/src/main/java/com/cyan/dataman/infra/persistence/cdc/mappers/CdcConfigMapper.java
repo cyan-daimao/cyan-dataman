@@ -23,14 +23,14 @@ public interface CdcConfigMapper extends BaseMapper<CdcConfigDO> {
     int findNextServerId();
 
     /**
-     * 按数据源查询所有 CDC 配置（通过 dsId 关联）
+     * 按数据源查询所有 CDC 配置（通过 dsName 关联）
      */
-    @Select("SELECT * FROM cdc_config WHERE ds_id = #{dsId} AND deleted_at IS NULL")
-    List<CdcConfigDO> findByDatasource(String dsId);
+    @Select("SELECT * FROM cdc_config WHERE ds_name = #{dsName} AND deleted_at IS NULL")
+    List<CdcConfigDO> findByDatasource(String dsName);
 
     /**
      * 按数据源查询已启用的 CDC 配置
      */
-    @Select("SELECT * FROM cdc_config WHERE ds_id = #{dsId} AND enabled = true AND deleted_at IS NULL")
-    List<CdcConfigDO> findEnabledByDatasource(String dsId);
+    @Select("SELECT * FROM cdc_config WHERE ds_name = #{dsName} AND enabled = true AND deleted_at IS NULL")
+    List<CdcConfigDO> findEnabledByDatasource(String dsName);
 }

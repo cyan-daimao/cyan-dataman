@@ -58,7 +58,7 @@ public class CdcConfigRepositoryImpl implements CdcConfigRepository {
     public List<CdcConfig> list(CdcConfigListQuery query) {
         LambdaQueryWrapper<CdcConfigDO> wrapper = new LambdaQueryWrapper<>();
         if (query != null) {
-            wrapper.eq(query.getDsId() != null, CdcConfigDO::getDsId, query.getDsId())
+            wrapper.eq(query.getDsName() != null, CdcConfigDO::getDsName, query.getDsName())
                     .eq(query.getDbName() != null, CdcConfigDO::getDbName, query.getDbName())
                     .eq(query.getTableName() != null, CdcConfigDO::getTableName, query.getTableName())
                     .eq(query.getEnabled() != null, CdcConfigDO::getEnabled, query.getEnabled());
@@ -75,16 +75,16 @@ public class CdcConfigRepositoryImpl implements CdcConfigRepository {
     }
 
     @Override
-    public List<CdcConfig> findByDatasource(String dsId) {
-        List<CdcConfigDO> dosList = cdcConfigMapper.findByDatasource(dsId);
+    public List<CdcConfig> findByDatasource(String dsName) {
+        List<CdcConfigDO> dosList = cdcConfigMapper.findByDatasource(dsName);
         return dosList.stream()
                 .map(CdcConfigInfraConvert.INSTANCE::toDomain)
                 .toList();
     }
 
     @Override
-    public List<CdcConfig> findEnabledByDatasource(String dsId) {
-        List<CdcConfigDO> dosList = cdcConfigMapper.findEnabledByDatasource(dsId);
+    public List<CdcConfig> findEnabledByDatasource(String dsName) {
+        List<CdcConfigDO> dosList = cdcConfigMapper.findEnabledByDatasource(dsName);
         return dosList.stream()
                 .map(CdcConfigInfraConvert.INSTANCE::toDomain)
                 .toList();

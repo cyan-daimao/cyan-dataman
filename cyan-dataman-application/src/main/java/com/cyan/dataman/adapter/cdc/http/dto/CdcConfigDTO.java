@@ -2,6 +2,7 @@ package com.cyan.dataman.adapter.cdc.http.dto;
 
 import com.cyan.dataman.enums.RunningStatus;
 import com.cyan.dataman.enums.SyncTool;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
@@ -28,9 +29,9 @@ public class CdcConfigDTO {
     private String name;
 
     /**
-     * 数据源 ID
+     * 数据源名称
      */
-    private String dsId;
+    private String dsName;
 
     /**
      * 数据库名
@@ -95,10 +96,12 @@ public class CdcConfigDTO {
     /**
      * 创建时间
      */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime createdAt;
 
     /**
      * 更新时间
      */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime updatedAt;
 }

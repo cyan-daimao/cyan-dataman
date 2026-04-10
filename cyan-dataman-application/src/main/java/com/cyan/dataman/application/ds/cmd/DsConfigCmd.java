@@ -52,6 +52,7 @@ public class DsConfigCmd {
     /**
      * 描述
      */
+    @NotBlank(message = "表描述不能为空")
     private String description;
 
     /**

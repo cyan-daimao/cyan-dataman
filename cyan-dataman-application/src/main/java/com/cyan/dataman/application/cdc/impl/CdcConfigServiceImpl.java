@@ -81,10 +81,10 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         DatasourceInfo info = parseJdbcUrl(dsConfig.getUrl());
 
         // 检查该数据源是否已有 CDC 配置（共用同一个 Debezium connector）
-        List<CdcConfig> datasourceConfigs = cdcConfigRepository.findByDatasource(dsConfig.getId());
+        List<CdcConfig> datasourceConfigs = cdcConfigRepository.findByDatasource(dsConfig.getName());
 
         CdcConfig config = CdcAppConvert.INSTANCE.toDomain(cmd);
-        config.setDsId(dsConfig.getId());
+        config.setDsName(dsConfig.getName());
 
         if (datasourceConfigs.isEmpty()) {
             // 第一个表，创建新的 Debezium connector
@@ -109,7 +109,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             config = config.save(cdcConfigRepository);
 
             // 更新连接器的表列表
-            updateConnectorTableList(dsConfig.getId(), existingConfig.getConnectorName(), dsConfig, info);
+            updateConnectorTableList(dsConfig.getName(), existingConfig.getConnectorName(), dsConfig, info);
         }
 
         return CdcAppConvert.INSTANCE.toBO(config);
@@ -117,20 +117,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
     @Override
     public List<CdcConfigBO> list(CdcConfigListQuery query) {
-        // 将 dsName 解析为 dsId 再查询
-        CdcConfigListQuery resolvedQuery = query;
-        if (query != null && query.getDsName() != null) {
-            DsConfig dsConfig = dsConfigRepository.findByName(query.getDsName());
-            if (dsConfig != null) {
-                CdcConfigListQuery resolved = new CdcConfigListQuery();
-                resolved.setDsId(dsConfig.getId());
-                resolved.setDbName(query.getDbName());
-                resolved.setTableName(query.getTableName());
-                resolved.setEnabled(query.getEnabled());
-                resolvedQuery = resolved;
-            }
-        }
-        List<CdcConfig> list = cdcConfigRepository.list(resolvedQuery);
+        List<CdcConfig> list = cdcConfigRepository.list(query);
         return Optional.ofNullable(list).orElse(List.of()).stream()
                 .map(CdcAppConvert.INSTANCE::toBO)
                 .toList();
@@ -163,7 +150,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         DsConfig dsConfig = getDsConfigByName(cmd.getDsName());
         config.setName(cmd.getName())
-                .setDsId(dsConfig.getId())
+                .setDsName(dsConfig.getName())
                 .setDbName(cmd.getDbName())
                 .setTableName(cmd.getTableName())
                 .setIcebergTableName(cmd.getIcebergTableName())
@@ -188,7 +175,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         config.delete(cdcConfigRepository);
 
         // 查询该数据源下剩余的配置
-        List<CdcConfig> remainingConfigs = cdcConfigRepository.findByDatasource(config.getDsId());
+        List<CdcConfig> remainingConfigs = cdcConfigRepository.findByDatasource(config.getDsName());
 
         if (remainingConfigs.isEmpty()) {
             // 该数据源下没有其他表了，删除连接器
@@ -202,7 +189,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             }
         } else {
             // 更新连接器的 table.include.list
-            DsConfig dsConfig = getDsConfigById(config.getDsId());
+            DsConfig dsConfig = getDsConfigByName(config.getDsName());
             DatasourceInfo info = parseJdbcUrl(dsConfig.getUrl());
             updateConnectorTableListFromConfigs(remainingConfigs, connectorName, dsConfig, info);
         }
@@ -215,9 +202,6 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         Assert.notNull(config, new SilentException("CDC 配置不存在"));
 
         config.toggle(cdcConfigRepository, enabled);
-
-        DsConfig dsConfig = getDsConfigById(config.getDsId());
-        DatasourceInfo info = parseJdbcUrl(dsConfig.getUrl());
 
         if (Boolean.TRUE.equals(enabled)) {
             startConnectorForTable(config);
@@ -305,7 +289,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      * 启动指定表对应的 CDC，更新连接器并启动
      */
     private void startConnectorForTable(CdcConfig config) {
-        DsConfig dsConfig = getDsConfigById(config.getDsId());
+        DsConfig dsConfig = getDsConfigByName(config.getDsName());
         DatasourceInfo info = parseJdbcUrl(dsConfig.getUrl());
         String connectorName = config.getConnectorName();
         if (connectorName == null) {
@@ -313,7 +297,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         }
 
         // 获取该数据源下所有配置
-        List<CdcConfig> allConfigs = cdcConfigRepository.findByDatasource(config.getDsId());
+        List<CdcConfig> allConfigs = cdcConfigRepository.findByDatasource(config.getDsName());
         boolean isNewTable = !Boolean.TRUE.equals(config.getEnabled());
 
         // 更新连接器配置（包含已启用的表）
@@ -354,7 +338,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      * 停止指定表对应的 CDC
      */
     private void stopConnectorForTable(CdcConfig config) {
-        DsConfig dsConfig = getDsConfigById(config.getDsId());
+        DsConfig dsConfig = getDsConfigByName(config.getDsName());
         DatasourceInfo info = parseJdbcUrl(dsConfig.getUrl());
         String connectorName = config.getConnectorName();
         if (connectorName == null) {
@@ -363,11 +347,11 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         // 更新连接器的表列表（只保留启用的）
         updateConnectorTableListFromConfigs(
-                cdcConfigRepository.findByDatasource(config.getDsId()),
+                cdcConfigRepository.findByDatasource(config.getDsName()),
                 connectorName, dsConfig, info);
 
         // 检查该数据源下是否还有启用的表
-        List<CdcConfig> enabledConfigs = cdcConfigRepository.findEnabledByDatasource(config.getDsId());
+        List<CdcConfig> enabledConfigs = cdcConfigRepository.findEnabledByDatasource(config.getDsName());
         if (enabledConfigs.isEmpty()) {
             try {
                 debeziumRpc.stopConnector(connectorName);
@@ -387,8 +371,8 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      * 创建 Debezium 连接器
      */
     private void createDebeziumConnector(CdcConfig config, DsConfig dsConfig, DatasourceInfo info) {
-        String databaseIncludeList = config.getDbName();
         String tableIncludeList = config.getDbName() + "." + config.getTableName();
+        String historyTopic = "schema-history-" + info.hostname() + "-" + info.port();
 
         MySQLConnectorConfig mysqlConfig = new MySQLConnectorConfig()
                 .setTopicPrefix(config.getConnectorName())
@@ -398,16 +382,14 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setUser(dsConfig.getUsername())
                 .setPassword(dsConfig.getPassword())
                 .setServerId(config.getServerId())
-                .setDatabaseIncludeList(databaseIncludeList)
                 .setTableIncludeList(tableIncludeList)
                 .setKafkaBootstrapServers(kafkaUrl)
-                .setKafkaTopic("schema-history-" + info.hostname() + "-" + info.port())
+                .setKafkaTopic(historyTopic)
                 .setIncludeSchemaChanges(true)
                 .setSnapshotMode("when_needed")
                 .setSignalDataCollection("debezium_cdc.signal")
                 .setIncrementalSnapshotEnabled(true)
-                .setIncrementalSnapshotChunkSize("1024")
-                .setIncrementalSnapshotAllowNullValues(true);
+                .setIncrementalSnapshotChunkSize("1024");
 
         ConnectorSaveRequest request = new ConnectorSaveRequest(config.getConnectorName(), mysqlConfig);
         debeziumRpc.createConnector(request);
@@ -415,14 +397,14 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         // 确保信号表存在
         debeziumSignalService.ensureSignalTableExists(info.hostname(), info.port(), dsConfig.getUsername(), dsConfig.getPassword());
 
-        log.info("创建 Debezium 连接器: {}, 库: {}, 表: {}", config.getConnectorName(), databaseIncludeList, tableIncludeList);
+        log.info("创建 Debezium 连接器: {}, 表: {}", config.getConnectorName(), tableIncludeList);
     }
 
     /**
      * 更新连接器的 table.include.list
      */
-    private void updateConnectorTableList(String dsId, String connectorName, DsConfig dsConfig, DatasourceInfo info) {
-        List<CdcConfig> allConfigs = cdcConfigRepository.findByDatasource(dsId);
+    private void updateConnectorTableList(String dsName, String connectorName, DsConfig dsConfig, DatasourceInfo info) {
+        List<CdcConfig> allConfigs = cdcConfigRepository.findByDatasource(dsName);
         updateConnectorTableListFromConfigs(allConfigs, connectorName, dsConfig, info);
     }
 
@@ -438,29 +420,24 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         if (enabledConfigs.isEmpty()) {
             // 没有启用的表，设置空列表
-            updateConnectorConfig(connectorName, info, dsConfig, "", "");
+            updateConnectorConfig(connectorName, info, dsConfig, "");
             return;
         }
-
-        String databaseIncludeList = enabledConfigs.stream()
-                .map(CdcConfig::getDbName)
-                .distinct()
-                .collect(java.util.stream.Collectors.joining(","));
 
         String tableIncludeList = enabledConfigs.stream()
                 .map(c -> c.getDbName() + "." + c.getTableName())
                 .distinct()
                 .collect(java.util.stream.Collectors.joining(","));
 
-        updateConnectorConfig(connectorName, info, dsConfig, databaseIncludeList, tableIncludeList);
+        updateConnectorConfig(connectorName, info, dsConfig, tableIncludeList);
     }
 
     /**
      * 更新单个连接器配置
      */
     private void updateConnectorConfig(String connectorName, DatasourceInfo info,
-                                       DsConfig dsConfig, String databaseIncludeList, String tableIncludeList) {
-        // 使用第一个配置的 serverId
+                                       DsConfig dsConfig, String tableIncludeList) {
+        String historyTopic = "schema-history-" + info.hostname() + "-" + info.port();
         MySQLConnectorConfig mysqlConfig = new MySQLConnectorConfig()
                 .setTopicPrefix(connectorName)
                 .setTaskMax("1")
@@ -468,16 +445,14 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setPort(info.port())
                 .setUser(dsConfig.getUsername())
                 .setPassword(dsConfig.getPassword())
-                .setDatabaseIncludeList(databaseIncludeList)
                 .setTableIncludeList(tableIncludeList)
                 .setKafkaBootstrapServers(kafkaUrl)
-                .setKafkaTopic("schema-history-" + info.hostname() + "-" + info.port())
+                .setKafkaTopic(historyTopic)
                 .setIncludeSchemaChanges(true)
                 .setSnapshotMode("when_needed")
                 .setSignalDataCollection("debezium_cdc.signal")
                 .setIncrementalSnapshotEnabled(true)
-                .setIncrementalSnapshotChunkSize("1024")
-                .setIncrementalSnapshotAllowNullValues(true);
+                .setIncrementalSnapshotChunkSize("1024");
 
         debeziumRpc.updateConnector(connectorName, mysqlConfig);
     }
@@ -487,12 +462,6 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private DsConfig getDsConfigByName(String dsName) {
         DsConfig dsConfig = dsConfigRepository.findByName(dsName);
         Assert.notNull(dsConfig, new SilentException("数据源配置不存在: " + dsName));
-        return dsConfig;
-    }
-
-    private DsConfig getDsConfigById(String dsId) {
-        DsConfig dsConfig = dsConfigRepository.findById(dsId);
-        Assert.notNull(dsConfig, new SilentException("数据源配置不存在"));
         return dsConfig;
     }
 

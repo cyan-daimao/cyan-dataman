@@ -46,12 +46,12 @@ public interface CdcConfigRepository {
     /**
      * 按数据源查询所有 CDC 配置
      */
-    List<CdcConfig> findByDatasource(String dsId);
+    List<CdcConfig> findByDatasource(String dsName);
 
     /**
      * 按数据源查询已启用的 CDC 配置
      */
-    List<CdcConfig> findEnabledByDatasource(String dsId);
+    List<CdcConfig> findEnabledByDatasource(String dsName);
 
     /**
      * 获取下一个可用的 serverId

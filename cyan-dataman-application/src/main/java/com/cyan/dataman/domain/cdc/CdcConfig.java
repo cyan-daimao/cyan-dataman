@@ -2,6 +2,7 @@ package com.cyan.dataman.domain.cdc;
 
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
+import com.cyan.arch.common.util.StrUtils;
 import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
 import com.cyan.dataman.enums.RunningStatus;
 import com.cyan.dataman.enums.SyncTool;
@@ -35,9 +36,9 @@ public class CdcConfig {
     private String name;
 
     /**
-     * 数据源 ID
+     * 数据源名称
      */
-    private String dsId;
+    private String dsName;
 
     /**
      * 数据库名
@@ -124,7 +125,7 @@ public class CdcConfig {
      */
     private void validate() {
         Assert.notBlank(this.name, new SilentException("CDC 配置名称不能为空"));
-        Assert.notBlank(this.dsId, new SilentException("数据源 ID 不能为空"));
+        Assert.notBlank(this.dsName, new SilentException("数据源名称不能为空"));
         Assert.notBlank(this.dbName, new SilentException("数据库名不能为空"));
         Assert.notBlank(this.tableName, new SilentException("表名不能为空"));
         Assert.notBlank(this.icebergTableName, new SilentException("目标 Iceberg 表名不能为空"));
@@ -141,6 +142,7 @@ public class CdcConfig {
         if (this.enabled == null) {
             this.enabled = false;
         }
+        this.msg = StrUtils.isBlank(this.msg)? "" : this.msg;
         return repository.save(this);
     }
 

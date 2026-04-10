@@ -48,4 +48,4 @@ debezium:
 
 # Kafka 地址
 kafka:
-  url: kafka:9092
+  url: 10.0.0.2:31093

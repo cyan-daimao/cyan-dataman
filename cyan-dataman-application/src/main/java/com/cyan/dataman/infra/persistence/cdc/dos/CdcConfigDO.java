@@ -39,10 +39,10 @@ public class CdcConfigDO {
     private String name;
 
     /**
-     * 数据源 ID
+     * 数据源名称
      */
-    @TableField("ds_id")
-    private String dsId;
+    @TableField("ds_name")
+    private String dsName;
 
     /**
      * 数据库名
@@ -63,28 +63,22 @@ public class CdcConfigDO {
     private String icebergTableName;
 
     /**
-     * 目标 Iceberg Schema 名
-     */
-    @TableField("iceberg_schema_name")
-    private String icebergSchemaName;
-
-    /**
      * 同步工具
      */
     @TableField("sync_tool")
     private SyncTool syncTool;
 
     /**
-     * 同步 SQL
-     */
-    @TableField("sync_sql")
-    private String syncSql;
-
-    /**
      * 是否启用
      */
     @TableField("enabled")
     private Boolean enabled;
+
+    /**
+     * 同步 SQL
+     */
+    @TableField("sync_sql")
+    private String syncSql;
 
     /**
      * 描述

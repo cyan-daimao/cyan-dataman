@@ -32,9 +32,9 @@ public class CdcConfigBO {
     private String name;
 
     /**
-     * 数据源 ID
+     * 数据源名称
      */
-    private String dsId;
+    private String dsName;
 
     /**
      * 数据库名
