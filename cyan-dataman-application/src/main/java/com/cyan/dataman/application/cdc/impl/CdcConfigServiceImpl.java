@@ -21,9 +21,11 @@ import com.cyan.dataman.domain.ds.DsConfig;
 import com.cyan.dataman.domain.ds.repository.DsConfigRepository;
 import com.cyan.dataman.enums.JobStatus;
 import com.cyan.dataman.enums.RunningStatus;
+import com.cyan.dataman.enums.SyncTool;
 import com.cyan.dataman.infra.rpc.request.ConnectorSaveRequest;
 import com.cyan.dataman.infra.rpc.request.DebeziumRPC;
 import com.cyan.dataman.infra.rpc.request.config.MySQLConnectorConfig;
+import com.cyan.dataman.infra.util.IcebergUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -56,19 +58,22 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private final DsConfigRepository dsConfigRepository;
     private final DebeziumRPC debeziumRpc;
     private final DebeziumSignalService debeziumSignalService;
+    private final IcebergUtil icebergUtil;
 
     public CdcConfigServiceImpl(CdcConfigRepository cdcConfigRepository,
                                 CdcSparkJobRepository cdcSparkJobRepository,
                                 CdcSparkTaskRepository cdcSparkTaskRepository,
                                 DsConfigRepository dsConfigRepository,
                                 DebeziumRPC debeziumRpc,
-                                DebeziumSignalService debeziumSignalService) {
+                                DebeziumSignalService debeziumSignalService,
+                                IcebergUtil icebergUtil) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.cdcSparkJobRepository = cdcSparkJobRepository;
         this.cdcSparkTaskRepository = cdcSparkTaskRepository;
         this.dsConfigRepository = dsConfigRepository;
         this.debeziumRpc = debeziumRpc;
         this.debeziumSignalService = debeziumSignalService;
+        this.icebergUtil = icebergUtil;
     }
 
     @Override
@@ -110,6 +115,11 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
             // 更新连接器的表列表
             updateConnectorTableList(dsConfig.getName(), existingConfig.getConnectorName(), dsConfig, info);
+        }
+
+        // FLINK CDC 需要确保目标 Iceberg 表存在 op 字段
+        if (SyncTool.FLINK.equals(cmd.getSyncTool())) {
+            ensureOpColumnForFlinkCdc(cmd.getIcebergTableName(), cmd.getDbName());
         }
 
         return CdcAppConvert.INSTANCE.toBO(config);
@@ -467,6 +477,38 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
     private String buildConnectorName(String dsName) {
         return "cdc-" + dsName;
+    }
+
+    /**
+     * 为 FLINK CDC 确保 Iceberg 表存在 op 字段
+     * @param icebergTableName Iceberg 表名（可能是 schema.tableName 或纯表名）
+     * @param defaultSchema 默认 schema（dbName）
+     */
+    private void ensureOpColumnForFlinkCdc(String icebergTableName, String defaultSchema) {
+        String schema;
+        String tableName;
+
+        // 解析 icebergTableName，支持 "schema.tableName" 或纯表名格式
+        if (icebergTableName.contains(".")) {
+            String[] parts = icebergTableName.split("\\.");
+            if (parts.length == 2) {
+                schema = parts[0];
+                tableName = parts[1];
+            } else {
+                // 多个点的情况，取最后两部分
+                schema = parts[parts.length - 2];
+                tableName = parts[parts.length - 1];
+            }
+        } else {
+            schema = defaultSchema;
+            tableName = icebergTableName;
+        }
+
+        // 检查并确保 op 字段存在
+        boolean success = icebergUtil.ensureOpColumnExists(schema, tableName);
+        if (!success) {
+            log.warn("无法为 Iceberg 表 {}.{} 检查/创建 op 字段，请确认表是否存在", schema, tableName);
+        }
     }
 
     private DatasourceInfo parseJdbcUrl(String jdbcUrl) {
