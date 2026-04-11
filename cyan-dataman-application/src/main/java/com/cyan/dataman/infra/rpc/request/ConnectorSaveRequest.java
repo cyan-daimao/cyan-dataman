@@ -17,7 +17,12 @@ import lombok.experimental.Accessors;
 @Data
 @Accessors(chain = true)
 public class ConnectorSaveRequest {
-
+    /**
+     * 连接器名称
+     */
     private String name;
+    /**
+     * 配置信息
+     */
     private ConnectorConfig config;
 }
