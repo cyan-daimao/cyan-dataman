@@ -83,7 +83,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     @Override
     public MetadataTableBO findOne(MetadataTableOneQuery query) {
         MetadataTable metadataTable = metadataTableRepository.findOne(query);
-        return MetadataTableAppConvert.INSTANCE.toMetadataTableBO(metadataTable);
+        return findById(metadataTable.getId());
     }
 
     /**

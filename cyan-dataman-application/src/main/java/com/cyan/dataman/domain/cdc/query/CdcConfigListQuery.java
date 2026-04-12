@@ -1,5 +1,6 @@
 package com.cyan.dataman.domain.cdc.query;
 
+import com.cyan.dataman.enums.SyncTool;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
@@ -32,4 +33,9 @@ public class CdcConfigListQuery {
      * 是否启用
      */
     private Boolean enabled;
+
+    /**
+     * 同步工具
+     */
+    private SyncTool syncTool;
 }

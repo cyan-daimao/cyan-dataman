@@ -9,7 +9,11 @@ import com.cyan.dataman.application.cdc.bo.CdcSparkTaskBO;
 import com.cyan.dataman.application.cdc.cmd.CdcConfigCmd;
 import com.cyan.dataman.application.cdc.cmd.CdcSparkJobCmd;
 import com.cyan.dataman.application.cdc.convert.CdcAppConvert;
+import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
 import com.cyan.dataman.application.cdc.service.DebeziumSignalService;
+import com.cyan.dataman.application.metadata.MetadataTableService;
+import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
+import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.cdc.CdcConfig;
 import com.cyan.dataman.domain.cdc.CdcSparkJob;
 import com.cyan.dataman.domain.cdc.CdcSparkTask;
@@ -19,13 +23,13 @@ import com.cyan.dataman.domain.cdc.repository.CdcSparkJobRepository;
 import com.cyan.dataman.domain.cdc.repository.CdcSparkTaskRepository;
 import com.cyan.dataman.domain.ds.DsConfig;
 import com.cyan.dataman.domain.ds.repository.DsConfigRepository;
-import com.cyan.dataman.enums.JobStatus;
-import com.cyan.dataman.enums.RunningStatus;
-import com.cyan.dataman.enums.SyncTool;
+import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
+import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
+import com.cyan.dataman.enums.*;
 import com.cyan.dataman.infra.rpc.request.ConnectorSaveRequest;
 import com.cyan.dataman.infra.rpc.request.DebeziumRPC;
 import com.cyan.dataman.infra.rpc.request.config.MySQLConnectorConfig;
-import com.cyan.dataman.infra.util.IcebergUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -58,7 +62,8 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private final DsConfigRepository dsConfigRepository;
     private final DebeziumRPC debeziumRpc;
     private final DebeziumSignalService debeziumSignalService;
-    private final IcebergUtil icebergUtil;
+    private final MetadataTableService metadataTableService;
+    private final CdcFlinkSyncService cdcFlinkSyncService;
 
     public CdcConfigServiceImpl(CdcConfigRepository cdcConfigRepository,
                                 CdcSparkJobRepository cdcSparkJobRepository,
@@ -66,14 +71,15 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                                 DsConfigRepository dsConfigRepository,
                                 DebeziumRPC debeziumRpc,
                                 DebeziumSignalService debeziumSignalService,
-                                IcebergUtil icebergUtil) {
+                                MetadataTableService metadataTableService, CdcFlinkSyncService cdcFlinkSyncService) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.cdcSparkJobRepository = cdcSparkJobRepository;
         this.cdcSparkTaskRepository = cdcSparkTaskRepository;
         this.dsConfigRepository = dsConfigRepository;
         this.debeziumRpc = debeziumRpc;
         this.debeziumSignalService = debeziumSignalService;
-        this.icebergUtil = icebergUtil;
+        this.metadataTableService = metadataTableService;
+        this.cdcFlinkSyncService = cdcFlinkSyncService;
     }
 
     @Override
@@ -102,10 +108,12 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
             config = config.save(cdcConfigRepository);
 
-            // 创建 Debezium 连接器
-            createDebeziumConnector(config, dsConfig, info);
+            // 只有启用时才创建 Debezium 连接器
+            if (Boolean.TRUE.equals(config.getEnabled())) {
+                createDebeziumConnector(config, dsConfig, info);
+            }
         } else {
-            // 复用已有 connector，更新其 table.include.list
+            // 复用已有 connector
             CdcConfig existingConfig = datasourceConfigs.getFirst();
             config.setConnectorName(existingConfig.getConnectorName())
                     .setServerId(existingConfig.getServerId())
@@ -113,13 +121,15 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
             config = config.save(cdcConfigRepository);
 
-            // 更新连接器的表列表
-            updateConnectorTableList(dsConfig.getName(), existingConfig.getConnectorName(), dsConfig, info);
+            // 只有启用时才更新连接器的表列表
+            if (Boolean.TRUE.equals(config.getEnabled())) {
+                updateConnectorTableList(dsConfig.getName(), existingConfig.getConnectorName(), dsConfig, info);
+            }
         }
 
         // FLINK CDC 需要确保目标 Iceberg 表存在 op 字段
         if (SyncTool.FLINK.equals(cmd.getSyncTool())) {
-            ensureOpColumnForFlinkCdc(cmd.getIcebergTableName(), cmd.getDbName());
+            ensureOpColumnForFlinkCdc(cmd.getIcebergTableName());
         }
 
         return CdcAppConvert.INSTANCE.toBO(config);
@@ -215,8 +225,10 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         if (Boolean.TRUE.equals(enabled)) {
             startConnectorForTable(config);
+            cdcFlinkSyncService.enableCdcSync(config.getId());
         } else {
             stopConnectorForTable(config);
+            cdcFlinkSyncService.disableCdcSync(config.getId());
         }
     }
 
@@ -308,39 +320,41 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         // 获取该数据源下所有配置
         List<CdcConfig> allConfigs = cdcConfigRepository.findByDatasource(config.getDsName());
-        boolean isNewTable = !Boolean.TRUE.equals(config.getEnabled());
 
-        // 更新连接器配置（包含已启用的表）
-        updateConnectorTableListFromConfigs(allConfigs, connectorName, dsConfig, info);
+        // 检查该 connector 是否已存在（如果该数据源是第一次启用，connector 可能还不存在）
+        boolean connectorExists = checkConnectorExists(connectorName);
 
-        if (isNewTable) {
-            // 新增表：先停止再启动，让 Debezium 获取新表 schema
-            try {
-                debeziumRpc.stopConnector(connectorName);
-                Thread.sleep(2000);
-            } catch (Exception e) {
-                log.warn("停止连接器失败（可忽略）: {}", e.getMessage());
-            }
-
-            try {
-                debeziumRpc.startConnector(connectorName);
-                config.setRunningStatus(RunningStatus.RUNNING);
-                cdcConfigRepository.update(config);
-                log.info("启动 Debezium 连接器: {}", connectorName);
-            } catch (Exception e) {
-                config.setRunningStatus(RunningStatus.ERROR);
-                config.setMsg("启动连接器失败: " + e.getMessage());
-                cdcConfigRepository.update(config);
-                throw new SilentException("启动连接器失败: " + e.getMessage());
-            }
+        if (!connectorExists) {
+            // Connector 不存在，先创建
+            createDebeziumConnector(config, dsConfig, info);
+            log.info("创建并启动 Debezium 连接器: {}", connectorName);
         } else {
+            // Connector 已存在，更新配置并启动
+            updateConnectorTableListFromConfigs(allConfigs, connectorName, dsConfig, info);
+
             try {
                 debeziumRpc.startConnector(connectorName);
-                config.setRunningStatus(RunningStatus.RUNNING);
-                cdcConfigRepository.update(config);
+                log.info("启动 Debezium 连接器: {}", connectorName);
             } catch (Exception e) {
                 log.warn("启动连接器失败（可能已在运行）: {}", e.getMessage());
             }
+        }
+
+        config.setRunningStatus(RunningStatus.RUNNING);
+        config.setMsg("");
+        cdcConfigRepository.update(config);
+    }
+
+    /**
+     * 检查 connector 是否已存在
+     */
+    private boolean checkConnectorExists(String connectorName) {
+        try {
+            List<String> connectors = debeziumRpc.connectors();
+            return connectors != null && connectors.contains(connectorName);
+        } catch (Exception e) {
+            log.warn("检查 connector 存在性失败: {}", e.getMessage());
+            return false;
         }
     }
 
@@ -422,15 +436,18 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      * 根据配置列表更新连接器的表列表（只包含已启用的配置）
      */
     private void updateConnectorTableListFromConfigs(List<CdcConfig> allConfigs, String connectorName,
-                                                      DsConfig dsConfig, DatasourceInfo info) {
+                                                     DsConfig dsConfig, DatasourceInfo info) {
         // 只包含启用状态的表
         List<CdcConfig> enabledConfigs = allConfigs.stream()
                 .filter(c -> Boolean.TRUE.equals(c.getEnabled()))
                 .toList();
 
+        // 获取 serverId（从任一配置中获取，它们共享同一个 connector）
+        Integer serverId = enabledConfigs.isEmpty() ? null : enabledConfigs.getFirst().getServerId();
+
         if (enabledConfigs.isEmpty()) {
             // 没有启用的表，设置空列表
-            updateConnectorConfig(connectorName, info, dsConfig, "");
+            updateConnectorConfig(connectorName, info, dsConfig, "", serverId);
             return;
         }
 
@@ -439,14 +456,14 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .distinct()
                 .collect(java.util.stream.Collectors.joining(","));
 
-        updateConnectorConfig(connectorName, info, dsConfig, tableIncludeList);
+        updateConnectorConfig(connectorName, info, dsConfig, tableIncludeList, serverId);
     }
 
     /**
      * 更新单个连接器配置
      */
     private void updateConnectorConfig(String connectorName, DatasourceInfo info,
-                                       DsConfig dsConfig, String tableIncludeList) {
+                                       DsConfig dsConfig, String tableIncludeList, Integer serverId) {
         String historyTopic = "schema-history-" + info.hostname() + "-" + info.port();
         MySQLConnectorConfig mysqlConfig = new MySQLConnectorConfig()
                 .setTopicPrefix(connectorName)
@@ -455,6 +472,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setPort(info.port())
                 .setUser(dsConfig.getUsername())
                 .setPassword(dsConfig.getPassword())
+                .setServerId(serverId)
                 .setTableIncludeList(tableIncludeList)
                 .setKafkaBootstrapServers(kafkaUrl)
                 .setKafkaTopic(historyTopic)
@@ -481,33 +499,93 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
     /**
      * 为 FLINK CDC 确保 Iceberg 表存在 op 字段
+     *
      * @param icebergTableName Iceberg 表名（可能是 schema.tableName 或纯表名）
-     * @param defaultSchema 默认 schema（dbName）
      */
-    private void ensureOpColumnForFlinkCdc(String icebergTableName, String defaultSchema) {
-        String schema;
+    private void ensureOpColumnForFlinkCdc(String icebergTableName) {
         String tableName;
 
         // 解析 icebergTableName，支持 "schema.tableName" 或纯表名格式
         if (icebergTableName.contains(".")) {
             String[] parts = icebergTableName.split("\\.");
             if (parts.length == 2) {
-                schema = parts[0];
                 tableName = parts[1];
             } else {
                 // 多个点的情况，取最后两部分
-                schema = parts[parts.length - 2];
                 tableName = parts[parts.length - 1];
             }
         } else {
-            schema = defaultSchema;
             tableName = icebergTableName;
         }
 
-        // 检查并确保 op 字段存在
-        boolean success = icebergUtil.ensureOpColumnExists(schema, tableName);
-        if (!success) {
-            log.warn("无法为 Iceberg 表 {}.{} 检查/创建 op 字段，请确认表是否存在", schema, tableName);
+        // 查找元数据表
+        MetadataTableBO metadata = metadataTableService.findOne(new MetadataTableOneQuery().setName(tableName));
+        if (metadata == null) {
+            throw new SilentException("Iceberg 表不存在: " + icebergTableName);
+        }
+
+        // FLINK CDC 必须使用 ODS 层表，检查表是否在 ODS 层
+        // 使用 metadata.table.schema 作为 schema 进行验证
+        String actualSchema = metadata.getTable() != null ? metadata.getTable().getSchema() : metadata.getLayerCode();
+        validateOdsLayer(actualSchema, tableName);
+
+        // 检查是否已存在 op 字段
+        boolean opColumnExists = metadata.getTable() != null
+                && metadata.getTable().getColumns() != null
+                && metadata.getTable().getColumns().stream()
+                .anyMatch(col -> "op".equals(col.getName()));
+
+        if (opColumnExists) {
+            log.info("Iceberg 表 {}.{} 已存在 op 字段", actualSchema, tableName);
+            return;
+        }
+
+        // 通过 MetadataTableService.update 添加 op 字段
+        TableValObj table = metadata.getTable();
+        // 构建新的列 表 + op 列
+        ColumnValObj opColumn = new ColumnValObj()
+                .setName("op")
+                .setType("STRING")
+                .setComment("CDC operation type: c(create), r(read), u(update), d(delete)")
+                .setSecretLevel(SecretLevel.L1)
+                .setNullable(true)
+                .setAutoIncrement(false);
+        table.getColumns().add(opColumn);
+
+        // 构建 MetadataTableCmd
+        MetadataTableCmd cmd = new MetadataTableCmd();
+        cmd.setName(metadata.getName());
+        cmd.setOwner(metadata.getOwner());
+        cmd.setSubjectCode(metadata.getSubjectCode());
+        cmd.setLayerCode(DataLayer.valueOf(metadata.getLayerCode().toUpperCase()));
+        cmd.setComment(metadata.getComment());
+        cmd.setHeatLevel(metadata.getHeatLevel());
+        cmd.setSecretLevel(metadata.getSecretLevel());
+        cmd.setOnlineStatus(metadata.getOnlineStatus());
+        cmd.setTableValObj(table);
+
+        metadataTableService.update(metadata.getId(), cmd);
+        log.info("成功为 Iceberg 表 {}.{} 添加 op 字段", actualSchema, tableName);
+    }
+
+    /**
+     * 验证 Iceberg 表是否在 ODS 层
+     *
+     * @param schema    库名
+     * @param tableName 表名
+     */
+    private void validateOdsLayer(String schema, String tableName) {
+        MetadataTableOneQuery query = new MetadataTableOneQuery();
+        query.setName(tableName);
+        MetadataTableBO metadataTable = metadataTableService.findOne(query);
+
+        if (metadataTable == null) {
+            throw new SilentException("Iceberg 表不存在: " + schema + "." + tableName);
+        }
+
+        if (!DataLayer.ODS.getCode().equalsIgnoreCase(metadataTable.getLayerCode())) {
+            throw new SilentException("Flink CDC 同步目标表必须位于 ODS 层，当前表位于: " +
+                    (metadataTable.getLayerCode() != null ? metadataTable.getLayerCode() : "未知层"));
         }
     }
 

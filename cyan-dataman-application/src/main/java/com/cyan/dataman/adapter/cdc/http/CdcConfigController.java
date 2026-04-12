@@ -1,6 +1,8 @@
 package com.cyan.dataman.adapter.cdc.http;
 
+import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.Response;
+import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.adapter.cdc.http.convert.CdcAdapterConvert;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcConfigDTO;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcSparkJobDTO;
@@ -95,6 +97,7 @@ public class CdcConfigController {
     public Response<Void> toggle(@PathVariable("cdcName") String cdcName,
                                  @RequestParam Boolean enabled) {
         CdcConfigBO existing = cdcConfigService.findByName(cdcName);
+        Assert.notNull(existing, new SilentException("CDC 配置不存在"));
         cdcConfigService.toggle(existing.getId(), enabled);
         return Response.success();
     }

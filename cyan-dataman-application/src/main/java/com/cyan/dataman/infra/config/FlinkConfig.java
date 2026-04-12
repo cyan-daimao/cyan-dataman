@@ -1,7 +1,5 @@
 package com.cyan.dataman.infra.config;
 
-import org.apache.flink.api.common.RuntimeExecutionMode;
-import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -34,11 +32,12 @@ public class FlinkConfig {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         // 2. 关键：指向远程 Flink 集群地址
-        env.setRuntimeMode(RuntimeExecutionMode.STREAMING);
+//        env.setRuntimeMode(RuntimeExecutionMode.STREAMING);
         org.apache.flink.configuration.Configuration config = new org.apache.flink.configuration.Configuration();
-        config.setString("execution.target", "remote");
-        config.set(JobManagerOptions.ADDRESS,"10.0.0.2");
-        config.set(JobManagerOptions.PORT,20031);
+//        config.setString("execution.target", "remote");
+//        config.set(JobManagerOptions.ADDRESS,"10.0.0.2");
+//        config.set(JobManagerOptions.PORT,20031);
+//        config.set(DeploymentOptions.ATTACHED, false);
 
         // 3. 生产必须开：Checkpoint（精准一次）
         env.enableCheckpointing(60000);
