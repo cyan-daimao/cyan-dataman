@@ -17,9 +17,14 @@ import lombok.experimental.Accessors;
 @Data
 @Accessors(chain = true)
 public class DebeziumConnectorDO {
-
+    /**
+     * 运行状态
+     */
     private String state;
 
+    /**
+     * 运行id
+     */
     @JsonProperty("worker_id")
     private String workerId;
 }

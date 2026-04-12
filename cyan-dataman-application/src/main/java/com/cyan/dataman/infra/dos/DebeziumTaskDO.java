@@ -16,8 +16,18 @@ import lombok.experimental.Accessors;
 @Data
 @Accessors(chain = true)
 public class DebeziumTaskDO {
-
+    /**
+     * 任务id
+     */
     private Long id;
+
+    /**
+     * 任务状态
+     */
     private String state;
+
+    /**
+     * 任务信息
+     */
     private String trace;
 }

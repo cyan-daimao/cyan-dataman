@@ -19,8 +19,24 @@ import java.util.List;
 @Accessors(chain = true)
 public class DebeziumDO {
 
+    /**
+     * 连接器名称
+     */
     private String name;
+
+    /**
+     * 连接器状态
+     */
     private DebeziumConnectorDO connector;
+
+    /**
+     * 任务列表
+     */
     private List<DebeziumTaskDO> tasks;
+
+    /**
+     * type: source
+     * 不知道是什么
+     */
     private String type;
 }
