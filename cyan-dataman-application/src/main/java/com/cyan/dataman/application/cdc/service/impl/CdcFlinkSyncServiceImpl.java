@@ -302,10 +302,11 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 .uid("cdc-process-" + dsName)
                 .name("CDC Process - " + dsName);
 
-        // 使用自定义 Sink 替代 print()，避免 Flink 2.0 Mini Cluster 兼容性问题
-        processedStream.addSink(new LoggerSink())
-                .uid("logger-sink-" + dsName)
-                .name("Logger Sink - " + dsName);
+        // 使用 map 代替 print()，直接打印日志避免 Flink 2.0 Sink 兼容性问题
+        processedStream.map(value -> {
+            log.info("CDC data: {}", value);
+            return value;
+        }).uid("logger-map-" + dsName).name("Logger Map - " + dsName);
 
         try {
             streamExecutionEnvironment.execute("Flink CDC Sync - " + dsName);
@@ -419,18 +420,6 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             } catch (Exception e) {
                 return null;
             }
-        }
-    }
-
-    /**
-     * 自定义日志 Sink，替代 print() 避免 Flink 2.0 Mini Cluster 兼容性问题
-     */
-    private static class LoggerSink implements org.apache.flink.streaming.api.functions.sink.legacy.SinkFunction<String> {
-        private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(LoggerSink.class);
-
-        @Override
-        public void invoke(String value, org.apache.flink.streaming.api.functions.sink.legacy.SinkFunction.Context context) {
-            LOG.info("CDC data: {}", value);
         }
     }
 }
