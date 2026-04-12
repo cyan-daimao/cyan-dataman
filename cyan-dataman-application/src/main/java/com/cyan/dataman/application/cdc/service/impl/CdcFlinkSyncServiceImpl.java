@@ -299,11 +299,11 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
         SingleOutputStreamOperator<String> processedStream = rawStream
                 .process(new CdcProcessFunction(enabledTableKeys))
-                .uid("cdc-process-" + dsName);
+                .uid("cdc-process-" + dsName)
+                .name("CDC Process - " + dsName);
 
-        processedStream.print()
-                .uid("print-sink-" + dsName)
-                .name("Print Sink - " + dsName);
+        // 直接使用 print()，Flink 2.0 会自动处理 Sink 算子
+        processedStream.print();
 
         try {
             streamExecutionEnvironment.execute("Flink CDC Sync - " + dsName);
