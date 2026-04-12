@@ -44,8 +44,8 @@ iceberg:
 
 # Debezium 连接地址
 debezium:
-  url: http://debezium-connect.cyan.com
+  url: http://debezium-connect-rest.kafka.svc.cluster.local:8083
 
 # Kafka 地址
 kafka:
-  url: 10.0.0.2:31093
+  url: kafka-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092
