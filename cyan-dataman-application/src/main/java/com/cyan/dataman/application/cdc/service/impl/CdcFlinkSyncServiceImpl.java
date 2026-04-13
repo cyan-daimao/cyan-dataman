@@ -303,10 +303,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 .name("CDC Process - " + dsName);
 
         // 使用 map 代替 print()，直接打印日志避免 Flink 2.0 Sink 兼容性问题
-        processedStream.map(value -> {
-            log.info("CDC data: {}", value);
-            return value;
-        }).uid("logger-map-" + dsName).name("Logger Map - " + dsName);
+        processedStream.print();
 
         try {
             streamExecutionEnvironment.execute("Flink CDC Sync - " + dsName);

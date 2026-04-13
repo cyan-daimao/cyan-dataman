@@ -43,8 +43,8 @@ iceberg:
 
 # Debezium 连接地址
 debezium:
-  url: http://debezium-connect.cyan.com
+  url: http://10.0.0.2:28083
 
 # Kafka 地址
 kafka:
-  url: 10.0.0.2:31093
+  url: 10.0.0.2:29092
