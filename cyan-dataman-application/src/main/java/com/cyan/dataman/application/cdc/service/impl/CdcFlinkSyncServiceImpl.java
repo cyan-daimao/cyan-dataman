@@ -32,6 +32,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -148,7 +149,9 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             log.info("数据源 {} 的 Flink 作业已存在，dsName: {}, flinkJobId: {}",dsName, dsName, existingFlinkJobId);
         } else {
             if ("local".equalsIgnoreCase(flinkMode)) {
-                createLocalFlinkJob(dsName, config);
+                // 异步启动 Flink 作业，避免阻塞 HTTP 请求线程
+                CdcConfig finalConfig = config;
+                CompletableFuture.runAsync(() -> createLocalFlinkJob(dsName, finalConfig));
             } else {
                 createRemoteFlinkJob(dsName, config);
             }
@@ -414,6 +417,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     /**
      * CDC 处理函数
      * 必须为静态类，且只包含可序列化字段
+     * 使用 transient +懒加载绕过 Flink 序列化对 Logger 的限制
      */
     private static class CdcProcessFunction extends ProcessFunction<String, String> {
 
@@ -422,8 +426,18 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
          */
         private final Set<String> enabledTables;
 
+        /**
+         * Flink 序列化时不支持 Logger，使用 transient 懒加载
+         */
+        private transient org.slf4j.Logger log;
+
         public CdcProcessFunction(Set<String> enabledTables) {
             this.enabledTables = enabledTables;
+        }
+
+        @Override
+        public void open(org.apache.flink.api.common.functions.OpenContext openContext) {
+            this.log = org.slf4j.LoggerFactory.getLogger(CdcProcessFunction.class);
         }
 
         @Override
@@ -437,6 +451,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 return;
             }
 
+            log.info("CDC 收到 Kafka 消息: table={}, value={}", tableKey, value);
             out.collect(value);
         }
 

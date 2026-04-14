@@ -336,7 +336,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         }
 
         // 等待 connector task 启动完成（Debezium task 启动后才会创建 Kafka topic 并开始快照）
-        boolean taskRunning = waitForConnectorTaskRunning(connectorName, 60);
+        boolean taskRunning = waitForConnectorTaskRunning(connectorName, 30);
         if (!taskRunning) {
             log.warn("Debezium 连接器 task 未能在超时时间内启动: {}", connectorName);
         }
