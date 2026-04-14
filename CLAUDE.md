@@ -5,100 +5,111 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run
 
 ```bash
-# Build
+# 构建（跳过测试）
 mvn clean package -DskipTests
 
-# Run application
-java -jar target/cyan-dataman.jar
+# 运行
+java -jar cyan-dataman-application/target/cyan-dataman.jar
+
+# 构建单个模块
+mvn clean package -pl cyan-dataman-application -am -DskipTests
 ```
+
+本项目当前无测试代码。
 
 ## Architecture
 
-**Multi-module Maven project** with DDD (Domain-Driven Design) architecture:
+**多模块 Maven 项目**，采用 DDD（领域驱动设计）分层架构：
 
 ```
 cyan-dataman/
-├── cyan-dataman-application/  # Main application module
-└── cyan-dataman-client/       # Client SDK with enums and shared types
+├── cyan-dataman-application/  # 主应用模块（Spring Boot）
+└── cyan-dataman-client/       # 客户端 SDK（枚举、Feign RPC 接口）
 ```
 
-### Layer Structure (within application module)
+### 分层结构（application 模块内）
 
 ```
-adapter/         # HTTP/RPC controllers, DTO conversion
-application/     # Business logic orchestration, transactions
-domain/          # Domain models, core business rules
-infra/           # Database access, external integrations
+adapter/         # HTTP 控制器、DTO 转换（AdapterConvert）
+application/     # 业务编排、事务、领域服务（Cmd -> Domain -> BO）
+domain/          # 领域模型、仓储接口、核心业务规则
+infra/           # 仓储实现、MyBatis-Plus Mapper、外部集成配置
 ```
 
-### Key Constraints
+### 调用链与转换链路
 
-- **Domain isolation**: `ds` domain valobjs (`domain/ds/valobj/`) and `metadata` domain valobjs (`domain/metadata/valobj/`) are independent - never cross-reference directly. Convert in adapter layer if needed.
-- **Polyorphic valobjs**: `ColumnValObj` uses Jackson `@JsonTypeInfo` with `databaseType` discriminator for MySQL/PostgreSQL subclasses.
+每个写操作经过三层 MapStruct 转换，确保层间解耦：
+
+```
+Controller
+  -> Service(Cmd) -> AppConvert.toDomain(cmd)
+    -> DomainEntity.save(Repository)
+      -> RepositoryImpl -> InfraConvert.toDO(entity) -> Mapper.insert(DO)
+```
+
+三组 Convert 职责：
+- **AdapterConvert**：DTO <-> BO（adapter 层）
+- **AppConvert**：Cmd -> Domain Entity，Domain Entity -> BO（application 层）
+- **InfraConvert**：Domain Entity <-> DO（infra 层）
+
+所有 Convert 均为 MapStruct 接口，使用 `INSTANCE = Mappers.getMapper(...)` 单例模式。
+
+### 核心约束
+
+- **领域隔离**：`ds` 域（`domain/ds/valobj/`）和 `metadata` 域（`domain/metadata/valobj/`）相互独立，禁止直接交叉引用。如需转换在 adapter 层处理。
+- **多态值对象**：`ds` 域的 `ColumnValObj` 使用 Jackson `@JsonTypeInfo`，以 `databaseType` 字段作为判别器，反序列化为 `MysqlColumnValObj` 或 `PgsqlColumnValObj`。
+- **无基类 DO**：所有 DO 类独立定义审计字段（`created_at`、`updated_at`、`deleted_at`），时间戳由领域实体的 `save()` 方法手动设置，未使用 MyBatis-Plus MetaObjectHandler。
+- **逻辑删除**：使用 `@TableLogic(value = "null", delval = "now()")`，deleted_at 为 null 表示未删除，删除时设置为当前时间。
 
 ## Tech Stack
 
 - Java 21, Spring Boot 3, MyBatis-Plus 3.5.7
-- Apache Iceberg 1.10.1, Spark 4.0.2, Gravitino 1.1.0
-- Nacos (service discovery & config)
-- MapStruct (object mapping), Lombok
+- Apache Iceberg 1.10.1, Spark 4.0.2, Gravitino 1.1.0, Flink, Debezium, Kafka
+- Nacos（服务发现与配置中心，通过 `spring.config.import: nacos:` 加载远程配置）
+- MapStruct（对象映射），Lombok
 
 ## Domains
 
-### ds (Data Source)
-Manages database connections (MySQL/PostgreSQL/Iceberg). Key entities: `DsConfig`, `TableSchemaValObj`.
+### ds（数据源）
+管理数据库连接（MySQL/PostgreSQL/Iceberg）。核心实体：`DsConfig`、`TableSchemaValObj`。
 
-### metadata
-Metadata catalog with subject hierarchy (max 3 levels). Key entities: `MetadataSubject`, `MetadataTable`.
+### metadata（元数据）
+元数据目录，支持主题层级（最多 3 级）。核心实体：`MetadataSubject`、`MetadataTable`。
 
-### cdc
-CDC synchronization from source DB to Iceberg using Spark. Key entities: `CdcConfig`, `CdcSparkJob`, `CdcSparkTask`.
+### cdc（变更数据捕获）
+CDC 同步：源数据库 -> Iceberg，支持 Spark SQL 和 Flink + Debezium 两种同步工具。
 
-**CDC Config:** Defines source table (ds_id, db, table) and target Iceberg table.
-**Spark Job:** Spark SQL template with sync mode (OVERWRITE/APPEND) and optional cron scheduling.
-**Spark Task:** Task instance with status tracking (PENDING/RUNNING/SUCCESS/FAILED/STOPPED), duration, and row counts.
+核心实体：
+- `CdcConfig` — 定义同步配置（源表 ds_id/db/table + 目标 Iceberg 表）
+- `CdcSparkJob` — Spark SQL 模板，同步模式（OVERWRITE/APPEND），可选 Cron 调度
+- `CdcSparkTask` — 任务实例，状态追踪（PENDING/RUNNING/SUCCESS/FAILED/STOPPED）
 
-**APIs:**
-```
-POST   /api/v1/cdc                        # Create CDC config
-GET    /api/v1/cdc                        # List CDC configs
-GET    /api/v1/cdc/{cdcName}              # Get CDC config
-PUT    /api/v1/cdc/{cdcName}              # Update CDC config
-PUT    /api/v1/cdc/{cdcName}/open         # Toggle CDC (enabled/disabled)
-DELETE /api/v1/cdc/{cdcName}              # Delete CDC config
-
-POST   /api/v1/cdc/{cdcName}/spark-jobs   # Create Spark job config
-GET    /api/v1/cdc/{cdcName}/spark-jobs   # List Spark job configs
-PUT    /api/v1/cdc/spark-jobs/{jobId}     # Update Spark job config
-DELETE /api/v1/cdc/spark-jobs/{jobId}     # Delete Spark job config
-
-GET    /api/v1/cdc/{cdcName}/tasks        # List task instances
-GET    /api/v1/cdc/tasks/{taskId}         # Get task instance details
-POST   /api/v1/cdc/tasks/{taskId}/stop    # Stop running task
-```
+异步机制：
+- Spark 任务通过 `ApplicationEventPublisher` 发布 `SparkJobEvent`，由 `SparkJobExecutor` 以 `@Async` + `@EventListener` 异步执行
+- `CdcFlinkSyncServiceImpl` 定时刷新 Flink 同步状态（`@Scheduled` 每 30s）
+- `IcebergMaintenanceScheduler` 执行 Iceberg 表维护（`@Scheduled` 每日零点）
 
 ## API Conventions
 
-- Base path: `/api/v1`
-- Response format: `Response<T>` with `code`, `message`, `data`
-- Logical delete via `deleted_at` field (MyBatis-Plus)
-- Auto-fields on create: `created_at`, `updated_at`, `deleted_at`
+- 基础路径：`/api/v1`
+- 响应格式：`Response<T>`（来自 `com.cyan.arch.common.api.Response`，属于 arch 公共库）
+- 分页：`Page<T>`（来自 arch 公共库）
+- 业务异常：`SilentException`（不输出堆栈）
 
 ## Naming Conventions
 
-- Controllers: `XxxController`
-- Services: `XxxService` / `XxxServiceImpl`
-- Repositories: `XxxRepository` / `XxxRepositoryImpl`
-- DTOs: `XxxDTO` (adapter), `XxxBO` (application), `XxxDO` (infra)
-- Queries: `XxxQuery`, Commands: `XxxCmd`, Valobjs: `XxxValObj`
+| 层级 | 命名模式 |
+|---|---|
+| Controller | `XxxController` |
+| Service | `XxxService` / `XxxServiceImpl` |
+| Repository | `XxxRepository`（接口，domain 层）/ `XxxRepositoryImpl`（实现，infra 层）|
+| DTO | `XxxDTO`（adapter），`XxxBO`（application），`XxxDO`（infra）|
+| 请求对象 | `XxxCmd`（写操作命令），`XxxQuery`（读操作查询），`XxxValObj`（值对象）|
+| 转换器 | `XxxAdapterConvert`（adapter），`XxxAppConvert`（application），`XxxInfraConvert`（infra）|
 
-## Database Tables
+## Configuration
 
-- `ds_config` - Data source configuration
-- `metadata_subject` - Metadata subject (hierarchical, max 3 levels)
-- `metadata_table` - Metadata table
-- `metadata_column` - Metadata column
-- `metadata_index` - Metadata index
-- `cdc_config` - CDC synchronization config
-- `cdc_spark_job` - CDC Spark job configuration
-- `cdc_spark_task` - CDC Spark task instances
+配置文件位于 `cyan-dataman-application/src/main/resources/`：
+- `bootstrap.yml` — 基础配置（应用名、profile、监控端点）
+- `bootstrap-{profile}.yml` — 环境配置（dev/prod/pre），含 Nacos 地址、MySQL、Gravitino、RustFS(S3)、Iceberg REST、Debezium、Kafka 等
+- `db/migration/` — SQL 建表脚本（Flyway/手动执行）
