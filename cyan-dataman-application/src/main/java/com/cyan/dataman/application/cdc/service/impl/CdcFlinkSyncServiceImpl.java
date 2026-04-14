@@ -276,6 +276,9 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 .map(c -> c.getConnectorName() + "." + c.getDbName() + "." + c.getTableName())
                 .toList();
 
+        // 等待 Debezium 完成 topic 创建（增量快照信号触发后，Debezium 需要时间执行快照并写入 Kafka）
+        waitForTopicsCreated(topics, 120);
+
         // 构建启用表的键集合（用于序列化传递，格式: dbName.tableName）
         // 注意：这里不要加 connectorName 前缀，因为 CdcProcessFunction 是从 JSON payload 中提取表信息
         Set<String> enabledTableKeys = allConfigs.stream()
@@ -369,6 +372,43 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         query.setEnabled(true);
         query.setSyncTool(SyncTool.FLINK);
         return cdcConfigRepository.list(query);
+    }
+
+    /**
+     * 等待 Kafka topic 被创建
+     * Debezium connector 创建后异步执行快照，topic 不会立即可用，需要轮询等待
+     *
+     * @param topics          期望存在的 topic 列表
+     * @param timeoutSeconds  最大等待秒数
+     */
+    private void waitForTopicsCreated(List<String> topics, int timeoutSeconds) {
+        if (topics.isEmpty()) {
+            return;
+        }
+        Properties props = new Properties();
+        props.put("bootstrap.servers", kafkaBootstrapServers);
+        props.put("request.timeout.ms", "5000");
+        props.put("default.api.timeout.ms", "5000");
+
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        try (var admin = org.apache.kafka.clients.admin.AdminClient.create(props)) {
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    var existing = admin.listTopics().names().get(5, java.util.concurrent.TimeUnit.SECONDS);
+                    if (existing.containsAll(topics)) {
+                        log.info("Kafka topic 已就绪: {}", topics);
+                        return;
+                    }
+                    log.info("等待 Kafka topic 创建，已有: {}, 期望: {}", existing, topics);
+                } catch (Exception e) {
+                    log.warn("查询 Kafka topic 失败: {}", e.getMessage());
+                }
+                Thread.sleep(2000);
+            }
+            log.warn("等待 Kafka topic 超时 ({}s)，继续启动 Flink 作业，期望: {}", timeoutSeconds, topics);
+        } catch (Exception e) {
+            log.warn("Kafka AdminClient 异常: {}", e.getMessage());
+        }
     }
 
     /**

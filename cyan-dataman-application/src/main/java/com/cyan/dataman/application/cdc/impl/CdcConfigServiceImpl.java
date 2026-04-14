@@ -27,6 +27,7 @@ import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.*;
+import com.cyan.dataman.infra.dos.DebeziumDO;
 import com.cyan.dataman.infra.rpc.request.ConnectorSaveRequest;
 import com.cyan.dataman.infra.rpc.request.DebeziumRPC;
 import com.cyan.dataman.infra.rpc.request.config.MySQLConnectorConfig;
@@ -329,15 +330,27 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             createDebeziumConnector(config, dsConfig, info);
             log.info("创建并启动 Debezium 连接器: {}", connectorName);
         } else {
-            // Connector 已存在，更新配置并启动
+            // Connector 已存在，更新配置（PUT /config 会自动触发 connector 和 task 重启）
             updateConnectorTableListFromConfigs(allConfigs, connectorName, dsConfig, info);
+            log.info("更新 Debezium 连接器配置: {}", connectorName);
+        }
 
-            try {
-                debeziumRpc.startConnector(connectorName);
-                log.info("启动 Debezium 连接器: {}", connectorName);
-            } catch (Exception e) {
-                log.warn("启动连接器失败（可能已在运行）: {}", e.getMessage());
-            }
+        // 等待 connector task 启动完成（Debezium task 启动后才会创建 Kafka topic 并开始快照）
+        boolean taskRunning = waitForConnectorTaskRunning(connectorName, 60);
+        if (!taskRunning) {
+            log.warn("Debezium 连接器 task 未能在超时时间内启动: {}", connectorName);
+        }
+
+        // 对当前表触发增量快照，确保 Debezium 立即开始捕获数据并创建 Kafka topic
+        // 场景：connector 已存在，新加入的表需要通过信号触发首次快照
+        boolean signalSent = debeziumSignalService.sendIncrementalSnapshotSignal(
+                info.hostname(), info.port(),
+                dsConfig.getUsername(), dsConfig.getPassword(),
+                config.getDbName() + "." + config.getTableName());
+        if (signalSent) {
+            log.info("已触发增量快照信号: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+        } else {
+            log.warn("增量快照信号发送失败: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
         }
 
         config.setRunningStatus(RunningStatus.RUNNING);
@@ -356,6 +369,47 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             log.warn("检查 connector 存在性失败: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * 等待 connector 的 task 启动并进入 RUNNING 状态
+     * Debezium connector 创建/更新后，task 需要经过 rebalance 才能启动，期间会创建 Kafka topic 并开始快照
+     *
+     * @param connectorName  连接器名称
+     * @param timeoutSeconds 最大等待秒数
+     * @return task 是否成功启动
+     */
+    private boolean waitForConnectorTaskRunning(String connectorName, int timeoutSeconds) {
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                DebeziumDO status = debeziumRpc.connectorStatus(connectorName);
+                if (status != null && status.getTasks() != null && !status.getTasks().isEmpty()) {
+                    boolean allRunning = status.getTasks().stream()
+                            .allMatch(t -> "RUNNING".equals(t.getState()));
+                    if (allRunning) {
+                        log.info("Debezium 连接器 task 已就绪: {}, task 数: {}", connectorName, status.getTasks().size());
+                        return true;
+                    }
+                    // 如果有 task 但状态不是 RUNNING（如 FAILED），记录状态
+                    status.getTasks().stream()
+                            .filter(t -> !"RUNNING".equals(t.getState()))
+                            .forEach(t -> log.warn("Debezium task 状态异常: connector={}, taskId={}, state={}, trace={}",
+                                    connectorName, t.getId(), t.getState(), t.getTrace()));
+                }
+                log.info("等待 Debezium task 启动: connector={}, connectorState={}", connectorName,
+                        status != null && status.getConnector() != null ? status.getConnector().getState() : "UNKNOWN");
+            } catch (Exception e) {
+                log.warn("查询 connector 状态失败: {}", e.getMessage());
+            }
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     /**
