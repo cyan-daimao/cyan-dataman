@@ -442,32 +442,62 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
         @Override
         public void processElement(String value, Context ctx, Collector<String> out) {
+            // 调试：打印收到的原始消息
+            log.info("CDC 收到原始消息: {}", value);
+
             String tableKey = extractTableKey(value);
+            log.info("CDC 提取的 tableKey: {}, enabledTables: {}", tableKey, enabledTables);
+
             if (tableKey == null) {
+                log.warn("CDC 无法提取 tableKey，消息被过滤");
                 return;
             }
 
             if (!enabledTables.contains(tableKey)) {
+                log.warn("CDC 表不在启用列表中，tableKey: {}, enabledTables: {}", tableKey, enabledTables);
                 return;
             }
 
-            log.info("CDC 收到 Kafka 消息: table={}, value={}", tableKey, value);
+            log.info("CDC 处理消息: table={}, value={}", tableKey, value);
             out.collect(value);
         }
 
+        /**
+         * 从 Debezium JSON 消息中提取表键
+         * Debezium 消息格式：{"schema":..., "payload":{"source":{"db":"xxx","table":"xxx"},...}}
+         *
+         * @param json Debezium JSON 消息
+         * @return 表键，格式为 "dbName.tableName"，提取失败返回 null
+         */
         private String extractTableKey(String json) {
             try {
-                int dbIdx = json.indexOf("\"db\":\"");
-                int tableIdx = json.indexOf("\"table\":\"");
-                if (dbIdx == -1 || tableIdx == -1) {
+                // 定位 payload.source 对象
+                int sourceIdx = json.indexOf("\"source\":{");
+                if (sourceIdx == -1) {
                     return null;
                 }
-                int dbStart = dbIdx + 5;
+
+                // 从 source 对象中提取 db 和 table
+                int sourceStart = sourceIdx + 10; // 跳过 "source":{
+
+                // 查找 db 字段: "db":"xxx"
+                int dbIdx = json.indexOf("\"db\":\"", sourceStart);
+                if (dbIdx == -1) {
+                    return null;
+                }
+                int dbStart = dbIdx + 6; // 跳过 "db":"
                 int dbEnd = json.indexOf("\"", dbStart);
-                int tableStart = tableIdx + 8;
-                int tableEnd = json.indexOf("\"", tableStart);
                 String db = json.substring(dbStart, dbEnd);
+
+                // 查找 table 字段: "table":"xxx"
+                int tableIdx = json.indexOf("\"table\":\"", sourceStart);
+                if (tableIdx == -1) {
+                    return null;
+                }
+                int tableStart = tableIdx + 9; // 跳过 "table":"
+                int tableEnd = json.indexOf("\"", tableStart);
                 String table = json.substring(tableStart, tableEnd);
+
                 return db + "." + table;
             } catch (Exception e) {
                 return null;
