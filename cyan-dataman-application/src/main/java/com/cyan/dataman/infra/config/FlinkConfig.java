@@ -27,20 +27,39 @@ public class FlinkConfig {
     @Value("${rustfs.secretKey}")
     private String rustfsSecretKey;
 
+    /**
+     * Checkpoint 间隔（毫秒）
+     */
+    @Value("${flink.checkpoint.interval:60000}")
+    private long checkpointInterval;
+
+    /**
+     * Checkpoint 超时时间（毫秒）
+     */
+    @Value("${flink.checkpoint.timeout:600000}")
+    private long checkpointTimeout;
+
     @Bean
     public StreamExecutionEnvironment streamExecutionEnvironment() {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        // 2. 关键：指向远程 Flink 集群地址
-//        env.setRuntimeMode(RuntimeExecutionMode.STREAMING);
-        org.apache.flink.configuration.Configuration config = new org.apache.flink.configuration.Configuration();
-//        config.setString("execution.target", "remote");
-//        config.set(JobManagerOptions.ADDRESS,"10.0.0.2");
-//        config.set(JobManagerOptions.PORT,20031);
-//        config.set(DeploymentOptions.ATTACHED, false);
+        // 配置 Checkpoint（精准一次语义）
+        env.enableCheckpointing(checkpointInterval);
 
-        // 3. 生产必须开：Checkpoint（精准一次）
-        env.enableCheckpointing(60000);
+        // 获取 Checkpoint 配置
+        var checkpointConfig = env.getCheckpointConfig();
+
+        // 设置超时时间
+        checkpointConfig.setCheckpointTimeout(checkpointTimeout);
+
+        // 设置最小暂停间隔
+        checkpointConfig.setMinPauseBetweenCheckpoints(500);
+
+        // 设置并发 Checkpoint 数量
+        checkpointConfig.setMaxConcurrentCheckpoints(1);
+
+        // 精准一次语义
+        checkpointConfig.setCheckpointingMode(org.apache.flink.streaming.api.CheckpointingMode.EXACTLY_ONCE);
 
         return env;
     }

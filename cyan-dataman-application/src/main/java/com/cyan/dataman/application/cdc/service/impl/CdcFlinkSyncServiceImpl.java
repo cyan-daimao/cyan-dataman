@@ -3,11 +3,17 @@ package com.cyan.dataman.application.cdc.service.impl;
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
+import com.cyan.dataman.application.cdc.sink.DebeziumToIcebergProcessFunction;
+import com.cyan.dataman.application.cdc.sink.IcebergBatchSink;
+import com.cyan.dataman.application.cdc.sink.IcebergWriteRecord;
 import com.cyan.dataman.domain.cdc.CdcConfig;
 import com.cyan.dataman.domain.cdc.CdcFlinkJob;
 import com.cyan.dataman.domain.cdc.query.CdcConfigListQuery;
 import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
 import com.cyan.dataman.domain.cdc.repository.CdcFlinkJobRepository;
+import com.cyan.dataman.domain.metadata.MetadataTable;
+import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
+import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.enums.JobStatus;
 import com.cyan.dataman.enums.SyncTool;
 import com.cyan.dataman.infra.config.FlinkConfig;
@@ -17,10 +23,7 @@ import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.ProcessFunction;
-import org.apache.flink.util.Collector;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -69,6 +72,30 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     private String kafkaBootstrapServers;
 
     /**
+     * Iceberg REST Catalog URI
+     */
+    @Value("${iceberg.uri:http://iceberg-rest.cyan.com/iceberg}")
+    private String icebergRestUri;
+
+    /**
+     * RustFS (S3) endpoint
+     */
+    @Value("${rustfs.endpoint:http://10.0.0.2:9000}")
+    private String rustfsEndpoint;
+
+    /**
+     * RustFS access key
+     */
+    @Value("${rustfs.accessKey:rustfsadmin}")
+    private String rustfsAccessKey;
+
+    /**
+     * RustFS secret key
+     */
+    @Value("${rustfs.secretKey:rustfsadmin}")
+    private String rustfsSecretKey;
+
+    /**
      * 存储数据源名称到其运行中的 Flink 作业 ID 的映射
      */
     private final Map<String, String> dsNameToFlinkJobId = new ConcurrentHashMap<>();
@@ -80,14 +107,17 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     private final CdcConfigRepository cdcConfigRepository;
     private final CdcFlinkJobRepository cdcFlinkJobRepository;
+    private final MetadataTableRepository metadataTableRepository;
     private final StreamExecutionEnvironment streamExecutionEnvironment;
     private final HttpClient httpClient;
 
     public CdcFlinkSyncServiceImpl(FlinkConfig flinkConfig,
                                    CdcConfigRepository cdcConfigRepository,
-                                   CdcFlinkJobRepository cdcFlinkJobRepository) {
+                                   CdcFlinkJobRepository cdcFlinkJobRepository,
+                                   MetadataTableRepository metadataTableRepository) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.cdcFlinkJobRepository = cdcFlinkJobRepository;
+        this.metadataTableRepository = metadataTableRepository;
         this.streamExecutionEnvironment = flinkConfig.streamExecutionEnvironment();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
@@ -288,6 +318,38 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 .map(c -> c.getDbName() + "." + c.getTableName())
                 .collect(java.util.stream.Collectors.toSet());
 
+        // 构建完整表映射：dbName.tableName -> icebergSchema.icebergTableName
+        // 需要从 MetadataTable 查询 Iceberg 表的 schema 信息
+        Map<String, String> tableToIcebergMapping = new HashMap<>();
+        for (CdcConfig cdcConfig : allConfigs) {
+            String mysqlTableKey = cdcConfig.getDbName() + "." + cdcConfig.getTableName();
+            String icebergTableName = cdcConfig.getIcebergTableName();
+
+            // 解析 icebergTableName（可能是 "schema.tableName" 或纯表名）
+            String tableName;
+            if (icebergTableName.contains(".")) {
+                String[] parts = icebergTableName.split("\\.");
+                tableName = parts[parts.length - 1];
+            } else {
+                tableName = icebergTableName;
+            }
+
+            // 查询元数据表获取 Iceberg schema
+            MetadataTable metadataTable = metadataTableRepository.findOne(
+                    new MetadataTableOneQuery().setName(tableName));
+
+            if (metadataTable == null || metadataTable.getTable() == null) {
+                log.warn("元数据表不存在，跳过: {}", tableName);
+                continue;
+            }
+
+            String icebergSchema = metadataTable.getTable().getSchema();
+            String icebergTableKey = icebergSchema + "." + tableName;
+            tableToIcebergMapping.put(mysqlTableKey, icebergTableKey);
+
+            log.info("表映射: {} -> {}", mysqlTableKey, icebergTableKey);
+        }
+
         // 创建 Kafka Source
         KafkaSource<String> kafkaSource = KafkaSource.<String>builder()
                 .setBootstrapServers(kafkaBootstrapServers)
@@ -303,13 +365,31 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                         "Kafka CDC Source - " + dsName)
                 .uid("kafka-source-" + dsName);
 
-        SingleOutputStreamOperator<String> processedStream = rawStream
-                .process(new CdcProcessFunction(enabledTableKeys))
-                .uid("cdc-process-" + dsName)
-                .name("CDC Process - " + dsName);
+        // 使用新的批量写入 Sink
+        // 1. 解析 Debezium 消息并转换为 IcebergWriteRecord
+        DataStream<IcebergWriteRecord> recordStream = rawStream
+                .process(new DebeziumToIcebergProcessFunction(
+                        dsName,
+                        tableToIcebergMapping,
+                        icebergRestUri,
+                        rustfsEndpoint,
+                        rustfsAccessKey,
+                        rustfsSecretKey))
+                .uid("cdc-parse-" + dsName)
+                .name("CDC Parse - " + dsName);
 
-        // 使用 map 代替 print()，直接打印日志避免 Flink 2.0 Sink 兼容性问题
-        processedStream.print();
+        // 2. 使用批量写入（利用 Checkpoint 批量提交）
+        // 目标文件大小：128MB
+        recordStream
+                .process(new IcebergBatchSink(
+                        icebergRestUri,
+                        rustfsEndpoint,
+                        rustfsAccessKey,
+                        rustfsSecretKey,
+                        128 * 1024 * 1024L
+                ))
+                .name("Iceberg Sink - " + dsName)
+                .uid("iceberg-sink-" + dsName);
 
         try {
             streamExecutionEnvironment.execute("Flink CDC Sync - " + dsName);
@@ -411,97 +491,6 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             log.warn("等待 Kafka topic 超时 ({}s)，继续启动 Flink 作业，期望: {}", timeoutSeconds, topics);
         } catch (Exception e) {
             log.warn("Kafka AdminClient 异常: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * CDC 处理函数
-     * 必须为静态类，且只包含可序列化字段
-     * 使用 transient +懒加载绕过 Flink 序列化对 Logger 的限制
-     */
-    private static class CdcProcessFunction extends ProcessFunction<String, String> {
-
-        /**
-         * 启用表的键集合（格式：dbName.tableName）
-         */
-        private final Set<String> enabledTables;
-
-        /**
-         * Flink 序列化时不支持 Logger，使用 transient 懒加载
-         */
-        private transient org.slf4j.Logger log;
-
-        public CdcProcessFunction(Set<String> enabledTables) {
-            this.enabledTables = enabledTables;
-        }
-
-        @Override
-        public void open(org.apache.flink.api.common.functions.OpenContext openContext) {
-            this.log = org.slf4j.LoggerFactory.getLogger(CdcProcessFunction.class);
-        }
-
-        @Override
-        public void processElement(String value, Context ctx, Collector<String> out) {
-            // 调试：打印收到的原始消息
-            log.info("CDC 收到原始消息: {}", value);
-
-            String tableKey = extractTableKey(value);
-            log.info("CDC 提取的 tableKey: {}, enabledTables: {}", tableKey, enabledTables);
-
-            if (tableKey == null) {
-                log.warn("CDC 无法提取 tableKey，消息被过滤");
-                return;
-            }
-
-            if (!enabledTables.contains(tableKey)) {
-                log.warn("CDC 表不在启用列表中，tableKey: {}, enabledTables: {}", tableKey, enabledTables);
-                return;
-            }
-
-            log.info("CDC 处理消息: table={}, value={}", tableKey, value);
-            out.collect(value);
-        }
-
-        /**
-         * 从 Debezium JSON 消息中提取表键
-         * Debezium 消息格式：{"schema":..., "payload":{"source":{"db":"xxx","table":"xxx"},...}}
-         *
-         * @param json Debezium JSON 消息
-         * @return 表键，格式为 "dbName.tableName"，提取失败返回 null
-         */
-        private String extractTableKey(String json) {
-            try {
-                // 定位 payload.source 对象
-                int sourceIdx = json.indexOf("\"source\":{");
-                if (sourceIdx == -1) {
-                    return null;
-                }
-
-                // 从 source 对象中提取 db 和 table
-                int sourceStart = sourceIdx + 10; // 跳过 "source":{
-
-                // 查找 db 字段: "db":"xxx"
-                int dbIdx = json.indexOf("\"db\":\"", sourceStart);
-                if (dbIdx == -1) {
-                    return null;
-                }
-                int dbStart = dbIdx + 6; // 跳过 "db":"
-                int dbEnd = json.indexOf("\"", dbStart);
-                String db = json.substring(dbStart, dbEnd);
-
-                // 查找 table 字段: "table":"xxx"
-                int tableIdx = json.indexOf("\"table\":\"", sourceStart);
-                if (tableIdx == -1) {
-                    return null;
-                }
-                int tableStart = tableIdx + 9; // 跳过 "table":"
-                int tableEnd = json.indexOf("\"", tableStart);
-                String table = json.substring(tableStart, tableEnd);
-
-                return db + "." + table;
-            } catch (Exception e) {
-                return null;
-            }
         }
     }
 }
