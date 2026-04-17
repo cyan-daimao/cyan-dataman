@@ -9,8 +9,7 @@ import java.util.Map;
 /**
  * Debezium CDC 消息解析结果
  * <p>
- * 从 Debezium JSON 消息中提取的结构化数据对象。
- * Debezium 消息格式：{"schema":..., "payload":{"source":{"db":"xxx","table":"xxx"},...}}
+ * 从 Debezium Envelope JSON 消息中提取的结构化数据对象。
  *
  * @author cy.Y
  * @since 1.0.0
@@ -43,7 +42,6 @@ public class DebeziumRecord {
 
     /**
      * 变更后的数据（after）
-     * key: 字段名, value: 字段值
      */
     private Map<String, Object> afterData;
 
@@ -56,6 +54,25 @@ public class DebeziumRecord {
      * 时间戳（毫秒）
      */
     private Long timestamp;
+
+    /**
+     * 从 DebeziumPayload 构建 DebeziumRecord
+     */
+    public static DebeziumRecord from(DebeziumPayload payload) {
+        if (payload == null || payload.getSource() == null) {
+            return null;
+        }
+
+        DebeziumSource source = payload.getSource();
+        DebeziumRecord record = new DebeziumRecord();
+        record.dbName = source.getDb();
+        record.tableName = source.getTable();
+        record.op = payload.getOp();
+        record.timestamp = payload.getTsMs() != null ? payload.getTsMs() : System.currentTimeMillis();
+        record.afterData = payload.getAfter();
+        record.beforeData = payload.getBefore();
+        return record;
+    }
 
     /**
      * 获取表键（格式：dbName.tableName）

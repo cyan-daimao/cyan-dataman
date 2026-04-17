@@ -310,6 +310,11 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
     /**
      * 启动指定表对应的 CDC，更新连接器并启动
+     * <p>
+     * 快照策略：
+     * - connector 不存在（数据源首次启用）→ 创建 connector，Debezium 自动对 include.list 中的表做全量快照
+     * - connector 已存在 + 表状态为 INIT（新表首次加入）→ 更新 include.list，发送增量快照信号对该表做全量快照
+     * - connector 已存在 + 表状态为 STOP（之前同步过，重新启用）→ 仅更新 include.list，从 binlog 增量继续
      */
     private void startConnectorForTable(CdcConfig config) {
         DsConfig dsConfig = getDsConfigByName(config.getDsName());
@@ -322,11 +327,14 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         // 获取该数据源下所有配置
         List<CdcConfig> allConfigs = cdcConfigRepository.findByDatasource(config.getDsName());
 
-        // 检查该 connector 是否已存在（如果该数据源是第一次启用，connector 可能还不存在）
+        // 检查该 connector 是否已存在
         boolean connectorExists = checkConnectorExists(connectorName);
+        // 表之前是否成功同步过（STOP 表示暂停后恢复，RUNNING 表示服务重启/崩溃后恢复）
+        boolean previouslySynced = RunningStatus.STOP.equals(config.getRunningStatus())
+                || RunningStatus.RUNNING.equals(config.getRunningStatus());
 
         if (!connectorExists) {
-            // Connector 不存在，先创建
+            // Connector 不存在，先创建（Debezium 会自动对 include.list 中的表做全量快照）
             createDebeziumConnector(config, dsConfig, info);
             log.info("创建并启动 Debezium 连接器: {}", connectorName);
         } else {
@@ -335,22 +343,30 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             log.info("更新 Debezium 连接器配置: {}", connectorName);
         }
 
-        // 等待 connector task 启动完成（Debezium task 启动后才会创建 Kafka topic 并开始快照）
+        // 等待 connector task 启动完成
         boolean taskRunning = waitForConnectorTaskRunning(connectorName, 30);
         if (!taskRunning) {
             log.warn("Debezium 连接器 task 未能在超时时间内启动: {}", connectorName);
         }
 
-        // 对当前表触发增量快照，确保 Debezium 立即开始捕获数据并创建 Kafka topic
-        // 场景：connector 已存在，新加入的表需要通过信号触发首次快照
-        boolean signalSent = debeziumSignalService.sendIncrementalSnapshotSignal(
-                info.hostname(), info.port(),
-                dsConfig.getUsername(), dsConfig.getPassword(),
-                config.getDbName() + "." + config.getTableName());
-        if (signalSent) {
-            log.info("已触发增量快照信号: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+        // 快照信号策略：
+        // - connector 不存在 → 创建时已自动快照，不发信号
+        // - connector 存在 + 表从未同步过（INIT）→ 发信号触发全量快照
+        // - connector 存在 + 表之前同步过（STOP）→ 不发信号，从 binlog 增量继续
+        if (connectorExists && !previouslySynced) {
+            boolean signalSent = debeziumSignalService.sendIncrementalSnapshotSignal(
+                    info.hostname(), info.port(),
+                    dsConfig.getUsername(), dsConfig.getPassword(),
+                    config.getDbName() + "." + config.getTableName());
+            if (signalSent) {
+                log.info("已触发增量快照信号（新表首次同步）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+            } else {
+                log.warn("增量快照信号发送失败: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+            }
+        } else if (previouslySynced) {
+            log.info("跳过增量快照信号（已同步过的表重新启用，从 binlog 增量继续）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
         } else {
-            log.warn("增量快照信号发送失败: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+            log.info("跳过增量快照信号（新建 connector，Debezium 自动执行全量快照）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
         }
 
         config.setRunningStatus(RunningStatus.RUNNING);

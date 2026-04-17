@@ -134,24 +134,28 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
 
     @Override
     public void processElement(String debeziumJson, Context ctx, Collector<IcebergWriteRecord> out) throws Exception {
+        log.info("收到 Debezium 消息: {}", debeziumJson.length() > 500 ? debeziumJson.substring(0, 500) + "..." : debeziumJson);
+
         // 解析 Debezium 消息
         DebeziumRecord record = parseDebeziumJson(debeziumJson);
         if (record == null) {
+            log.warn("Debezium 消息解析失败: {}", debeziumJson.length() > 200 ? debeziumJson.substring(0, 200) + "..." : debeziumJson);
             return;
         }
 
         String tableKey = record.getTableKey();
+        log.info("解析成功, tableKey={}, op={}, enabledTables={}", tableKey, record.getOp(), enabledTables);
 
         // 检查表是否启用
         if (!enabledTables.contains(tableKey)) {
-            log.debug("表 {} 未启用，跳过", tableKey);
+            log.info("表 {} 未启用，跳过, enabledTables={}", tableKey, enabledTables);
             return;
         }
 
         // 获取目标 Iceberg 表标识（格式：icebergSchema.icebergTableName）
         String icebergTableKey = tableToIcebergMapping.get(tableKey);
         if (icebergTableKey == null) {
-            log.warn("表 {} 没有配置 Iceberg 目标表", tableKey);
+            log.warn("表 {} 没有配置 Iceberg 目标表, mapping={}", tableKey, tableToIcebergMapping);
             return;
         }
 
@@ -296,43 +300,23 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
 
     /**
      * 解析 Debezium JSON 消息
+     * <p>
+     * Debezium 消息格式: {"schema": {...}, "payload": {"source": {...}, "op": ..., ...}}
+     * 先尝试按信封格式解析，失败则尝试直接解析为 payload
      */
-    @SuppressWarnings("unchecked")
     private DebeziumRecord parseDebeziumJson(String json) {
         try {
-            Map<String, Object> payload = JSON.parseObject(json, Map.class);
-            if (payload == null) {
-                return null;
+            // 优先按信封格式解析
+            DebeziumEnvelope envelope = JSON.parseObject(json, DebeziumEnvelope.class);
+            if (envelope != null && envelope.getPayload() != null) {
+                return DebeziumRecord.from(envelope.getPayload());
             }
 
-            DebeziumRecord record = new DebeziumRecord();
-
-            // 提取 source 信息
-            Map<String, Object> source = (Map<String, Object>) payload.get("source");
-            if (source == null) {
-                return null;
-            }
-            record.setDbName((String) source.get("db"));
-            record.setTableName((String) source.get("table"));
-
-            // 提取 op
-            record.setOp((String) payload.get("op"));
-
-            // 提取 ts_ms
-            Object tsMs = payload.get("ts_ms");
-            if (tsMs instanceof Number) {
-                record.setTimestamp(((Number) tsMs).longValue());
-            } else {
-                record.setTimestamp(System.currentTimeMillis());
-            }
-
-            // 提取 after / before 数据
-            record.setAfterData((Map<String, Object>) payload.get("after"));
-            record.setBeforeData((Map<String, Object>) payload.get("before"));
-
-            return record;
+            // 兼容没有外层包装的情况
+            DebeziumPayload payload = JSON.parseObject(json, DebeziumPayload.class);
+            return DebeziumRecord.from(payload);
         } catch (Exception e) {
-            log.debug("解析 Debezium JSON 失败: {}", e.getMessage());
+            log.warn("解析 Debezium JSON 失败: {}, 原始消息: {}", e.getMessage(), json.length() > 200 ? json.substring(0, 200) + "..." : json);
             return null;
         }
     }

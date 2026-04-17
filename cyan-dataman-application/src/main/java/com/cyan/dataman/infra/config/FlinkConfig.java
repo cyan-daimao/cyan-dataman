@@ -3,6 +3,7 @@ package com.cyan.dataman.infra.config;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ExternalizedCheckpointRetention;
+import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.springframework.beans.factory.annotation.Value;
@@ -55,7 +56,7 @@ public class FlinkConfig {
         // 配置 Flink 参数
         org.apache.flink.configuration.Configuration flinkConfig = new org.apache.flink.configuration.Configuration();
 
-        // 注册 S3 文件系统（基于 Hadoop S3A），用于 checkpoint 存储
+        // 注册 S3 文件系统（基于 Presto S3），用于 checkpoint 存储
         flinkConfig.setString("s3.endpoint", rustfsEndpoint);
         flinkConfig.setString("s3.access-key", rustfsAccessKey);
         flinkConfig.setString("s3.secret-key", rustfsSecretKey);
@@ -68,6 +69,9 @@ public class FlinkConfig {
         // 作业取消后保留 checkpoint，以便恢复
         flinkConfig.set(CheckpointingOptions.EXTERNALIZED_CHECKPOINT_RETENTION,
                 ExternalizedCheckpointRetention.RETAIN_ON_CANCELLATION);
+
+        // 初始化 Flink 全局 FileSystem 工厂配置，确保 S3 文件系统工厂能获取到凭证
+        FileSystem.initialize(flinkConfig);
 
         // 创建执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(flinkConfig);
