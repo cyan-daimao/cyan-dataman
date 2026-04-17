@@ -1,5 +1,6 @@
 package com.cyan.dataman.application.cdc.sink;
 
+import com.cyan.arch.common.util.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
@@ -12,7 +13,6 @@ import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.types.Types;
 
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -297,164 +297,43 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
     /**
      * 解析 Debezium JSON 消息
      */
+    @SuppressWarnings("unchecked")
     private DebeziumRecord parseDebeziumJson(String json) {
         try {
+            Map<String, Object> payload = JSON.parseObject(json, Map.class);
+            if (payload == null) {
+                return null;
+            }
+
             DebeziumRecord record = new DebeziumRecord();
 
             // 提取 source 信息
-            int sourceIdx = json.indexOf("\"source\":{");
-            if (sourceIdx == -1) {
+            Map<String, Object> source = (Map<String, Object>) payload.get("source");
+            if (source == null) {
                 return null;
             }
-            int sourceStart = sourceIdx + 10;
-
-            // 提取 db
-            int dbIdx = json.indexOf("\"db\":\"", sourceStart);
-            if (dbIdx != -1) {
-                int dbStart = dbIdx + 6;
-                int dbEnd = json.indexOf("\"", dbStart);
-                record.setDbName(json.substring(dbStart, dbEnd));
-            }
-
-            // 提取 table
-            int tableIdx = json.indexOf("\"table\":\"", sourceStart);
-            if (tableIdx != -1) {
-                int tableStart = tableIdx + 9;
-                int tableEnd = json.indexOf("\"", tableStart);
-                record.setTableName(json.substring(tableStart, tableEnd));
-            }
+            record.setDbName((String) source.get("db"));
+            record.setTableName((String) source.get("table"));
 
             // 提取 op
-            int opIdx = json.indexOf("\"op\":\"");
-            if (opIdx != -1) {
-                int opStart = opIdx + 6;
-                int opEnd = json.indexOf("\"", opStart);
-                record.setOp(json.substring(opStart, opEnd));
-            }
+            record.setOp((String) payload.get("op"));
 
             // 提取 ts_ms
-            int tsIdx = json.indexOf("\"ts_ms\":");
-            if (tsIdx != -1) {
-                int tsStart = tsIdx + 8;
-                int tsEnd = tsStart;
-                while (tsEnd < json.length() && (Character.isDigit(json.charAt(tsEnd)) || json.charAt(tsEnd) == '.')) {
-                    tsEnd++;
-                }
-                try {
-                    record.setTimestamp(Long.parseLong(json.substring(tsStart, tsEnd)));
-                } catch (NumberFormatException e) {
-                    record.setTimestamp(System.currentTimeMillis());
-                }
+            Object tsMs = payload.get("ts_ms");
+            if (tsMs instanceof Number) {
+                record.setTimestamp(((Number) tsMs).longValue());
+            } else {
+                record.setTimestamp(System.currentTimeMillis());
             }
 
-            // 提取 after 数据
-            record.setAfterData(extractData(json, "\"after\":"));
-
-            // 提取 before 数据
-            record.setBeforeData(extractData(json, "\"before\":"));
+            // 提取 after / before 数据
+            record.setAfterData((Map<String, Object>) payload.get("after"));
+            record.setBeforeData((Map<String, Object>) payload.get("before"));
 
             return record;
         } catch (Exception e) {
             log.debug("解析 Debezium JSON 失败: {}", e.getMessage());
             return null;
-        }
-    }
-
-    /**
-     * 提取数据字段
-     */
-    private Map<String, Object> extractData(String json, String fieldPrefix) {
-        Map<String, Object> data = new LinkedHashMap<>();
-
-        int afterIdx = json.indexOf(fieldPrefix + "{");
-        if (afterIdx == -1) {
-            return null;
-        }
-
-        int start = afterIdx + fieldPrefix.length();
-        int braceCount = 1;
-        int i = start + 1;
-
-        while (i < json.length() && braceCount > 0) {
-            char c = json.charAt(i);
-            if (c == '{') braceCount++;
-            else if (c == '}') braceCount--;
-            i++;
-        }
-
-        String content = json.substring(start, i);
-
-        // 简单解析 JSON 字段
-        parseJsonFields(content, data);
-
-        return data.isEmpty() ? null : data;
-    }
-
-    /**
-     * 解析 JSON 字段
-     */
-    private void parseJsonFields(String json, Map<String, Object> data) {
-        int i = 1; // 跳过开头的 {
-        while (i < json.length() - 1) {
-            // 查找字段名
-            int nameStart = json.indexOf("\"", i);
-            if (nameStart == -1) break;
-            int nameEnd = json.indexOf("\"", nameStart + 1);
-            if (nameEnd == -1) break;
-
-            String fieldName = json.substring(nameStart + 1, nameEnd);
-
-            // 查找冒号
-            int colonIdx = json.indexOf(":", nameEnd);
-            if (colonIdx == -1) break;
-
-            // 查找值
-            int valueStart = colonIdx + 1;
-            while (valueStart < json.length() && Character.isWhitespace(json.charAt(valueStart))) {
-                valueStart++;
-            }
-
-            if (valueStart >= json.length()) break;
-
-            char firstChar = json.charAt(valueStart);
-            Object value;
-
-            if (firstChar == '"') {
-                // 字符串值
-                int valueEnd = json.indexOf("\"", valueStart + 1);
-                if (valueEnd == -1) break;
-                value = json.substring(valueStart + 1, valueEnd);
-                i = valueEnd + 1;
-            } else if (firstChar == 'n' && json.startsWith("null", valueStart)) {
-                value = null;
-                i = valueStart + 4;
-            } else if (firstChar == 't' && json.startsWith("true", valueStart)) {
-                value = true;
-                i = valueStart + 4;
-            } else if (firstChar == 'f' && json.startsWith("false", valueStart)) {
-                value = false;
-                i = valueStart + 5;
-            } else {
-                // 数字值
-                int valueEnd = valueStart;
-                while (valueEnd < json.length() && (Character.isDigit(json.charAt(valueEnd)) || json.charAt(valueEnd) == '.' || json.charAt(valueEnd) == '-')) {
-                    valueEnd++;
-                }
-                String numStr = json.substring(valueStart, valueEnd);
-                if (numStr.contains(".")) {
-                    value = Double.parseDouble(numStr);
-                } else {
-                    value = Long.parseLong(numStr);
-                }
-                i = valueEnd;
-            }
-
-            data.put(fieldName, value);
-
-            // 跳过逗号
-            while (i < json.length() && (json.charAt(i) == ',' || Character.isWhitespace(json.charAt(i)))) {
-                i++;
-            }
         }
     }
 }

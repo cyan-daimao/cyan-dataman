@@ -312,12 +312,6 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         // 等待 Debezium 完成 topic 创建（增量快照信号触发后，Debezium 需要时间执行快照并写入 Kafka）
         waitForTopicsCreated(topics, 120);
 
-        // 构建启用表的键集合（用于序列化传递，格式: dbName.tableName）
-        // 注意：这里不要加 connectorName 前缀，因为 CdcProcessFunction 是从 JSON payload 中提取表信息
-        Set<String> enabledTableKeys = allConfigs.stream()
-                .map(c -> c.getDbName() + "." + c.getTableName())
-                .collect(java.util.stream.Collectors.toSet());
-
         // 构建完整表映射：dbName.tableName -> icebergSchema.icebergTableName
         // 需要从 MetadataTable 查询 Iceberg 表的 schema 信息
         Map<String, String> tableToIcebergMapping = new HashMap<>();
@@ -351,12 +345,13 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         }
 
         // 创建 Kafka Source
+        // 使用 committedOffsets 策略：优先从已提交的 offset 继续消费，无提交记录时从 earliest 开始
         KafkaSource<String> kafkaSource = KafkaSource.<String>builder()
                 .setBootstrapServers(kafkaBootstrapServers)
                 .setTopics(topics)
                 .setGroupId("flink-cdc-consumer-" + dsName)
                 .setValueOnlyDeserializer(new SimpleStringSchema())
-                .setStartingOffsets(OffsetsInitializer.earliest())
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(org.apache.kafka.clients.consumer.OffsetResetStrategy.EARLIEST))
                 .build();
 
         DataStream<String> rawStream = streamExecutionEnvironment.fromSource(

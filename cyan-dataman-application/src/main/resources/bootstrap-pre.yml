@@ -49,3 +49,11 @@ debezium:
 # Kafka 地址
 kafka:
   url: kafka-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092
+
+# Flink 配置
+flink:
+  mode: remote
+  checkpoint:
+    interval: 60000
+    timeout: 600000
+    dir: s3://flink/checkpoints/cyan-dataman

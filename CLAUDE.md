@@ -13,6 +13,9 @@ java -jar cyan-dataman-application/target/cyan-dataman.jar
 
 # 构建单个模块
 mvn clean package -pl cyan-dataman-application -am -DskipTests
+
+# 部署到 Nexus（需配置 ~/.m2/settings.xml 认证）
+mvn clean deploy -DskipTests
 ```
 
 本项目当前无测试代码。
@@ -54,9 +57,45 @@ Controller
 
 所有 Convert 均为 MapStruct 接口，使用 `INSTANCE = Mappers.getMapper(...)` 单例模式。
 
+### 充血模型
+
+领域实体采用充血模型，包含业务行为方法：
+
+```java
+// 领域实体示例
+public class DsConfig {
+    private String id;
+    private String name;
+    // ... 属性
+    
+    private void validate() {
+        Assert.notBlank(this.name, new SilentException("名称不能为空"));
+    }
+    
+    public DsConfig save(DsConfigRepository repository) {
+        validate();
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        return repository.save(this);
+    }
+    
+    public DsConfig update(DsConfigRepository repository) {
+        validate();
+        this.updatedAt = LocalDateTime.now();
+        return repository.update(this);
+    }
+    
+    public void delete(DsConfigRepository repository) {
+        repository.deleteById(this.id);
+    }
+}
+```
+
+Service 层调用方式：`entity.save(repository)` 而非 `repository.save(entity)`。
+
 ### 核心约束
 
-- **领域隔离**：`ds` 域（`domain/ds/valobj/`）和 `metadata` 域（`domain/metadata/valobj/`）相互独立，禁止直接交叉引用。如需转换在 adapter 层处理。
+- **领域隔离**：`ds` 域和 `metadata` 域相互独立，禁止直接交叉引用。如需转换在 adapter 层处理。
 - **多态值对象**：`ds` 域的 `ColumnValObj` 使用 Jackson `@JsonTypeInfo`，以 `databaseType` 字段作为判别器，反序列化为 `MysqlColumnValObj` 或 `PgsqlColumnValObj`。
 - **无基类 DO**：所有 DO 类独立定义审计字段（`created_at`、`updated_at`、`deleted_at`），时间戳由领域实体的 `save()` 方法手动设置，未使用 MyBatis-Plus MetaObjectHandler。
 - **逻辑删除**：使用 `@TableLogic(value = "null", delval = "now()")`，deleted_at 为 null 表示未删除，删除时设置为当前时间。
@@ -67,6 +106,26 @@ Controller
 - Apache Iceberg 1.10.1, Spark 4.0.2, Gravitino 1.1.0, Flink, Debezium, Kafka
 - Nacos（服务发现与配置中心，通过 `spring.config.import: nacos:` 加载远程配置）
 - MapStruct（对象映射），Lombok
+
+## Dependencies
+
+### 公共库依赖
+
+项目依赖公司内部 `arch` 公共库（`com.cyan:arch-common`），提供：
+
+- `Response<T>` — 统一响应封装
+- `Page<T>` — 分页封装
+- `Assert` — 断言工具
+- `SilentException` — 静默异常（不输出堆栈）
+- `MapstructConvert` — MapStruct 通用转换器
+
+### Maven 私服
+
+部署配置在 `pom.xml` 中：
+- Releases: `http://nexus.cyan.com/repository/maven-releases/`
+- Snapshots: `http://nexus.cyan.com/repository/maven-snapshots/`
+
+需在 `~/.m2/settings.xml` 配置认证信息。
 
 ## Domains
 
@@ -104,8 +163,26 @@ CDC 同步：源数据库 -> Iceberg，支持 Spark SQL 和 Flink + Debezium 两
 | Service | `XxxService` / `XxxServiceImpl` |
 | Repository | `XxxRepository`（接口，domain 层）/ `XxxRepositoryImpl`（实现，infra 层）|
 | DTO | `XxxDTO`（adapter），`XxxBO`（application），`XxxDO`（infra）|
-| 请求对象 | `XxxCmd`（写操作命令），`XxxQuery`（读操作查询），`XxxValObj`（值对象）|
+| 请求对象 | `XxxCmd`（写操作命令），`XxxQuery`（读操作查询，定义在 domain 层），`XxxValObj`（值对象）|
 | 转换器 | `XxxAdapterConvert`（adapter），`XxxAppConvert`（application），`XxxInfraConvert`（infra）|
+
+### Query 对象
+
+查询对象定义在 `domain/xxx/query/` 目录，用于条件查询：
+
+```java
+// domain/ds/query/DsConfigListQuery.java
+public class DsConfigListQuery {
+    private String name;           // 模糊查询
+    private DatasourceType datasourceType;  // 精确匹配
+}
+```
+
+Repository 接口定义查询方法：
+```java
+List<DsConfig> list(DsConfigListQuery query);
+DsConfig find(DsConfigFindQuery query);
+```
 
 ## Configuration
 
