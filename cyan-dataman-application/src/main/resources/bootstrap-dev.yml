@@ -52,6 +52,8 @@ kafka:
 # Flink 配置
 flink:
   mode: local
+  rest:
+    url: 10.0.0.2:20031
   checkpoint:
     interval: 60000
     timeout: 600000

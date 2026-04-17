@@ -12,16 +12,19 @@ import org.apache.iceberg.data.Record;
 import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.types.Types;
 
+import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Debezium 消息到 Iceberg Record 的转换器
+ * Debezium 消息到 Iceberg Record 的转换器（动态路由版）
  * <p>
- * 负责解析 Debezium JSON 消息并转换为 Iceberg Record。
- * 支持动态表启用/禁用（通过数据库轮询）。
+ * 定时从数据库查询该数据源下所有 enabled 的 CDC 配置，动态更新路由映射。
+ * 支持不停作业的情况下增减同步表。
  * <p>
  * 注意：此类必须可序列化（Flink 要求），所有不可序列化的字段使用 transient 懒加载。
  *
@@ -32,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, IcebergWriteRecord> {
 
     /**
-     * 数据源名称
+     * 数据源名称（用于查询 CDC 配置和构造 topic pattern）
      */
     private final String dsName;
 
@@ -57,10 +60,19 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
     private final String rustfsSecretKey;
 
     /**
-     * 表映射：mysqlDbName.mysqlTableName -> icebergSchema.icebergTableName
-     * 例如：user.user_info -> ods.ods_user_user_info
+     * JDBC 连接 URL（用于定时查询 CDC 配置）
      */
-    private final Map<String, String> tableToIcebergMapping;
+    private final String jdbcUrl;
+
+    /**
+     * JDBC 用户名
+     */
+    private final String jdbcUsername;
+
+    /**
+     * JDBC 密码
+     */
+    private final String jdbcPassword;
 
     /**
      * Iceberg Catalog（transient 懒加载）
@@ -73,40 +85,50 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
     private transient Map<String, Table> tableCache;
 
     /**
-     * 启用表集合（从数据库加载）
+     * 当前路由映射：dbName.tableName -> icebergSchema.icebergTableName
+     * 由定时任务从数据库刷新
      */
-    private transient Set<String> enabledTables;
+    private transient volatile Map<String, String> tableToIcebergMapping;
 
     /**
-     * 上次刷新时间
+     * 当前启用的表集合：dbName.tableName
+     * 由定时任务从数据库刷新
      */
-    private transient long lastRefreshTime;
+    private transient volatile Map<String, String> enabledTables;
 
     /**
-     * 刷新间隔（5分钟）
+     * 定时刷新线程
      */
-    private static final long REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+    private transient ScheduledExecutorService scheduler;
+
+    /**
+     * 刷新间隔（秒）
+     */
+    private static final long REFRESH_INTERVAL_SECONDS = 30;
 
     public DebeziumToIcebergProcessFunction(String dsName,
-                                            Map<String, String> tableToIcebergMapping,
                                             String icebergRestUri,
                                             String rustfsEndpoint,
                                             String rustfsAccessKey,
-                                            String rustfsSecretKey) {
+                                            String rustfsSecretKey,
+                                            String jdbcUrl,
+                                            String jdbcUsername,
+                                            String jdbcPassword) {
         this.dsName = dsName;
-        this.tableToIcebergMapping = tableToIcebergMapping;
         this.icebergRestUri = icebergRestUri;
         this.rustfsEndpoint = rustfsEndpoint;
         this.rustfsAccessKey = rustfsAccessKey;
         this.rustfsSecretKey = rustfsSecretKey;
+        this.jdbcUrl = jdbcUrl;
+        this.jdbcUsername = jdbcUsername;
+        this.jdbcPassword = jdbcPassword;
     }
 
     @Override
     public void open(org.apache.flink.api.common.functions.OpenContext openContext) throws Exception {
         this.tableCache = new ConcurrentHashMap<>();
-        this.enabledTables = ConcurrentHashMap.newKeySet();
-        this.enabledTables.addAll(tableToIcebergMapping.keySet());
-        this.lastRefreshTime = System.currentTimeMillis();
+        this.tableToIcebergMapping = new HashMap<>();
+        this.enabledTables = new HashMap<>();
 
         // 初始化 Iceberg REST Catalog
         this.catalog = new RESTCatalog();
@@ -118,11 +140,25 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
         properties.put("s3.path-style-access", "true");
         catalog.initialize("iceberg-catalog", properties);
 
-        log.info("DebeziumToIcebergProcessFunction 初始化完成, dsName: {}, icebergUri: {}", dsName, icebergRestUri);
+        // 首次加载配置
+        refreshConfig();
+
+        // 启动定时刷新
+        this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "cdc-config-refresh-" + dsName);
+            t.setDaemon(true);
+            return t;
+        });
+        scheduler.scheduleAtFixedRate(this::refreshConfig, REFRESH_INTERVAL_SECONDS, REFRESH_INTERVAL_SECONDS, TimeUnit.SECONDS);
+
+        log.info("DebeziumToIcebergProcessFunction 初始化完成, dsName: {}, 初始映射表数: {}", dsName, tableToIcebergMapping.size());
     }
 
     @Override
     public void close() throws Exception {
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+        }
         if (catalog != null) {
             try {
                 catalog.close();
@@ -134,60 +170,120 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
 
     @Override
     public void processElement(String debeziumJson, Context ctx, Collector<IcebergWriteRecord> out) throws Exception {
-        log.info("收到 Debezium 消息: {}", debeziumJson.length() > 500 ? debeziumJson.substring(0, 500) + "..." : debeziumJson);
-
         // 解析 Debezium 消息
         DebeziumRecord record = parseDebeziumJson(debeziumJson);
         if (record == null) {
-            log.warn("Debezium 消息解析失败: {}", debeziumJson.length() > 200 ? debeziumJson.substring(0, 200) + "..." : debeziumJson);
             return;
         }
 
         String tableKey = record.getTableKey();
-        log.info("解析成功, tableKey={}, op={}, enabledTables={}", tableKey, record.getOp(), enabledTables);
+
+        // 使用最新的映射快照（volatile 保证可见性）
+        Map<String, String> currentMapping = this.tableToIcebergMapping;
+        Map<String, String> currentEnabled = this.enabledTables;
 
         // 检查表是否启用
-        if (!enabledTables.contains(tableKey)) {
-            log.info("表 {} 未启用，跳过, enabledTables={}", tableKey, enabledTables);
+        if (!currentEnabled.containsKey(tableKey)) {
             return;
         }
 
-        // 获取目标 Iceberg 表标识（格式：icebergSchema.icebergTableName）
-        String icebergTableKey = tableToIcebergMapping.get(tableKey);
+        // 获取目标 Iceberg 表标识
+        String icebergTableKey = currentMapping.get(tableKey);
         if (icebergTableKey == null) {
-            log.warn("表 {} 没有配置 Iceberg 目标表, mapping={}", tableKey, tableToIcebergMapping);
+            log.debug("表 {} 无 Iceberg 映射，跳过", tableKey);
             return;
         }
 
-        // 解析 Iceberg schema 和 table name
         String[] icebergParts = icebergTableKey.split("\\.");
         String icebergSchema = icebergParts[0];
         String icebergTableName = icebergParts[1];
 
         try {
-            // 加载 Iceberg 表
             Table table = loadTable(icebergSchema, icebergTableName);
             if (table == null) {
                 log.warn("Iceberg 表不存在: {}", icebergTableKey);
                 return;
             }
 
-            // 构建 Iceberg Record
             Record icebergRecord = buildIcebergRecord(table.schema(), record);
             if (icebergRecord == null) {
                 return;
             }
 
-            // 输出写入记录
             out.collect(new IcebergWriteRecord(
                     TableIdentifier.of(icebergSchema, icebergTableName),
                     icebergRecord,
-                    record.getOp()
-            ));
+                    record.getOp()));
 
             log.debug("转换成功: {} -> {}, op={}", tableKey, icebergTableKey, record.getOp());
         } catch (Exception e) {
             log.error("处理消息失败: tableKey={}, error={}", tableKey, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 从数据库刷新 CDC 配置
+     * <p>
+     * 查询 cdc_config 表获取该数据源下所有 enabled 的 Flink CDC 配置，
+     * 并从 metadata_table 查询 Iceberg schema 信息构建完整映射。
+     */
+    private void refreshConfig() {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUsername, jdbcPassword)) {
+            Map<String, String> newMapping = new HashMap<>();
+            Map<String, String> newEnabled = new HashMap<>();
+
+            // 查询所有 enabled 的 Flink CDC 配置
+            String sql = "SELECT db_name, table_name, iceberg_table_name FROM cdc_config " +
+                    "WHERE ds_name = ? AND enabled = 1 AND sync_tool = 'FLINK' AND deleted_at IS NULL";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, dsName);
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    String dbName = rs.getString("db_name");
+                    String tableName = rs.getString("table_name");
+                    String icebergTableName = rs.getString("iceberg_table_name");
+
+                    String mysqlTableKey = dbName + "." + tableName;
+                    newEnabled.put(mysqlTableKey, icebergTableName);
+                }
+            }
+
+            // 从 metadata_table 查询 Iceberg schema 构建完整映射
+            for (Map.Entry<String, String> entry : newEnabled.entrySet()) {
+                String mysqlTableKey = entry.getKey();
+                String icebergTableName = entry.getValue();
+
+                String tableName;
+                if (icebergTableName.contains(".")) {
+                    String[] parts = icebergTableName.split("\\.");
+                    tableName = parts[parts.length - 1];
+                } else {
+                    tableName = icebergTableName;
+                }
+
+                String schemaSql = "SELECT t.schema FROM metadata_table t WHERE t.name = ? AND t.deleted_at IS NULL LIMIT 1";
+                try (PreparedStatement ps = conn.prepareStatement(schemaSql)) {
+                    ps.setString(1, tableName);
+                    ResultSet rs = ps.executeQuery();
+                    if (rs.next()) {
+                        String icebergSchema = rs.getString("schema");
+                        if (icebergSchema != null) {
+                            newMapping.put(mysqlTableKey, icebergSchema + "." + tableName);
+                        }
+                    }
+                }
+            }
+
+            // 原子替换
+            this.tableToIcebergMapping = newMapping;
+            this.enabledTables = newEnabled;
+
+            // 清除不再需要的 Iceberg 表缓存
+            tableCache.keySet().retainAll(newMapping.values());
+
+            log.info("CDC 配置刷新完成, dsName={}, enabled表数={}, mapping={}", dsName, newEnabled.size(), newMapping);
+        } catch (Exception e) {
+            log.error("刷新 CDC 配置失败, dsName={}, error={}", dsName, e.getMessage(), e);
         }
     }
 
@@ -216,10 +312,8 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
     private Record buildIcebergRecord(Schema schema, DebeziumRecord record) {
         Record icebergRecord = GenericRecord.create(schema);
 
-        // 设置 op 字段
         icebergRecord.setField("op", record.getOp());
 
-        // 设置数据字段
         Map<String, Object> data = record.getAfterData();
         if (data == null && record.isDelete()) {
             data = record.getBeforeData();
@@ -229,9 +323,7 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
             for (Map.Entry<String, Object> entry : data.entrySet()) {
                 String fieldName = entry.getKey();
                 Object value = entry.getValue();
-
                 try {
-                    // 根据字段类型转换值
                     Types.NestedField field = schema.findField(fieldName);
                     if (field != null) {
                         value = convertValue(value, field.type());
@@ -277,9 +369,7 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
             }
             return Boolean.parseBoolean(value.toString());
         } else if (type instanceof Types.TimestampType) {
-            // Iceberg TimestampType 需要 LocalDateTime
             if (value instanceof Number) {
-                // Debezium 时间戳是毫秒，转换为 LocalDateTime
                 long timestampMs = ((Number) value).longValue();
                 return java.time.LocalDateTime.ofInstant(
                         java.time.Instant.ofEpochMilli(timestampMs),
@@ -287,7 +377,6 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
             }
             return value;
         } else if (type instanceof Types.DateType) {
-            // Iceberg DateType 需要 LocalDate
             if (value instanceof Number) {
                 int days = ((Number) value).intValue();
                 return java.time.LocalDate.ofEpochDay(days);
@@ -302,21 +391,18 @@ public class DebeziumToIcebergProcessFunction extends ProcessFunction<String, Ic
      * 解析 Debezium JSON 消息
      * <p>
      * Debezium 消息格式: {"schema": {...}, "payload": {"source": {...}, "op": ..., ...}}
-     * 先尝试按信封格式解析，失败则尝试直接解析为 payload
      */
     private DebeziumRecord parseDebeziumJson(String json) {
         try {
-            // 优先按信封格式解析
             DebeziumEnvelope envelope = JSON.parseObject(json, DebeziumEnvelope.class);
             if (envelope != null && envelope.getPayload() != null) {
                 return DebeziumRecord.from(envelope.getPayload());
             }
 
-            // 兼容没有外层包装的情况
             DebeziumPayload payload = JSON.parseObject(json, DebeziumPayload.class);
             return DebeziumRecord.from(payload);
         } catch (Exception e) {
-            log.warn("解析 Debezium JSON 失败: {}, 原始消息: {}", e.getMessage(), json.length() > 200 ? json.substring(0, 200) + "..." : json);
+            log.debug("解析 Debezium JSON 失败: {}", e.getMessage());
             return null;
         }
     }
