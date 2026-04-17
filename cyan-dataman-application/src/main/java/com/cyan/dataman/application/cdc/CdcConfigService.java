@@ -92,4 +92,9 @@ public interface CdcConfigService {
      * 停止运行中的任务
      */
     void stopTask(String taskId);
+
+    /**
+     * 手动触发 Spark Job 执行一次
+     */
+    CdcSparkJobBO executeSparkJob(String sparkJobId);
 }

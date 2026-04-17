@@ -87,4 +87,15 @@ public class CdcSparkTaskRepositoryImpl implements CdcSparkTaskRepository {
                 .map(CdcSparkTaskInfraConvert.INSTANCE::toDomain)
                 .toList();
     }
+
+    @Override
+    public List<CdcSparkTask> findRunningByCdcConfigId(String cdcConfigId) {
+        LambdaQueryWrapper<CdcSparkTaskDO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CdcSparkTaskDO::getCdcConfigId, cdcConfigId)
+                .eq(CdcSparkTaskDO::getStatus, JobStatus.RUNNING);
+        List<CdcSparkTaskDO> dosList = cdcSparkTaskMapper.selectList(wrapper);
+        return dosList.stream()
+                .map(CdcSparkTaskInfraConvert.INSTANCE::toDomain)
+                .toList();
+    }
 }

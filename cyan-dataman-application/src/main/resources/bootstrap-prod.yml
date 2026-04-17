@@ -59,3 +59,8 @@ flink:
     interval: 60000
     timeout: 600000
     dir: s3://flink/checkpoints/cyan-dataman
+
+# Spark Connect 配置
+spark:
+  connect:
+    url: sc://spark-connect-server.spark.svc.cluster.local:15002

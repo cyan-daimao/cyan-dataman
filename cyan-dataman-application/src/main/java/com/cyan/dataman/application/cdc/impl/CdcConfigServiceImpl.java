@@ -9,6 +9,7 @@ import com.cyan.dataman.application.cdc.bo.CdcSparkTaskBO;
 import com.cyan.dataman.application.cdc.cmd.CdcConfigCmd;
 import com.cyan.dataman.application.cdc.cmd.CdcSparkJobCmd;
 import com.cyan.dataman.application.cdc.convert.CdcAppConvert;
+import com.cyan.dataman.application.cdc.job.SparkJobExecutor;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
 import com.cyan.dataman.application.cdc.service.DebeziumSignalService;
 import com.cyan.dataman.application.metadata.MetadataTableService;
@@ -65,6 +66,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private final DebeziumSignalService debeziumSignalService;
     private final MetadataTableService metadataTableService;
     private final CdcFlinkSyncService cdcFlinkSyncService;
+    private final SparkJobExecutor sparkJobExecutor;
 
     public CdcConfigServiceImpl(CdcConfigRepository cdcConfigRepository,
                                 CdcSparkJobRepository cdcSparkJobRepository,
@@ -72,7 +74,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                                 DsConfigRepository dsConfigRepository,
                                 DebeziumRPC debeziumRpc,
                                 DebeziumSignalService debeziumSignalService,
-                                MetadataTableService metadataTableService, CdcFlinkSyncService cdcFlinkSyncService) {
+                                MetadataTableService metadataTableService,
+                                CdcFlinkSyncService cdcFlinkSyncService,
+                                SparkJobExecutor sparkJobExecutor) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.cdcSparkJobRepository = cdcSparkJobRepository;
         this.cdcSparkTaskRepository = cdcSparkTaskRepository;
@@ -81,6 +85,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         this.debeziumSignalService = debeziumSignalService;
         this.metadataTableService = metadataTableService;
         this.cdcFlinkSyncService = cdcFlinkSyncService;
+        this.sparkJobExecutor = sparkJobExecutor;
     }
 
     @Override
@@ -225,11 +230,41 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         config.toggle(cdcConfigRepository, enabled);
 
         if (Boolean.TRUE.equals(enabled)) {
-            startConnectorForTable(config);
-            cdcFlinkSyncService.enableCdcSync(config.getId());
+            if (SyncTool.FLINK.equals(config.getSyncTool())) {
+                startConnectorForTable(config);
+                cdcFlinkSyncService.enableCdcSync(config.getId());
+            } else if (SyncTool.SPARK.equals(config.getSyncTool())) {
+                triggerSparkSyncIfNeeded(config);
+            }
         } else {
-            stopConnectorForTable(config);
-            cdcFlinkSyncService.disableCdcSync(config.getId());
+            if (SyncTool.FLINK.equals(config.getSyncTool())) {
+                stopConnectorForTable(config);
+                cdcFlinkSyncService.disableCdcSync(config.getId());
+            } else if (SyncTool.SPARK.equals(config.getSyncTool())) {
+                stopRunningTasks(config.getId());
+            }
+        }
+    }
+
+    /**
+     * 触发关联的 Spark Job 执行一次
+     */
+    private void triggerSparkSyncIfNeeded(CdcConfig config) {
+        List<CdcSparkJob> sparkJobs = cdcSparkJobRepository.findByCdcConfigId(config.getId());
+        for (CdcSparkJob job : sparkJobs) {
+            if (Boolean.TRUE.equals(job.getEnabled())) {
+                sparkJobExecutor.executeSparkJob(job, config);
+            }
+        }
+    }
+
+    /**
+     * 停止该 CDC 配置下所有运行中的 Spark 任务
+     */
+    private void stopRunningTasks(String cdcConfigId) {
+        List<CdcSparkTask> runningTasks = cdcSparkTaskRepository.findRunningByCdcConfigId(cdcConfigId);
+        for (CdcSparkTask task : runningTasks) {
+            task.stop(cdcSparkTaskRepository);
         }
     }
 
@@ -261,7 +296,6 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         Assert.notNull(job, new SilentException("Spark 作业配置不存在"));
 
         job.setSyncMode(cmd.getSyncMode())
-                .setSparkSql(cmd.getSparkSql())
                 .setCronExpression(cmd.getCronExpression())
                 .setEnabled(cmd.getEnabled())
                 .setUpdateBy(cmd.getUpdateBy());
@@ -304,6 +338,20 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         if (task.getStatus() == JobStatus.RUNNING) {
             task.stop(cdcSparkTaskRepository);
         }
+    }
+
+    @Override
+    public CdcSparkJobBO executeSparkJob(String sparkJobId) {
+        CdcSparkJob job = cdcSparkJobRepository.findById(sparkJobId);
+        Assert.notNull(job, new SilentException("Spark 作业配置不存在"));
+
+        CdcConfig config = cdcConfigRepository.findById(job.getCdcConfigId());
+        Assert.notNull(config, new SilentException("关联的 CDC 配置不存在"));
+        Assert.isTrue(Boolean.TRUE.equals(config.getEnabled()),
+                new SilentException("CDC 配置未启用，请先启用"));
+
+        sparkJobExecutor.executeSparkJob(job, config);
+        return CdcAppConvert.INSTANCE.toBO(job);
     }
 
     // ==================== Debezium 连接器管理 ====================

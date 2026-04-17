@@ -36,4 +36,9 @@ public interface CdcSparkJobRepository {
      * 删除
      */
     void deleteById(String id);
+
+    /**
+     * 查找所有启用的 Spark Job
+     */
+    List<CdcSparkJob> findAllEnabled();
 }

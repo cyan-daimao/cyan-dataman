@@ -162,6 +162,15 @@ public class CdcConfigController {
         return Response.success();
     }
 
+    /**
+     * 手动触发 Spark Job 执行一次
+     */
+    @PostMapping("/spark-jobs/{jobId}/execute")
+    public Response<Void> executeSparkJob(@PathVariable("jobId") String jobId) {
+        cdcConfigService.executeSparkJob(jobId);
+        return Response.success();
+    }
+
     // ==================== Spark 任务实例管理 ====================
 
     /**

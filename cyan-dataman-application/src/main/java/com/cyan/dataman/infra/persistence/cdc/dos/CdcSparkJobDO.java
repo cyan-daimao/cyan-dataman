@@ -44,12 +44,6 @@ public class CdcSparkJobDO {
     private SyncMode syncMode;
 
     /**
-     * Spark SQL 模板
-     */
-    @TableField("spark_sql")
-    private String sparkSql;
-
-    /**
      * 调度表达式 (Cron)
      */
     @TableField("cron_expression")

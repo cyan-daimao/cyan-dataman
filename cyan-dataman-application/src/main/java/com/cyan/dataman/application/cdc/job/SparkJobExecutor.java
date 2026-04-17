@@ -1,20 +1,30 @@
 package com.cyan.dataman.application.cdc.job;
 
-import com.cyan.dataman.application.cdc.event.SparkJobEvent;
+import com.cyan.dataman.domain.cdc.CdcConfig;
+import com.cyan.dataman.domain.cdc.CdcSparkJob;
 import com.cyan.dataman.domain.cdc.CdcSparkTask;
+import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
 import com.cyan.dataman.domain.cdc.repository.CdcSparkTaskRepository;
+import com.cyan.dataman.domain.ds.DsConfig;
+import com.cyan.dataman.domain.ds.repository.DsConfigRepository;
 import com.cyan.dataman.enums.JobStatus;
+import com.cyan.dataman.enums.SyncMode;
+import com.cyan.dataman.infra.config.SparkConfig;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
+import org.apache.spark.sql.SparkSession;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Spark 任务执行器
+ * Spark 任务执行器（基于 Spark Connect）
+ * <p>
+ * 通过 Spark Connect 协议连接远端 Spark 集群执行 SQL：
+ * 1. 动态注册 MySQL JDBC Catalog（如不存在）
+ * 2. 根据 syncMode 自动生成 INSERT OVERWRITE / INSERT INTO SQL
+ * 3. 执行 SQL 并更新任务状态
  *
  * @author cy.Y
  * @since 1.0.0
@@ -23,123 +33,127 @@ import java.util.UUID;
 @Component
 public class SparkJobExecutor {
 
+    private final SparkConfig sparkConfig;
     private final CdcSparkTaskRepository cdcSparkTaskRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final DsConfigRepository dsConfigRepository;
 
-    public SparkJobExecutor(CdcSparkTaskRepository cdcSparkTaskRepository,
-                            ApplicationEventPublisher eventPublisher) {
+    public SparkJobExecutor(SparkConfig sparkConfig,
+                            CdcSparkTaskRepository cdcSparkTaskRepository,
+                            DsConfigRepository dsConfigRepository) {
+        this.sparkConfig = sparkConfig;
         this.cdcSparkTaskRepository = cdcSparkTaskRepository;
-        this.eventPublisher = eventPublisher;
+        this.dsConfigRepository = dsConfigRepository;
     }
 
     /**
-     * 监听 Spark 任务提交事件
+     * 执行 Spark 同步任务
+     *
+     * @param sparkJob Spark 作业配置
+     * @param cdcConfig CDC 配置
      */
-    @EventListener
-    @Async
-    public void handleSubmitEvent(SparkJobEvent event) {
-        if (event.getType() != SparkJobEvent.EventType.SUBMIT) {
-            return;
-        }
-
-        log.info("提交 Spark 任务，cdcConfigId: {}, sparkSql: {}", event.getCdcConfigId(), event.getSparkSql());
-
+    public void executeSparkJob(CdcSparkJob sparkJob, CdcConfig cdcConfig) {
         // 创建任务实例
         CdcSparkTask task = new CdcSparkTask();
         task.setId(UUID.randomUUID().toString());
-        task.setSparkJobId(event.getSparkJobId());
-        task.setCdcConfigId(event.getCdcConfigId());
+        task.setSparkJobId(sparkJob.getId());
+        task.setCdcConfigId(cdcConfig.getId());
         task.setStatus(JobStatus.PENDING);
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
-
         task = cdcSparkTaskRepository.save(task);
 
-        // TODO: 实际场景中这里应该提交到 Spark 集群
-        // 模拟执行 Spark SQL
-        executeSparkTask(task, event.getSparkSql());
-    }
-
-    /**
-     * 监听 Spark 任务开始事件
-     */
-    @EventListener
-    @Async
-    public void handleStartEvent(SparkJobEvent event) {
-        if (event.getType() != SparkJobEvent.EventType.START) {
+        DsConfig dsConfig = dsConfigRepository.findByName(cdcConfig.getDsName());
+        if (dsConfig == null) {
+            task.fail(cdcSparkTaskRepository, "数据源配置不存在: " + cdcConfig.getDsName());
             return;
         }
 
-        log.info("开启 Spark 任务，applicationId: {}", event.getApplicationId());
-
-        CdcSparkTask task = cdcSparkTaskRepository.findById(event.getSparkJobId());
-        if (task != null) {
-            task.start(cdcSparkTaskRepository, event.getApplicationId());
-        }
-    }
-
-    /**
-     * 监听 Spark 任务停止事件
-     */
-    @EventListener
-    @Async
-    public void handleStopEvent(SparkJobEvent event) {
-        if (event.getType() != SparkJobEvent.EventType.STOP) {
-            return;
-        }
-
-        log.info("关闭 Spark 任务，applicationId: {}", event.getApplicationId());
-
-        CdcSparkTask task = cdcSparkTaskRepository.findById(event.getSparkJobId());
-        if (task != null && task.getStatus() == JobStatus.RUNNING) {
-            task.stop(cdcSparkTaskRepository);
-        }
-    }
-
-    /**
-     * 执行 Spark 任务（模拟实现）
-     */
-    private void executeSparkTask(CdcSparkTask task, String sparkSql) {
-        log.info("执行 Spark SQL: {}", sparkSql);
-
+        SparkSession spark = null;
         try {
-            // 模拟任务执行
-            // 实际场景应该调用 Spark submit 或 Spark API
+            spark = sparkConfig.createSparkSession();
+            LocalDateTime startTime = LocalDateTime.now();
+            task.start(cdcSparkTaskRepository, "spark-connect-" + task.getId());
 
-            // 更新任务状态为运行中
-            task.start(cdcSparkTaskRepository, "spark-app-" + System.currentTimeMillis());
+            // 动态注册 MySQL Catalog
+            String mysqlCatalogName = ensureMysqlCatalog(spark, dsConfig);
 
-            // 模拟执行时间
-            Thread.sleep(5000);
+            // 解析 Iceberg 目标表信息
+            String icebergTableName = cdcConfig.getIcebergTableName();
+            String icebergSchema;
+            String icebergTable;
+            if (icebergTableName.contains(".")) {
+                String[] parts = icebergTableName.split("\\.");
+                icebergSchema = parts[0];
+                icebergTable = parts[1];
+            } else {
+                icebergSchema = "ods";
+                icebergTable = icebergTableName;
+            }
 
-            // 模拟执行成功
-            long rowsAffected = 1000L; // 模拟影响的行数
-            task.success(cdcSparkTaskRepository, rowsAffected);
+            // 生成并执行 SQL
+            String sql = buildSparkSql(sparkJob.getSyncMode(), mysqlCatalogName,
+                    cdcConfig.getDbName(), cdcConfig.getTableName(),
+                    icebergSchema, icebergTable);
 
-            log.info("Spark 任务执行成功，影响行数：{}", rowsAffected);
+            log.info("执行 Spark SQL: {}", sql);
+            spark.sql(sql);
 
+            LocalDateTime endTime = LocalDateTime.now();
+            long durationSeconds = Duration.between(startTime, endTime).getSeconds();
+            task.success(cdcSparkTaskRepository, 0L);
+            log.info("Spark 任务执行成功: sparkJobId={}, cdcConfigId={}, 耗时={}s",
+                    sparkJob.getId(), cdcConfig.getId(), durationSeconds);
         } catch (Exception e) {
-            log.error("Spark 任务执行失败", e);
+            log.error("Spark 任务执行失败: sparkJobId={}, cdcConfigId={}, error={}",
+                    sparkJob.getId(), cdcConfig.getId(), e.getMessage(), e);
             task.fail(cdcSparkTaskRepository, e.getMessage());
+        } finally {
+            if (spark != null) {
+                try {
+                    spark.close();
+                } catch (Exception e) {
+                    log.debug("关闭 SparkSession 失败: {}", e.getMessage());
+                }
+            }
         }
     }
 
     /**
-     * 提交 Spark SQL 任务
+     * 动态注册 MySQL JDBC Catalog（如不存在）
      *
-     * @param sparkJobId Spark 作业配置 ID
-     * @param cdcConfigId CDC 配置 ID
-     * @param sparkSql Spark SQL
+     * @return catalog 名称
      */
-    public void submitSparkJob(String sparkJobId, String cdcConfigId, String sparkSql) {
-        SparkJobEvent event = new SparkJobEvent();
-        event.setType(SparkJobEvent.EventType.SUBMIT);
-        event.setSparkJobId(sparkJobId);
-        event.setCdcConfigId(cdcConfigId);
-        event.setSparkSql(sparkSql);
+    private String ensureMysqlCatalog(SparkSession spark, DsConfig dsConfig) {
+        // catalog 名称使用 dsName（替换特殊字符为下划线）
+        String catalogName = "mysql_" + dsConfig.getName().replaceAll("[^a-zA-Z0-9]", "_");
 
-        // 发布事件
-        eventPublisher.publishEvent(event);
-        log.info("已提交 Spark 任务事件，cdcConfigId: {}", cdcConfigId);
+        // CREATE OR REPLACE CATALOG 动态注册
+        String createCatalogSql = String.format(
+                "CREATE OR REPLACE CATALOG %s USING jdbc OPTIONS (" +
+                        "url '%s', " +
+                        "user '%s', " +
+                        "password '%s', " +
+                        "driver 'com.mysql.cj.jdbc.Driver')",
+                catalogName, dsConfig.getUrl(), dsConfig.getUsername(), dsConfig.getPassword());
+
+        spark.sql(createCatalogSql);
+        log.info("动态注册 MySQL Catalog: {}", catalogName);
+        return catalogName;
+    }
+
+    /**
+     * 根据 syncMode 自动生成 Spark SQL
+     */
+    private String buildSparkSql(SyncMode syncMode, String mysqlCatalog,
+                                 String mysqlDb, String mysqlTable,
+                                 String icebergSchema, String icebergTable) {
+        String target = String.format("rest.%s.%s", icebergSchema, icebergTable);
+        String source = String.format("%s.%s.%s", mysqlCatalog, mysqlDb, mysqlTable);
+
+        if (syncMode == SyncMode.OVERWRITE) {
+            return String.format("INSERT OVERWRITE TABLE %s SELECT * FROM %s", target, source);
+        } else {
+            return String.format("INSERT INTO TABLE %s SELECT * FROM %s", target, source);
+        }
     }
 }

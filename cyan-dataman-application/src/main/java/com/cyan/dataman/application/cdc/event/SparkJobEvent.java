@@ -38,11 +38,6 @@ public class SparkJobEvent {
     private String applicationId;
 
     /**
-     * Spark SQL
-     */
-    private String sparkSql;
-
-    /**
      * 错误信息
      */
     private String errorMessage;

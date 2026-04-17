@@ -59,4 +59,15 @@ public class CdcSparkJobRepositoryImpl implements CdcSparkJobRepository {
     public void deleteById(String id) {
         cdcSparkJobMapper.deleteById(id);
     }
+
+    @Override
+    public List<CdcSparkJob> findAllEnabled() {
+        LambdaQueryWrapper<CdcSparkJobDO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CdcSparkJobDO::getEnabled, true);
+        wrapper.isNotNull(CdcSparkJobDO::getCronExpression);
+        List<CdcSparkJobDO> dosList = cdcSparkJobMapper.selectList(wrapper);
+        return dosList.stream()
+                .map(CdcSparkJobInfraConvert.INSTANCE::toDomain)
+                .toList();
+    }
 }

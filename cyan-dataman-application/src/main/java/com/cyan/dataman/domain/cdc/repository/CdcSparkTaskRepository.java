@@ -43,4 +43,9 @@ public interface CdcSparkTaskRepository {
      * 根据状态查找任务
      */
     List<CdcSparkTask> findByStatus(JobStatus status);
+
+    /**
+     * 根据 CDC 配置 ID 查找运行中的任务
+     */
+    List<CdcSparkTask> findRunningByCdcConfigId(String cdcConfigId);
 }

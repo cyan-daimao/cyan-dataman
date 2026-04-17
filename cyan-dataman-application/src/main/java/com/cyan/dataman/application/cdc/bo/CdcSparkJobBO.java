@@ -36,11 +36,6 @@ public class CdcSparkJobBO {
     private SyncMode syncMode;
 
     /**
-     * Spark SQL 模板
-     */
-    private String sparkSql;
-
-    /**
      * 调度表达式 (Cron)
      */
     private String cronExpression;

@@ -39,11 +39,6 @@ public class CdcSparkJob {
     private SyncMode syncMode;
 
     /**
-     * Spark SQL 模板
-     */
-    private String sparkSql;
-
-    /**
      * 调度表达式 (Cron)
      */
     private String cronExpression;
@@ -84,7 +79,6 @@ public class CdcSparkJob {
     private void validate() {
         Assert.notBlank(this.cdcConfigId, new SilentException("CDC 配置 ID 不能为空"));
         Assert.notNull(this.syncMode, new SilentException("同步模式不能为空"));
-        Assert.notBlank(this.sparkSql, new SilentException("Spark SQL 不能为空"));
     }
 
     /**
