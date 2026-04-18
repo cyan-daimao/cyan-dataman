@@ -3,7 +3,6 @@ package com.cyan.dataman.infra.config;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ExternalizedCheckpointRetention;
-import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +17,9 @@ import org.springframework.context.annotation.Configuration;
  * 支持 local 和 remote 模式：
  * - local: 在 Spring Boot 进程内本地运行 Flink 作业
  * - remote: 通过 RemoteStreamEnvironment 提交到远端 Flink 集群
+ * <p>
+ * S3 文件系统通过 hadoop-aws 的 S3AFileSystem 实现（由 core-site.xml 提供 duration 格式修复），
+ * Flink 通过 HadoopFsFactory 回退机制使用 Hadoop 的 S3A。
  *
  * @author cy.Y
  * @since v1.0.0
@@ -59,10 +61,18 @@ public class FlinkConfig {
         var flinkConfig = new org.apache.flink.configuration.Configuration();
 
         // S3 文件系统配置（用于 checkpoint 存储）
-        flinkConfig.setString("s3.endpoint", rustfsEndpoint);
-        flinkConfig.setString("s3.access-key", rustfsAccessKey);
-        flinkConfig.setString("s3.secret-key", rustfsSecretKey);
-        flinkConfig.setString("s3.path.style.access", "true");
+        // 通过 flink.hadoop. 前缀传递给 Hadoop Configuration，由 HadoopFsFactory 读取
+        flinkConfig.setString("flink.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        flinkConfig.setString("flink.hadoop.fs.s3a.endpoint", rustfsEndpoint);
+        flinkConfig.setString("flink.hadoop.fs.s3a.access.key", rustfsAccessKey);
+        flinkConfig.setString("flink.hadoop.fs.s3a.secret.key", rustfsSecretKey);
+        flinkConfig.setString("flink.hadoop.fs.s3a.path.style.access", "true");
+        // s3:// scheme 映射到 S3AFileSystem
+        flinkConfig.setString("flink.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        flinkConfig.setString("flink.hadoop.fs.s3.endpoint", rustfsEndpoint);
+        flinkConfig.setString("flink.hadoop.fs.s3.access.key", rustfsAccessKey);
+        flinkConfig.setString("flink.hadoop.fs.s3.secret.key", rustfsSecretKey);
+        flinkConfig.setString("flink.hadoop.fs.s3.path.style.access", "true");
 
         // Checkpoint 存储目录
         flinkConfig.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
@@ -70,9 +80,6 @@ public class FlinkConfig {
         // 作业取消后保留 checkpoint
         flinkConfig.set(CheckpointingOptions.EXTERNALIZED_CHECKPOINT_RETENTION,
                 ExternalizedCheckpointRetention.RETAIN_ON_CANCELLATION);
-
-        // 初始化全局 FileSystem 工厂
-        FileSystem.initialize(flinkConfig);
 
         StreamExecutionEnvironment env;
         if ("remote".equalsIgnoreCase(flinkMode)) {

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+    覆盖 Hadoop core-default.xml 中带 duration 后缀（s/m/h）的 S3A 配置。
+    Hadoop 3.4.x core-default.xml 中部分超时值使用了 duration 格式（如 "5s"、"200s"），
+    某些代码路径使用 Configuration.getLong() 读取时会抛出 NumberFormatException。
+    此文件通过 core-site.xml（优先级高于 core-default.xml）将值覆盖为纯毫秒数。
+-->
+<configuration>
+    <property>
+        <name>fs.s3a.connection.establish.timeout</name>
+        <value>5000</value>
+    </property>
+    <property>
+        <name>fs.s3a.connection.timeout</name>
+        <value>200000</value>
+    </property>
+    <property>
+        <name>fs.s3a.connection.ttl</name>
+        <value>300000</value>
+    </property>
+    <property>
+        <name>fs.s3a.threads.keepalivetime</name>
+        <value>60</value>
+    </property>
+    <property>
+        <name>fs.s3a.multipart.purge.age</name>
+        <value>86400</value>
+    </property>
+</configuration>

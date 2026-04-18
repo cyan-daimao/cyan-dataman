@@ -91,13 +91,6 @@
             <version>4.0.1-2.0</version>
         </dependency>
 
-        <!-- Flink S3 FileSystem (Presto based, avoids Hadoop 3.4.1 core-default.xml Duration format issue) -->
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-s3-fs-presto</artifactId>
-            <version>${flink.version}</version>
-        </dependency>
-
         <!-- Iceberg Flink Runtime (包含所有 Iceberg 功能，包括 shade 的 Parquet) -->
         <dependency>
             <groupId>org.apache.iceberg</groupId>

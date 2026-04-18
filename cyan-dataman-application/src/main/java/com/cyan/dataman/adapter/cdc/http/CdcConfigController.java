@@ -67,13 +67,7 @@ public class CdcConfigController {
      */
     @GetMapping("/{cdcName}")
     public Response<CdcConfigDTO> findById(@PathVariable("cdcName") String cdcName) {
-        CdcConfigBO bo;
-        // 尝试按 ID 或名称查找
-        try {
-            bo = cdcConfigService.findById(cdcName);
-        } catch (Exception e) {
-            bo = cdcConfigService.findByName(cdcName);
-        }
+        CdcConfigBO bo = cdcConfigService.findByName(cdcName);
         return Response.success(CdcAdapterConvert.INSTANCE.toCdcConfigDTO(bo));
     }
 

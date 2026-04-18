@@ -65,14 +65,15 @@ public class SparkConfig {
             log.info("创建本地 SparkSession (未配置 spark.connect.url)");
         }
 
-        return builder.getOrCreate();
+        SparkSession spark = builder.getOrCreate();
+        return spark;
     }
 
     /**
      * 创建本地模式 SparkSession（用于 Iceberg 表维护等内部操作）
      */
     public SparkSession createLocalSparkSession() {
-        return SparkSession.builder()
+        SparkSession spark = SparkSession.builder()
                 .appName(appName + "-maintenance")
                 .master("local[*]")
                 .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
@@ -98,6 +99,8 @@ public class SparkConfig {
                 .config("spark.sql.catalog.rest.s3.secret-access-key", rustfsSecretKey)
                 .config("spark.sql.defaultCatalog", "rest")
                 .getOrCreate();
+
+        return spark;
     }
 
     public String getSparkConnectUrl() {
