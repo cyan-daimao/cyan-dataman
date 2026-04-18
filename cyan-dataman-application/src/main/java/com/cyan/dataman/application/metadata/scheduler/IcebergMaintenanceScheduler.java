@@ -34,7 +34,7 @@ public class IcebergMaintenanceScheduler {
     /**
      * 合并小文件
      */
-    @Scheduled(cron = "0 */1 * * * ?")
+    @Scheduled(cron = "0 0 0 * * ?")
     public void maintenance() {
         List<MetadataTableBO> tableBOS = metadataTableService.list(new MetadataTableListQuery());
         for (MetadataTableBO tableBO : tableBOS) {
