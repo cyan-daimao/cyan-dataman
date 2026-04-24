@@ -72,4 +72,9 @@ public interface MetadataTableService {
      * 回滚
      */
     void rollback(String schema, String tbl, String snapshotId);
+
+    /**
+     * 获取表字段列表
+     */
+    List<com.cyan.dataman.application.metadata.bo.MetadataColumnBO> listColumns(String tableId);
 }

@@ -49,4 +49,10 @@ public interface MetadataTableRepository {
      * 获取表
      */
     MetadataTable findOne(MetadataTableOneQuery query);
+
+    /**
+     * 根据表ID获取字段列表
+     */
+    List<com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO> findColumnsByTableId(String tableId);
 }
+

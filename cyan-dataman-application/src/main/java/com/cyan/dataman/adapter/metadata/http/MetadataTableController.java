@@ -117,6 +117,27 @@ public class MetadataTableController {
     }
 
     /**
+     * 获取表字段列表
+     */
+    @GetMapping("/{id}/columns")
+    public Response<List<com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO>> getTableColumns(@PathVariable String id) {
+        List<com.cyan.dataman.application.metadata.bo.MetadataColumnBO> columnBOs = metadataTableService.listColumns(id);
+        List<com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO> dtos = columnBOs.stream().map(bo -> {
+            com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO dto = new com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO();
+            dto.setId(bo.getId());
+            dto.setCol(bo.getCol());
+            dto.setDataType(bo.getDataType());
+            dto.setComment(bo.getComment());
+            dto.setNullable(bo.getNullable());
+            dto.setSecretLevel(bo.getSecretLevel());
+            dto.setDefaultValue(bo.getDefaultValue());
+            dto.setAutoIncrement(bo.getAutoIncrement());
+            return dto;
+        }).toList();
+        return Response.success(dtos);
+    } // API: ready
+
+    /**
      * 获取表快照
      */
     @GetMapping("/{fullName}/snapshots")

@@ -167,6 +167,20 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     }
 
     /**
+     * 根据表ID获取字段列表
+     */
+    @Override
+    public List<MetadataColumnDO> findColumnsByTableId(String tableId) {
+        MetadataTableDO metadataTableDO = metadataTableMapper.selectById(tableId);
+        if (metadataTableDO == null) {
+            return List.of();
+        }
+        LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()
+                .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl());
+        return Optional.ofNullable(metadataColumnMapper.selectList(queryWrapper)).orElse(List.of());
+    }
+
+    /**
      * 更新字段信息
      */
     private void updateColumns(MetadataTable table, MetadataTableDO metadataTableDO) {

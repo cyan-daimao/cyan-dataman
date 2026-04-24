@@ -771,6 +771,15 @@ public class DsJdbcUtil {
             if (isQuery) {
                 // 执行查询
                 if (limit != null && limit > 0) {
+                    // 仅对 SELECT / WITH 语句自动追加 LIMIT，避免 SHOW/DESC/EXPLAIN 语法错误
+                    boolean isDql = trimmedSql.startsWith("SELECT") || trimmedSql.startsWith("WITH");
+                    if (isDql && !trimmedSql.contains("LIMIT")) {
+                        String cleanSql = sql.trim();
+                        if (cleanSql.endsWith(";")) {
+                            cleanSql = cleanSql.substring(0, cleanSql.length() - 1);
+                        }
+                        sql = cleanSql + " LIMIT " + limit;
+                    }
                     stmt.setMaxRows(limit);
                 }
                 
