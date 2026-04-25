@@ -18,7 +18,7 @@ import java.util.List;
  * @author cy.Y
  * @since 1.1.0
  */
-@FeignClient(name = "cyan-dataman", path = "/api/v1/metadata/tables")
+@FeignClient(name = "cyan-dataman", contextId = "datamanTableClient", path = "/api/v1/metadata/tables")
 public interface DatamanTableClient {
 
     /**

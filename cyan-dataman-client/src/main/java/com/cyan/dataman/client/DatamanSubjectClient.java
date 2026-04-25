@@ -13,7 +13,7 @@ import java.util.List;
  * @author cy.Y
  * @since 1.1.0
  */
-@FeignClient(name = "cyan-dataman", path = "/api/v1/metadata/subjects")
+@FeignClient(name = "cyan-dataman", contextId = "datamanSubjectClient", path = "/api/v1/metadata/subjects")
 public interface DatamanSubjectClient {
 
     /**
