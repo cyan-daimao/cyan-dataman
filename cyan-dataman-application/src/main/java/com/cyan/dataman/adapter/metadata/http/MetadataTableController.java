@@ -75,6 +75,16 @@ public class MetadataTableController {
     }
 
     /**
+     * 按表名获取表
+     */
+    @GetMapping("/by-name/{name}")
+    public Response<MetadataTableDTO> getByName(@PathVariable("name") String name) {
+        MetadataTableBO metadataTable = metadataTableService.findOne(new com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery().setName(name));
+        MetadataTableDTO metadataTableDTO = MetadataTableAdapterConvert.INSTANCE.toMetadataTableDTO(metadataTable);
+        return Response.success(metadataTableDTO);
+    }
+
+    /**
      * 创建表
      */
     @PostMapping

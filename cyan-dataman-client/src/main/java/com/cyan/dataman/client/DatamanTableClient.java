@@ -34,6 +34,12 @@ public interface DatamanTableClient {
     Response<MetadataTableDTO> getMetadataTableById(@PathVariable("id") String id); // API: ready
 
     /**
+     * 按表名获取元数据表
+     */
+    @GetMapping("/by-name/{name}")
+    Response<MetadataTableDTO> getMetadataTableByName(@PathVariable("name") String name);
+
+    /**
      * 获取表字段列表
      */
     @GetMapping("/{id}/columns")
