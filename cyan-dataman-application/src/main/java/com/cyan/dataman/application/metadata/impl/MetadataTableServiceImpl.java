@@ -83,6 +83,9 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     @Override
     public MetadataTableBO findOne(MetadataTableOneQuery query) {
         MetadataTable metadataTable = metadataTableRepository.findOne(query);
+        if (metadataTable==null){
+            return null;
+        }
         return findById(metadataTable.getId());
     }
 
