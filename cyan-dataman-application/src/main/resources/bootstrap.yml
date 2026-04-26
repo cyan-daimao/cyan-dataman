@@ -6,6 +6,10 @@ spring:
     name:  cyan-dataman
   main:
     web-application-type: servlet
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
 # 服务监控端点（暴露所有端点，生产环境需调整）
 management:
   endpoints:
