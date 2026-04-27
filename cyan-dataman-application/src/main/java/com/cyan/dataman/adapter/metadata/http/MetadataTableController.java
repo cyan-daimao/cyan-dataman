@@ -183,7 +183,7 @@ public class MetadataTableController {
         return Response.success();
     }
 
-    /**
+/**
      * 快照清理
      */
     @PostMapping("/{fullName}/maintenance")
