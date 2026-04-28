@@ -119,7 +119,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
             return null;
         }
         LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()
-                .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl());
+                .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl())
+                .orderByAsc(MetadataColumnDO::getId);
         List<MetadataColumnDO> metadataColumnDOS = metadataColumnMapper.selectList(queryWrapper);
         List<ColumnValObj> cols = MetadataTableInfraConvert.INSTANCE.toMetadataColumns(metadataColumnDOS);
         MetadataTable metadataTable = MetadataTableInfraConvert.INSTANCE.toMetadataTable(metadataTableDO);
@@ -176,7 +177,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
             return List.of();
         }
         LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()
-                .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl());
+                .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl())
+                .orderByAsc(MetadataColumnDO::getId);
         return Optional.ofNullable(metadataColumnMapper.selectList(queryWrapper)).orElse(List.of());
     }
 
