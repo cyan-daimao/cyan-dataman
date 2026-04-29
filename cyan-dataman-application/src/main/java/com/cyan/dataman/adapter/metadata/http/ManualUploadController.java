@@ -6,6 +6,7 @@ import com.cyan.dataman.adapter.metadata.http.dto.ManualUploadRecordDTO;
 import com.cyan.dataman.application.metadata.ManualUploadService;
 import com.cyan.dataman.domain.metadata.ManualUploadRecord;
 import com.cyan.employee.login.filter.UserContextHolder;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -16,17 +17,12 @@ import org.springframework.web.multipart.MultipartFile;
  * @since 1.0.0
  */
 @RestController
+@RequiredArgsConstructor
 @RequestMapping("/api/v1/metadata/tables/{tableId}/upload")
 public class ManualUploadController {
 
     private final ManualUploadService manualUploadService;
 
-    /**
-     * 构造器注入
-     */
-    public ManualUploadController(ManualUploadService manualUploadService) {
-        this.manualUploadService = manualUploadService;
-    }
 
     /**
      * 上传文件并导入数据
@@ -50,9 +46,9 @@ public class ManualUploadController {
     /**
      * 分页查询上传记录
      *
-     * @param tableId   元数据表ID
-     * @param pageNum   页码
-     * @param pageSize  页大小
+     * @param tableId  元数据表ID
+     * @param pageNum  页码
+     * @param pageSize 页大小
      * @return 上传记录分页列表
      */
     @GetMapping("/records")
