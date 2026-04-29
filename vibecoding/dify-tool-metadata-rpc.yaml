@@ -1,0 +1,95 @@
+openapi: 3.0.0
+info:
+  title: cyan-dataman Metadata RPC
+  description: 元数据表字段查询 RPC 接口（Prompt 中需提示 LLM 只关注 data 字段）
+  version: "1.0.0"
+
+servers:
+  - url: http://cyan-dataman-pre.cyan.com
+    description: cyan-dataman 预发环境
+
+paths:
+  /rpc/v1/agent/meta/tables/{tableName}/columns:
+    get:
+      operationId: getTableColumns
+      summary: 获取指定表的字段列表
+      parameters:
+        - name: tableName
+          in: path
+          required: true
+          description: 元数据表名称
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    description: 状态码（0 表示成功）
+                  message:
+                    type: string
+                    description: 提示信息
+                  data:
+                    type: array
+                    description: 字段列表
+                    items:
+                      type: object
+                      properties:
+                        col:
+                          type: string
+                          description: 字段名
+                        dataType:
+                          type: string
+                          description: 数据类型
+                        comment:
+                          type: string
+                          description: 字段注释
+                        nullable:
+                          type: boolean
+                          description: 是否可空
+
+  /rpc/v1/agent/meta/tables:
+    get:
+      operationId: listMetadataTables
+      summary: 获取元数据表列表
+      parameters:
+        - name: keyword
+          in: query
+          required: false
+          description: 搜索关键词（同时匹配表名或表描述），为空时返回全部
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    description: 状态码（0 表示成功）
+                  message:
+                    type: string
+                    description: 提示信息
+                  data:
+                    type: array
+                    description: 元数据表列表
+                    items:
+                      type: object
+                      properties:
+                        schema:
+                          type: string
+                          description: 表所属 schema
+                        name:
+                          type: string
+                          description: 表名
+                        comment:
+                          type: string
+                          description: 表描述

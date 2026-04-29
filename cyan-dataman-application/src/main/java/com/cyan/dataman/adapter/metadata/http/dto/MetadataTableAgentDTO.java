@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
+
 /**
  * 元数据表信息agent传输
  *
@@ -30,4 +31,5 @@ public class MetadataTableAgentDTO {
      * 元数据表描述
      */
     private String comment;
+
 }

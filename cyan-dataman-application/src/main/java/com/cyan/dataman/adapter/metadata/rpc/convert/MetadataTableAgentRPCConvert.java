@@ -2,8 +2,11 @@ package com.cyan.dataman.adapter.metadata.rpc.convert;
 
 import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnAgentDTO;
+import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableAgentDTO;
 import com.cyan.dataman.application.metadata.bo.MetadataColumnBO;
+import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 import java.util.List;
@@ -18,6 +21,13 @@ import java.util.List;
 public interface MetadataTableAgentRPCConvert {
 
     MetadataTableAgentRPCConvert INSTANCE = Mappers.getMapper(MetadataTableAgentRPCConvert.class);
+
+    @Mapping(target = "schema", source = "layerCode")
+    MetadataTableAgentDTO toMetadataTableAgentDTO(MetadataTableBO metadataTableBO);
+
+    default List<MetadataTableAgentDTO> toMetadataTableAgentDTOList(List<MetadataTableBO> metadataTableBOList){
+        return metadataTableBOList.stream().map(this::toMetadataTableAgentDTO).toList();
+    }
 
     MetadataColumnAgentDTO toMetadataColumnAgentDTO(MetadataColumnBO metadataColumnBO);
 
