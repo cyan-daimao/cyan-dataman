@@ -122,7 +122,7 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
                 .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl())
                 .orderByAsc(MetadataColumnDO::getId);
         List<MetadataColumnDO> metadataColumnDOS = metadataColumnMapper.selectList(queryWrapper);
-        List<ColumnValObj> cols = MetadataTableInfraConvert.INSTANCE.toMetadataColumns(metadataColumnDOS);
+        List<ColumnValObj> cols = MetadataColumnInfraConvert.INSTANCE.toColumnValObjList(metadataColumnDOS);
         MetadataTable metadataTable = MetadataTableInfraConvert.INSTANCE.toMetadataTable(metadataTableDO);
         metadataTable.getTable().setColumns(cols);
         return metadataTable;
@@ -171,7 +171,7 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
      * 根据表ID获取字段列表
      */
     @Override
-    public List<MetadataColumnDO> findColumnsByTableId(String tableId) {
+    public List<ColumnValObj> findColumnsByTableId(String tableId) {
         MetadataTableDO metadataTableDO = metadataTableMapper.selectById(tableId);
         if (metadataTableDO == null) {
             return List.of();
@@ -179,7 +179,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
         LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()
                 .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl())
                 .orderByAsc(MetadataColumnDO::getId);
-        return Optional.ofNullable(metadataColumnMapper.selectList(queryWrapper)).orElse(List.of());
+        List<MetadataColumnDO> columnDOs = Optional.ofNullable(metadataColumnMapper.selectList(queryWrapper)).orElse(List.of());
+        return MetadataColumnInfraConvert.INSTANCE.toColumnValObjList(columnDOs);
     }
 
     /**

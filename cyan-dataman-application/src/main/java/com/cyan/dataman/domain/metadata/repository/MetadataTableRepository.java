@@ -5,6 +5,7 @@ import com.cyan.dataman.domain.metadata.MetadataTable;
 import com.cyan.dataman.domain.metadata.query.MetadataTableListQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
+import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 
 import java.util.List;
 
@@ -53,6 +54,6 @@ public interface MetadataTableRepository {
     /**
      * 根据表ID获取字段列表
      */
-    List<com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO> findColumnsByTableId(String tableId);
+    List<ColumnValObj> findColumnsByTableId(String tableId);
 }
 

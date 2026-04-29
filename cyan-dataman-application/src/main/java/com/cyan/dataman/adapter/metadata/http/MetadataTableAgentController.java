@@ -1,6 +1,7 @@
 package com.cyan.dataman.adapter.metadata.http;
 
 import com.cyan.arch.common.api.Response;
+import com.cyan.dataman.adapter.metadata.http.convert.MetadataTableAgentAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableAgentDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
@@ -21,7 +22,7 @@ import java.util.List;
 @RequestMapping("/api/v1/agent/meta/tables")
 @RequiredArgsConstructor
 public class MetadataTableAgentController {
-    private MetadataTableService metadataTableService;
+    private final MetadataTableService metadataTableService;
 
     /**
      * 获取元数据表列表
@@ -30,6 +31,7 @@ public class MetadataTableAgentController {
     @GetMapping
     public Response<List<MetadataTableAgentDTO>> list(){
         List<MetadataTableBO> list = metadataTableService.list(new MetadataTableListQuery());
-        return Response.success();
+        List<MetadataTableAgentDTO> data = MetadataTableAgentAdapterConvert.INSTANCE.toMetadataTableAgentDTOList(list);
+        return Response.success(data);
     }
 }

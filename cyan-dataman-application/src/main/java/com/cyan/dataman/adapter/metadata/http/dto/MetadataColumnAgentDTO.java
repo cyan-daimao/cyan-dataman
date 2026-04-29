@@ -6,28 +6,36 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 /**
- * 元数据表信息agent传输
+ * 元数据表字段DTO
  *
  * @author cy.Y
- * @since v1.0.0
+ * @since 1.0.0
  */
 @AllArgsConstructor
 @NoArgsConstructor
-@Accessors(chain = true)
 @Data
-public class MetadataTableAgentDTO {
-    /**
-     * 元数据表所属schema
-     */
-    private String schema;
+@Accessors(chain = true)
+public class MetadataColumnAgentDTO {
+
 
     /**
-     * 元数据表名称
+     * 字段名
      */
-    private String name;
+    private String col;
 
     /**
-     * 元数据表描述
+     * 数据类型
+     */
+    private String dataType;
+
+    /**
+     * 字段注释
      */
     private String comment;
+
+    /**
+     * 可空
+     */
+    private Boolean nullable;
+
 }

@@ -7,6 +7,7 @@ import com.cyan.arch.common.util.CollUtils;
 import com.cyan.arch.common.util.Convert;
 import com.cyan.dataman.adapter.metadata.http.dto.SubjectTableTreeDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
+import com.cyan.dataman.application.metadata.bo.MetadataColumnBO;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.application.metadata.convert.MetadataTableAppConvert;
@@ -381,20 +382,9 @@ public class MetadataTableServiceImpl implements MetadataTableService {
      * 获取表字段列表
      */
     @Override
-    public List<com.cyan.dataman.application.metadata.bo.MetadataColumnBO> listColumns(String tableId) {
-        List<com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO> columnDOs = metadataTableRepository.findColumnsByTableId(tableId);
-        return columnDOs.stream().map(do_ -> {
-            com.cyan.dataman.application.metadata.bo.MetadataColumnBO bo = new com.cyan.dataman.application.metadata.bo.MetadataColumnBO();
-            bo.setId(do_.getId() != null ? do_.getId().toString() : null);
-            bo.setCol(do_.getCol());
-            bo.setDataType(do_.getDataType() != null ? do_.getDataType().getCode() : null);
-            bo.setComment(do_.getComment());
-            bo.setNullable(do_.getNullable());
-            bo.setSecretLevel(do_.getSecretLevel() != null ? do_.getSecretLevel().getCode() : null);
-            bo.setDefaultValue(do_.getDefaultValue());
-            bo.setAutoIncrement(do_.getAutoIncrement());
-            return bo;
-        }).toList();
+    public List<MetadataColumnBO> listColumns(String tableId) {
+        List<ColumnValObj> columnValObjs = metadataTableRepository.findColumnsByTableId(tableId);
+        return com.cyan.dataman.application.metadata.convert.MetadataColumnAppConvert.INSTANCE.toMetadataColumnBOList(columnValObjs);
     }
 
     /**

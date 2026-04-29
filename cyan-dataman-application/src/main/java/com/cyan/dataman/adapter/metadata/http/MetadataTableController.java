@@ -2,7 +2,9 @@ package com.cyan.dataman.adapter.metadata.http;
 
 import com.cyan.arch.common.api.Page;
 import com.cyan.arch.common.api.Response;
+import com.cyan.dataman.adapter.metadata.http.convert.MetadataColumnAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.convert.MetadataTableAdapterConvert;
+import com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO;
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableDTO;
 import com.cyan.dataman.adapter.metadata.http.dto.SubjectTableTreeDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
@@ -130,20 +132,9 @@ public class MetadataTableController {
      * 获取表字段列表
      */
     @GetMapping("/{id}/columns")
-    public Response<List<com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO>> getTableColumns(@PathVariable String id) {
+    public Response<List<MetadataColumnDTO>> getTableColumns(@PathVariable String id) {
         List<com.cyan.dataman.application.metadata.bo.MetadataColumnBO> columnBOs = metadataTableService.listColumns(id);
-        List<com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO> dtos = columnBOs.stream().map(bo -> {
-            com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO dto = new com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO();
-            dto.setId(bo.getId());
-            dto.setCol(bo.getCol());
-            dto.setDataType(bo.getDataType());
-            dto.setComment(bo.getComment());
-            dto.setNullable(bo.getNullable());
-            dto.setSecretLevel(bo.getSecretLevel());
-            dto.setDefaultValue(bo.getDefaultValue());
-            dto.setAutoIncrement(bo.getAutoIncrement());
-            return dto;
-        }).toList();
+        List<MetadataColumnDTO> dtos = MetadataColumnAdapterConvert.INSTANCE.toMetadataColumnDTOList(columnBOs);
         return Response.success(dtos);
     } // API: ready
 
@@ -154,10 +145,10 @@ public class MetadataTableController {
     public Response<List<TableSnapshotValObj>> snapshot(@PathVariable String fullName) {
         String[] split = fullName.split("\\.");
         String schema, tbl;
-        if (split.length>2){
-           schema = split[1];
-           tbl = split[2];
-        }else{
+        if (split.length > 2) {
+            schema = split[1];
+            tbl = split[2];
+        } else {
             schema = split[0];
             tbl = split[1];
         }
@@ -172,10 +163,10 @@ public class MetadataTableController {
     public Response<Void> rollback(@PathVariable String fullName, @PathVariable String snapshotId) {
         String[] split = fullName.split("\\.");
         String schema, tbl;
-        if (split.length>2){
+        if (split.length > 2) {
             schema = split[1];
             tbl = split[2];
-        }else{
+        } else {
             schema = split[0];
             tbl = split[1];
         }
@@ -183,21 +174,21 @@ public class MetadataTableController {
         return Response.success();
     }
 
-/**
+    /**
      * 快照清理
      */
     @PostMapping("/{fullName}/maintenance")
     public Response<Void> maintenance(@PathVariable String fullName) throws NoSuchTableException, ParseException {
         String[] split = fullName.split("\\.");
         String schema, tbl;
-        if (split.length>2){
+        if (split.length > 2) {
             schema = split[1];
             tbl = split[2];
-        }else{
+        } else {
             schema = split[0];
             tbl = split[1];
         }
-        Table table = Spark3Util.loadIcebergTable(sparkSession, "%s.%s".formatted(schema,tbl));
+        Table table = Spark3Util.loadIcebergTable(sparkSession, "%s.%s".formatted(schema, tbl));
         SparkActions actions = SparkActions.get(sparkSession);
 
         // 保留最近1秒的快照
