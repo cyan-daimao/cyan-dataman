@@ -14,30 +14,41 @@
 | 技术 | 版本/说明 |
 |------|----------|
 | Java | 21 |
-| Spring Boot | 3.x |
+| Spring Boot | 3.3.13 |
 | MyBatis-Plus | 3.5.7 |
 | MapStruct | 自动生成转换代码 |
 | Lombok | 1.18.42（使用 `@Accessors(chain = true)` 链式调用） |
 | Apache Iceberg | 1.10.1 |
-| Apache Spark | 4.0.2（Spark Connect） |
+| Apache Spark | 4.0.2（Spark Connect，Scala 2.13） |
 | Apache Flink | 2.0.1 |
 | Apache Gravitino | 1.1.0 |
 | Nacos | 服务发现与配置中心（`spring.config.import: nacos:`） |
-| MySQL | 8.x |
+| MySQL | 8.x（驱动 `mysql-connector-j` 8.3.0） |
 | Maven | 构建工具，Nexus 私服部署 |
+
+其他关键依赖：
+- `com.opencsv:opencsv` 5.12.0（CSV 解析）
+- `org.apache.poi:poi-ooxml` 5.2.5（Excel 解析）
+- `spring-cloud-starter-openfeign`（已引入，但目前项目中暂无实际 Feign 客户端定义）
+
+内部公共库（`com.cyan` 组织）：
+- `arch-common` — 提供 `Response<T>`、`Page<T>`、`Assert`、`SilentException`、`MapstructConvert`、`UserContextHolder`
+- `arch-base` — Spring Boot 基础 Starter
+- `cyan-employee-login` — 员工登录与上下文拦截
+- `cyan-datagateway-client` — 数据网关客户端
 
 ---
 
 ## 项目结构
 
-本项目是多模块 Maven 项目：
+本项目是多模块 Maven 项目，共 188 个 Java 源文件（application 模块 169 个，client 模块 19 个）：
 
 ```
 cyan-dataman/
 ├── pom.xml                               # 父 POM，定义依赖管理与 Nexus 部署仓库
-├── cyan-dataman-client/                  # 客户端 SDK 模块（枚举、Feign RPC 接口）
+├── cyan-dataman-client/                  # 客户端 SDK 模块（枚举、RPC 接口占位）
 │   └── src/main/java/com/cyan/dataman/
-│       ├── client/                       # Feign 客户端接口（DatamanClient）
+│       ├── MetadataTableClient.java      # 元数据表客户端接口（当前为空接口）
 │       └── enums/                        # 全量枚举定义（DatasourceType、SyncTool、JobStatus 等）
 │
 └── cyan-dataman-application/             # 主应用模块（Spring Boot 可执行 JAR）
@@ -46,7 +57,9 @@ cyan-dataman/
         ├── adapter/                      # 适配层：HTTP 控制器、DTO、AdapterConvert
         │   ├── cdc/http/
         │   ├── ds/http/
-        │   └── metadata/http/
+        │   └── metadata/
+        │       ├── http/                 # 对外 REST API
+        │       └── rpc/                  # 内部 Agent/RPC 接口
         ├── application/                  # 应用层：Service、BO、Cmd、AppConvert、事件/调度
         │   ├── cdc/
         │   ├── ds/
@@ -90,6 +103,12 @@ mvn clean deploy -DskipTests
 ```
 
 **注意**：本项目当前没有任何测试代码，构建时务必使用 `-DskipTests`。
+
+### 构建配置要点
+- 根 POM 使用 `maven-compiler-plugin` 3.8.1，编译参数保留 `-parameters`。
+- `maven-source-plugin` 3.3.0 自动附加源码包（`jar-no-fork`）。
+- application 模块使用 `spring-boot-maven-plugin` 3.3.13 重新打包为可执行 JAR（`cyan-dataman.jar`）。
+- Spring Boot 插件排除了 `org.apache.hive:hive-common`，并设置 `hive-exec` 为解压依赖（解决 Jar 内类加载问题）。
 
 ---
 
@@ -242,12 +261,14 @@ DsConfig find(DsConfigFindQuery query);
 - 使用 `Assert` 工具类（来自 `arch-common`）进行参数校验，不满足立即抛 `SilentException`（静默异常，不输出堆栈）。
 - Controller 层使用 `@Valid` 进行参数校验。
 - 用户信息仅在 Controller 层通过 `UserContextHolder.getCurrentEmployee().getPassport()` 获取，然后透传给其他层。
+- 依赖注入统一使用**构造器注入**。
 
 ---
 
 ## API 规范
 
-- 基础路径：`/api/v1`
+- 对外 REST API 基础路径：`/api/v1`
+- 内部 Agent/RPC 基础路径：`/rpc/v1`（如 `/rpc/v1/agent/meta/tables`）
 - 统一响应格式：`Response<T>`（来自 `com.cyan.arch.common.api.Response`）
 - 分页：`Page<T>`（来自 `com.cyan.arch.common.api.Page`）
 - RESTful 风格示例：
@@ -294,11 +315,18 @@ CDC 同步：源数据库 -> Iceberg。
 
 配置文件位于 `cyan-dataman-application/src/main/resources/`：
 
-- `bootstrap.yml` — 基础配置（应用名、profile、监控端点暴露）
+- `bootstrap.yml` — 基础配置（应用名、profile、监控端点暴露、文件上传限制 100MB）
 - `bootstrap-dev.yml` — 开发环境配置（Nacos、MySQL、Gravitino、RustFS/S3、Iceberg REST、Debezium、Kafka 等）
-- `bootstrap-pre.yml` — 预发环境配置
-- `bootstrap-prod.yml` — 生产环境配置
-- `db/migration/` — SQL 建表脚本（目前仅有 `V2__create_cdc_tables.sql`）
+- `bootstrap-pre.yml` — 预发环境配置（使用 K8s 内部 Service DNS）
+- `bootstrap-prod.yml` — 生产环境配置（使用 K8s 内部 Service DNS）
+- `core-site.xml` — 覆盖 Hadoop 3.4.x S3A 超时配置，避免 `NumberFormatException`
+
+> 注：目前仓库中**没有** `db/migration/` 目录及 Flyway 迁移脚本，数据库表需通过其他方式维护。
+
+### 配置隔离说明
+- 开发环境（`dev`）直接连接 VM IP（`10.0.0.2`）。
+- 预发/生产环境（`pre`/`prod`）连接 K8s 集群内部 DNS（如 `gravitino.gravitino.svc.cluster.local`）。
+- Flink 在 dev 为 `local` 模式，在 pre/prod 为 `remote` 模式。
 
 ---
 
@@ -313,6 +341,7 @@ CDC 同步：源数据库 -> Iceberg。
 - `Assert` — 断言工具
 - `SilentException` — 静默异常（不输出堆栈）
 - `MapstructConvert` — MapStruct 通用转换器（如 String/Long 互转）
+- `UserContextHolder` — 当前登录员工上下文
 
 ### Maven 私服
 
@@ -326,7 +355,9 @@ CDC 同步：源数据库 -> Iceberg。
 
 ## 测试
 
-**本项目当前没有任何测试代码。** 新增功能时如需补充测试，建议使用 JUnit 5 + Mockito，遵循项目现有包结构放置于 `src/test/java` 下。
+**本项目当前没有任何测试代码。** `cyan-dataman-application/src/test` 与 `cyan-dataman-client/src/test` 目录均为空。
+
+新增功能时如需补充测试，建议使用 JUnit 5 + Mockito，遵循项目现有包结构放置于 `src/test/java` 下。
 
 ---
 
@@ -338,3 +369,4 @@ CDC 同步：源数据库 -> Iceberg。
 - **监控端点**：`bootstrap.yml` 中 `management.endpoints.web.exposure.include: "*"` 暴露了所有 Actuator 端点，生产环境应收缩暴露范围。
 - **主题层级限制**：元数据主题最多支持 3 级，超出应在 adapter 层拦截。
 - **CDC 任务调度**：Spark/Flink 任务涉及实际计算资源调度，配置变更时需评估对集群的影响。
+- **Hadoop S3A 兼容**：`core-site.xml` 覆盖了 Hadoop 3.4.x 中 duration 格式的 S3A 超时配置，若升级 Hadoop 版本需重新验证。
