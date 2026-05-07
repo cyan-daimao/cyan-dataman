@@ -1,6 +1,6 @@
 package com.cyan.dataman.application.metadata;
 
-import com.cyan.dataman.adapter.metadata.http.dto.TableRelationDTO;
+import com.cyan.dataman.client.table.dto.TableRelationDTO;
 import com.cyan.dataman.application.metadata.cmd.CreateRelationCmd;
 
 import java.util.List;

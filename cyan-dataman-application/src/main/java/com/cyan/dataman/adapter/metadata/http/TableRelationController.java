@@ -1,9 +1,9 @@
 package com.cyan.dataman.adapter.metadata.http;
 
 import com.cyan.arch.common.api.Response;
-import com.cyan.dataman.adapter.metadata.http.dto.JoinPathsRequestDTO;
-import com.cyan.dataman.adapter.metadata.http.dto.TableRelationDTO;
-import com.cyan.dataman.adapter.metadata.http.dto.TableRelationsResultDTO;
+import com.cyan.dataman.client.table.dto.JoinPathsRequestDTO;
+import com.cyan.dataman.client.table.dto.TableRelationDTO;
+import com.cyan.dataman.client.table.dto.TableRelationsResultDTO;
 import com.cyan.dataman.application.metadata.TableRelationService;
 import com.cyan.dataman.application.metadata.cmd.CreateRelationCmd;
 import com.cyan.employee.login.filter.UserContextHolder;

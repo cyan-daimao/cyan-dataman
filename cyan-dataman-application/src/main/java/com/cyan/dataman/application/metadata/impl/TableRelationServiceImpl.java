@@ -1,6 +1,6 @@
 package com.cyan.dataman.application.metadata.impl;
 
-import com.cyan.dataman.adapter.metadata.http.dto.TableRelationDTO;
+import com.cyan.dataman.client.table.dto.TableRelationDTO;
 import com.cyan.dataman.application.metadata.TableRelationService;
 import com.cyan.dataman.application.metadata.cmd.CreateRelationCmd;
 import com.cyan.dataman.domain.metadata.repository.TableRelationRepository;

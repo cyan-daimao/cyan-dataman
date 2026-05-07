@@ -1,4 +1,4 @@
-package com.cyan.dataman.adapter.metadata.http.dto;
+package com.cyan.dataman.client.table.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
