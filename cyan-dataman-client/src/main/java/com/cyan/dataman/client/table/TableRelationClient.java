@@ -59,6 +59,10 @@ public interface TableRelationClient {
                 .setDimensionTables(dimTableRefs.stream()
                         .map(ref -> {
                             String[] parts = ref.split("\\.");
+                            if (parts.length != 3) {
+                                throw new IllegalArgumentException(
+                                        "维度表引用格式错误，期望 catalog.schema.table 或 schema.table，实际: " + ref);
+                            }
                             return new JoinPathsRequestDTO.TableRefDTO(parts[0], parts[1], parts[2]);
                         })
                         .toList());
