@@ -96,6 +96,12 @@ public class MetadataTableRelationDO {
     private String createdBy;
 
     /**
+     * 创建人
+     */
+    @TableField("updated_by")
+    private String updatedBy;
+
+    /**
      * 创建时间
      */
     @TableField("created_at")
