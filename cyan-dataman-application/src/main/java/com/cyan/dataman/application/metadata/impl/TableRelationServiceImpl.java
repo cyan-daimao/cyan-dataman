@@ -62,6 +62,7 @@ public class TableRelationServiceImpl implements TableRelationService {
         relation.setJoinType(cmd.getJoinType());
         relation.setDescription(cmd.getDescription());
         relation.setCreatedBy(createdBy);
+        relation.setUpdatedBy(createdBy);
         relation.setCreatedAt(LocalDateTime.now());
         relation.setUpdatedAt(LocalDateTime.now());
 
