@@ -1,10 +1,13 @@
 package com.cyan.dataman.application.metadata.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cyan.dataman.client.table.dto.TableRelationDTO;
 import com.cyan.dataman.application.metadata.TableRelationService;
 import com.cyan.dataman.application.metadata.cmd.CreateRelationCmd;
 import com.cyan.dataman.domain.metadata.repository.TableRelationRepository;
+import com.cyan.dataman.infra.persistence.metadata.dos.MetadataTableDO;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataTableRelationDO;
+import com.cyan.dataman.infra.persistence.metadata.mappers.MetadataTableMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,9 +24,12 @@ import java.util.*;
 public class TableRelationServiceImpl implements TableRelationService {
 
     private final TableRelationRepository tableRelationRepository;
+    private final MetadataTableMapper metadataTableMapper;
 
-    public TableRelationServiceImpl(TableRelationRepository tableRelationRepository) {
+    public TableRelationServiceImpl(TableRelationRepository tableRelationRepository,
+                                    MetadataTableMapper metadataTableMapper) {
         this.tableRelationRepository = tableRelationRepository;
+        this.metadataTableMapper = metadataTableMapper;
     }
 
     /**
@@ -171,6 +177,25 @@ public class TableRelationServiceImpl implements TableRelationService {
         dto.setCreatedBy(relation.getCreatedBy());
         dto.setCreatedAt(relation.getCreatedAt());
         dto.setUpdatedAt(relation.getUpdatedAt());
+        dto.setSourceTableComment(getTableComment(relation.getSourceCatalog(), relation.getSourceSchema(), relation.getSourceTable()));
+        dto.setTargetTableComment(getTableComment(relation.getTargetCatalog(), relation.getTargetSchema(), relation.getTargetTable()));
         return dto;
+    }
+
+    /**
+     * 根据 catalog + schema + table 查询表注释
+     */
+    private String getTableComment(String catalog, String schema, String table) {
+        try {
+            LambdaQueryWrapper<MetadataTableDO> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(MetadataTableDO::getDataCatalog, catalog)
+                    .eq(MetadataTableDO::getDataSchema, schema)
+                    .eq(MetadataTableDO::getTbl, table)
+                    .last("limit 1");
+            MetadataTableDO metadataTableDO = metadataTableMapper.selectOne(wrapper);
+            return metadataTableDO != null ? metadataTableDO.getComment() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

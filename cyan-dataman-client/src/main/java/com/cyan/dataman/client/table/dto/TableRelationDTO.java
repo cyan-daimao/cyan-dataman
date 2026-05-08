@@ -76,6 +76,16 @@ public class TableRelationDTO {
     private String description;
 
     /**
+     * 源表注释
+     */
+    private String sourceTableComment;
+
+    /**
+     * 目标表注释
+     */
+    private String targetTableComment;
+
+    /**
      * 创建人
      */
     private String createdBy;
