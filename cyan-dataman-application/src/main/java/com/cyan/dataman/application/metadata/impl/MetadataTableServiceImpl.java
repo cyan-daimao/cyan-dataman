@@ -362,7 +362,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
             List<Snapshot> snapshots = new ArrayList<>();
             if (CollUtils.isNotEmpty((Collection<?>) table.snapshots())) {
                 table.snapshots().forEach(snapshots::add);
-                snapshots.sort((o1, o2) -> Math.toIntExact(o2.timestampMillis() - o1.timestampMillis()));
+                snapshots.sort((o1, o2) -> Long.compare(o2.timestampMillis(), o1.timestampMillis()));
                 return snapshots.stream().map(snapshot -> new TableSnapshotValObj()
                         .setSnapshotId(Convert.toStr(snapshot.snapshotId()))
                         .setCreatedAt(LocalDateTime.ofInstant(Instant.ofEpochMilli(snapshot.timestampMillis()), ZoneId.systemDefault()))
