@@ -205,16 +205,58 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                 .stream()
                 .collect(Collectors.toMap(ColumnValObj::getName, Function.identity()));
 
-        // 删除不存在的字段
+        // 分离：旧字段中"消失"的、新字段中"新增"的、以及"同名"的
+        Set<String> removedOldNames = new HashSet<>();
+        Set<String> addedNewNames = new HashSet<>();
         for (String oldColName : oldColumns.keySet()) {
             if (!newColumns.containsKey(oldColName)) {
-                changes.add(TableChange.deleteColumn(new String[]{oldColName}, true));
+                removedOldNames.add(oldColName);
+            }
+        }
+        for (String newColName : newColumns.keySet()) {
+            if (!oldColumns.containsKey(newColName)) {
+                addedNewNames.add(newColName);
             }
         }
 
-        // 添加新字段或更新字段
+        // 检测重命名：旧字段除名字外其他属性（类型、nullable、注释）都匹配某个新字段
+        Map<String, String> renameMap = new HashMap<>(); // oldName -> newName
+        for (String oldColName : new HashSet<>(removedOldNames)) {
+            org.apache.gravitino.rel.Column oldCol = oldColumns.get(oldColName);
+            Type oldType = oldCol.dataType();
+            Boolean oldNullable = oldCol.nullable();
+            String oldComment = oldCol.comment() != null ? oldCol.comment() : "";
+
+            for (String newColName : new HashSet<>(addedNewNames)) {
+                ColumnValObj newCol = newColumns.get(newColName);
+                Type newType = toGravitinoType(newCol.getColumnDataType(), newCol.getPrecision(), newCol.getScale());
+                Boolean newNullable = newCol.getNullable() != null ? newCol.getNullable() : true;
+                String newComment = newCol.getComment() != null ? newCol.getComment() : "";
+
+                if (Objects.equals(oldType, newType)
+                        && Objects.equals(oldNullable, newNullable)
+                        && Objects.equals(oldComment, newComment)) {
+                    renameMap.put(oldColName, newColName);
+                    removedOldNames.remove(oldColName);
+                    addedNewNames.remove(newColName);
+                    break;
+                }
+            }
+        }
+
+        // 执行重命名
+        for (Map.Entry<String, String> entry : renameMap.entrySet()) {
+            changes.add(TableChange.renameColumn(new String[]{entry.getKey()}, entry.getValue()));
+        }
+
+        // 删除真正不存在的字段
+        for (String oldColName : removedOldNames) {
+            changes.add(TableChange.deleteColumn(new String[]{oldColName}, true));
+        }
+
+        // 添加真正的新字段或更新字段
         for (ColumnValObj newCol : Optional.ofNullable(newTable.getTable().getColumns()).orElse(List.of())) {
-            if (!oldColumns.containsKey(newCol.getName())) {
+            if (addedNewNames.contains(newCol.getName())) {
                 // 添加新字段
                 changes.add(TableChange.addColumn(
                         new String[]{newCol.getName()},
@@ -222,15 +264,19 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                         newCol.getComment(),
                         true
                 ));
-            } else {
-                // 更新字段注释
+            } else if (!renameMap.containsValue(newCol.getName())) {
+                // 更新字段注释（重命名字段已在上面处理，此处跳过）
                 org.apache.gravitino.rel.Column oldCol = oldColumns.get(newCol.getName());
-                if (!oldCol.comment().equals(newCol.getComment())) {
-                    changes.add(TableChange.updateColumnComment(new String[]{newCol.getName()}, newCol.getComment()));
-                }
-                // 更新字段可空性
-                if (oldCol.nullable() != newCol.getNullable()) {
-                    changes.add(TableChange.updateColumnNullability(new String[]{newCol.getName()}, newCol.getNullable()));
+                if (oldCol != null) {
+                    String oldComment = oldCol.comment() != null ? oldCol.comment() : "";
+                    String newComment = newCol.getComment() != null ? newCol.getComment() : "";
+                    if (!oldComment.equals(newComment)) {
+                        changes.add(TableChange.updateColumnComment(new String[]{newCol.getName()}, newCol.getComment()));
+                    }
+                    // 更新字段可空性
+                    if (oldCol.nullable() != newCol.getNullable()) {
+                        changes.add(TableChange.updateColumnNullability(new String[]{newCol.getName()}, newCol.getNullable()));
+                    }
                 }
             }
         }
