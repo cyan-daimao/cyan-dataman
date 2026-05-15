@@ -40,7 +40,9 @@ public class DsJdbcUtil {
         try {
             String driverClass = getDriverClass(dsConfig.getDatasourceType());
             Class.forName(driverClass);
-            Connection ignored = getConnection(dsConfig);
+            try (Connection conn = getConnection(dsConfig)) {
+                // 连接成功即关闭，验证连通性即可
+            }
         } catch (Exception e) {
             throw new SilentException("数据源连接失败: " + e.getMessage());
         }
