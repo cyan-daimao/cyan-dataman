@@ -38,6 +38,12 @@ public class CdcFlinkJobDO {
     private String dsName;
 
     /**
+     * 主题编码（ODS 表前缀）
+     */
+    @TableField("subject_code")
+    private String subjectCode;
+
+    /**
      * flink的job id
      */
     @TableField("flink_job_id")

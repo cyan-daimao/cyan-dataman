@@ -10,42 +10,27 @@ import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
 import com.cyan.dataman.domain.cdc.repository.CdcFlinkJobRepository;
 import com.cyan.dataman.enums.JobStatus;
 import com.cyan.dataman.enums.SyncTool;
-import com.cyan.dataman.infra.config.FlinkConfig;
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.table.api.TableResult;
-import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * CDC Flink 同步服务实现（Flink SQL 版本）
+ * CDC Flink 同步服务实现（Application 模式）
  * <p>
- * 架构：一数据源一 Flink SQL 作业，通过 Kafka topic pattern 消费该数据源下所有 topic，
- * 将完整的 Debezium JSON 写入统一的 ODS Iceberg 表。
- * <p>
- * ODS 表固定 Schema：
- * - _raw_json STRING    -- 完整 Debezium JSON
- * - _op STRING          -- 操作类型（c/u/d）
- * - _ts BIGINT          -- 数据变更时间戳
- * - _db STRING          -- 来源库名
- * - _table STRING       -- 来源表名
- * - _ingestion_time TIMESTAMP_LTZ(3)  -- 摄入时间
- * <p>
- * 支持 local 和 remote 模式：
- * - local: 在 Spring Boot 进程内本地运行 Flink 作业
- * - remote: 通过 RemoteStreamEnvironment 提交到远端 Flink 集群
+ * 通过 Flink Kubernetes Operator 管理 FlinkDeployment CR，
+ * 每个数据源对应一个独立的 Flink Application。
+ * SQL 脚本通过 ConfigMap 挂载到 Pod，由 SqlRunner 执行。
  *
  * @author cy.Y
  * @since 1.0.0
@@ -53,9 +38,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Service
 public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
-
-    @Value("${flink.rest.url:localhost:6123}")
-    private String flinkRestUrl;
 
     @Value("${kafka.url:kafka:9092}")
     private String kafkaBootstrapServers;
@@ -72,33 +54,25 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     @Value("${rustfs.secretKey:rustfsadmin}")
     private String rustfsSecretKey;
 
-    /**
-     * 数据源名称 -> 运行中的 Flink 作业 ID
-     */
-    private final Map<String, String> dsNameToFlinkJobId = new ConcurrentHashMap<>();
+    @Value("${flink.image:harbor.cyan.com/cyan/flink-sql:2.0.1}")
+    private String flinkImage;
+
+    @Value("${flink.namespace:flink}")
+    private String flinkNamespace;
 
     private final CdcConfigRepository cdcConfigRepository;
     private final CdcFlinkJobRepository cdcFlinkJobRepository;
-    private final FlinkConfig flinkConfig;
-    private final HttpClient httpClient;
+    private final KubernetesClient k8sClient;
 
-    public CdcFlinkSyncServiceImpl(FlinkConfig flinkConfig,
-                                   CdcConfigRepository cdcConfigRepository,
+    public CdcFlinkSyncServiceImpl(CdcConfigRepository cdcConfigRepository,
                                    CdcFlinkJobRepository cdcFlinkJobRepository) {
-        this.flinkConfig = flinkConfig;
         this.cdcConfigRepository = cdcConfigRepository;
         this.cdcFlinkJobRepository = cdcFlinkJobRepository;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
+        this.k8sClient = new KubernetesClientBuilder().build();
     }
 
     @Override
     public void startFlinkSyncJob() {
-        // 从数据库恢复已运行作业的映射
-        recoverRunningJobs();
-
-        // 对没有运行中作业的数据源提交新作业
         List<CdcConfig> enabledConfigs = getEnabledFlinkConfigs();
         Map<String, List<CdcConfig>> configsByDsName = new HashMap<>();
         for (CdcConfig config : enabledConfigs) {
@@ -107,22 +81,27 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
         for (Map.Entry<String, List<CdcConfig>> entry : configsByDsName.entrySet()) {
             String dsName = entry.getKey();
-            if (dsNameToFlinkJobId.containsKey(dsName)) {
-                log.info("数据源 {} 已有运行中的 Flink 作业，跳过提交", dsName);
-                continue;
-            }
             CdcConfig config = entry.getValue().getFirst();
             String subjectCode = config.getSubjectCode();
-            CompletableFuture.runAsync(() -> submitFlinkSqlJob(dsName, subjectCode, config));
+            String deploymentName = getDeploymentName(dsName, subjectCode);
+
+            // 检查 FlinkDeployment 是否已存在
+            if (getFlinkDeployment(deploymentName) != null) {
+                log.info("数据源 {} 已有 FlinkDeployment，跳过提交", dsName);
+                continue;
+            }
+            CompletableFuture.runAsync(() -> submitFlinkApplication(dsName, subjectCode, config));
         }
     }
 
     @Override
     public void stopFlinkSyncJob() {
-        for (Map.Entry<String, String> entry : dsNameToFlinkJobId.entrySet()) {
-            cancelFlinkJob(entry.getValue());
+        List<CdcFlinkJob> runningJobs = cdcFlinkJobRepository.findAllRunning();
+        for (CdcFlinkJob job : runningJobs) {
+            String deploymentName = getDeploymentName(job.getDsName(), job.getSubjectCode());
+            deleteFlinkApplication(deploymentName);
+            log.info("已删除 FlinkDeployment: {}", deploymentName);
         }
-        log.info("已停止所有 Flink CDC 同步作业");
     }
 
     @Override
@@ -138,12 +117,12 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
         String dsName = config.getDsName();
         String subjectCode = config.getSubjectCode();
+        String deploymentName = getDeploymentName(dsName, subjectCode);
 
-        // 只有该数据源没有运行中的 Flink 作业时才提交新作业
-        if (!dsNameToFlinkJobId.containsKey(dsName)) {
-            CompletableFuture.runAsync(() -> submitFlinkSqlJob(dsName, subjectCode, config));
+        if (getFlinkDeployment(deploymentName) == null) {
+            CompletableFuture.runAsync(() -> submitFlinkApplication(dsName, subjectCode, config));
         } else {
-            log.info("数据源 {} 已有运行中的 Flink 作业，新表数据将由 Kafka topic pattern 自动消费, table={}.{}",
+            log.info("数据源 {} 已有 FlinkDeployment，新表数据将由 Kafka topic pattern 自动消费, table={}.{}",
                     dsName, config.getDbName(), config.getTableName());
         }
     }
@@ -158,21 +137,20 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         }
 
         String dsName = config.getDsName();
+        String subjectCode = config.getSubjectCode();
         log.info("已禁用 CDC 同步, dsName={}, table={}.{}",
                 dsName, config.getDbName(), config.getTableName());
 
-        // 检查该数据源下是否还有启用的表，没有则停止 Flink 作业
+        // 检查该数据源下是否还有启用的表，没有则删除 FlinkDeployment
         List<CdcConfig> remainingEnabled = cdcConfigRepository.list(
                 new CdcConfigListQuery().setDsName(dsName)
                         .setEnabled(true)
                         .setSyncTool(SyncTool.FLINK));
 
         if (remainingEnabled.isEmpty()) {
-            String flinkJobId = dsNameToFlinkJobId.remove(dsName);
-            if (flinkJobId != null) {
-                cancelFlinkJob(flinkJobId);
-                log.info("数据源 {} 没有启用的表，已停止 Flink 作业", dsName);
-            }
+            String deploymentName = getDeploymentName(dsName, subjectCode);
+            deleteFlinkApplication(deploymentName);
+            log.info("数据源 {} 没有启用的表，已删除 FlinkDeployment", dsName);
         }
     }
 
@@ -184,85 +162,65 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             return;
         }
 
-        if ("remote".equalsIgnoreCase(flinkConfig.getFlinkMode())) {
-            cancelRemoteFlinkJob(flinkJobId);
-        }
+        String deploymentName = getDeploymentName(flinkJob.getDsName(), flinkJob.getSubjectCode());
+        deleteFlinkApplication(deploymentName);
 
         flinkJob.setStatus(JobStatus.STOPPED);
         flinkJob.setUpdatedAt(LocalDateTime.now());
         flinkJob.update(cdcFlinkJobRepository);
 
-        dsNameToFlinkJobId.entrySet().removeIf(entry -> entry.getValue().equals(flinkJobId));
         log.info("已取消 Flink CDC 作业，flinkJobId: {}", flinkJobId);
     }
 
     @Override
     @Scheduled(fixedDelay = 30000)
     public void refreshSyncStatus() {
-        if ("remote".equalsIgnoreCase(flinkConfig.getFlinkMode())) {
-            List<CdcFlinkJob> runningJobs = cdcFlinkJobRepository.findAllRunning();
-
-            for (CdcFlinkJob job : runningJobs) {
-                try {
-                    String jobUrl = "http://" + flinkRestUrl + "/jobs/" + job.getFlinkJobId();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create(jobUrl))
-                            .GET()
-                            .timeout(Duration.ofSeconds(5))
-                            .build();
-
-                    HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                    if (response.statusCode() == 404) {
-                        job.setStatus(JobStatus.STOPPED);
-                        job.setUpdatedAt(LocalDateTime.now());
-                        job.update(cdcFlinkJobRepository);
-                        dsNameToFlinkJobId.entrySet().removeIf(e -> e.getValue().equals(job.getFlinkJobId()));
-                        log.info("Flink 作业已结束，更新状态，flinkJobId: {}", job.getFlinkJobId());
-                    }
-                } catch (Exception e) {
-                    log.debug("检查 Flink 作业状态失败，flinkJobId: {}, error: {}", job.getFlinkJobId(), e.getMessage());
+        List<CdcFlinkJob> runningJobs = cdcFlinkJobRepository.findAllRunning();
+        for (CdcFlinkJob job : runningJobs) {
+            try {
+                String deploymentName = getDeploymentName(job.getDsName(), job.getSubjectCode());
+                GenericKubernetesResource deployment = getFlinkDeployment(deploymentName);
+                if (deployment == null) {
+                    job.setStatus(JobStatus.STOPPED);
+                    job.setUpdatedAt(LocalDateTime.now());
+                    job.update(cdcFlinkJobRepository);
+                    log.info("FlinkDeployment 已删除，更新状态: {}", deploymentName);
                 }
+            } catch (Exception e) {
+                log.debug("检查 FlinkDeployment 状态失败: {}, error: {}", job.getFlinkJobId(), e.getMessage());
             }
         }
     }
 
-    // ==================== SQL 生成与作业提交 ====================
+    @Override
+    public CdcFlinkJob findByDsName(String dsName) {
+        return cdcFlinkJobRepository.findByDsName(dsName);
+    }
 
-    /**
-     * 生成 Flink SQL 并提交作业
-     */
-    private void submitFlinkSqlJob(String dsName, String subjectCode, CdcConfig config) {
+    // ==================== Application 模式作业提交 ====================
+
+    private void submitFlinkApplication(String dsName, String subjectCode, CdcConfig config) {
         String sql = buildFlinkSql(dsName, subjectCode);
-        log.info("生成 Flink SQL，dsName={}\n{}", dsName, sql);
-
-        StreamExecutionEnvironment env = flinkConfig.createStreamExecutionEnvironment();
-        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+        String deploymentName = getDeploymentName(dsName, subjectCode);
+        String configMapName = getConfigMapName(dsName, subjectCode);
 
         try {
-            // 执行 Kafka Source DDL
-            String kafkaDdl = extractStatement(sql, "CREATE TABLE kafka_cdc_" + dsName);
-            tableEnv.executeSql(kafkaDdl);
-            log.info("Kafka Source 表创建成功，dsName={}", dsName);
+            // 1. 创建/更新 ConfigMap（包含 SQL 脚本）
+            createOrUpdateConfigMap(configMapName, sql);
+            log.info("ConfigMap 创建成功: {}", configMapName);
 
-            // 执行 Iceberg Sink DDL
-            String safeSubject = subjectCode.replaceAll("[^a-zA-Z0-9_]", "_");
-            String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + dsName.replaceAll("[^a-zA-Z0-9_]", "_");
-            String icebergDdl = extractStatement(sql, "CREATE TABLE " + odsTableName);
-            tableEnv.executeSql(icebergDdl);
-            log.info("Iceberg Sink 表创建成功，dsName={}", dsName);
+            // 2. 创建 FlinkDeployment CR
+            String yaml = buildFlinkDeploymentYaml(deploymentName, configMapName, dsName, subjectCode);
+            k8sClient.load(new java.io.ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)))
+                    .inNamespace(flinkNamespace)
+                    .createOrReplace();
+            log.info("FlinkDeployment 创建成功: {}", deploymentName);
 
-            // 执行 INSERT DML，获取 JobClient
-            String insertDml = extractStatement(sql, "INSERT INTO " + odsTableName);
-            TableResult result = tableEnv.executeSql(insertDml);
-
-            String realJobId = result.getJobClient()
-                    .map(client -> client.getJobID().toString())
-                    .orElseThrow(() -> new RuntimeException("无法获取 Flink Job ID，可能作业提交失败"));
-
-            // 保存作业记录
+            // 3. 保存作业记录
             CdcFlinkJob flinkJob = new CdcFlinkJob()
                     .setDsName(dsName)
-                    .setFlinkJobId(realJobId)
+                    .setSubjectCode(subjectCode)
+                    .setFlinkJobId(deploymentName)  // Application 模式用 deploymentName 作为标识
                     .setFlinkSql(sql)
                     .setEnabled(true)
                     .setStatus(JobStatus.RUNNING)
@@ -272,15 +230,13 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     .setUpdateBy(config.getUpdateBy());
             flinkJob.save(cdcFlinkJobRepository);
 
-            dsNameToFlinkJobId.put(dsName, realJobId);
-            log.info("Flink SQL CDC 作业已提交, mode={}, dsName={}, flinkJobId={}",
-                    flinkConfig.getFlinkMode(), dsName, realJobId);
+            log.info("Flink Application CDC 作业已提交, dsName={}, deploymentName={}", dsName, deploymentName);
         } catch (Exception e) {
-            log.error("Flink SQL CDC 作业提交失败, mode={}, dsName={}", flinkConfig.getFlinkMode(), dsName, e);
+            log.error("Flink Application CDC 作业提交失败, dsName={}", dsName, e);
 
-            // 保存失败记录
             CdcFlinkJob failedJob = new CdcFlinkJob()
                     .setDsName(dsName)
+                    .setSubjectCode(subjectCode)
                     .setFlinkSql(sql)
                     .setEnabled(false)
                     .setStatus(JobStatus.FAILED)
@@ -293,9 +249,113 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         }
     }
 
-    /**
-     * 构建 Flink SQL 文本
-     */
+    private void deleteFlinkApplication(String deploymentName) {
+        try {
+            k8sClient.genericKubernetesResources("flink.apache.org/v1beta1", "FlinkDeployment")
+                    .inNamespace(flinkNamespace)
+                    .withName(deploymentName)
+                    .delete();
+
+            // 同时删除关联的 ConfigMap
+            String configMapName = deploymentName + "-sql";
+            k8sClient.configMaps().inNamespace(flinkNamespace).withName(configMapName).delete();
+        } catch (Exception e) {
+            log.warn("删除 FlinkDeployment 失败: {}, error: {}", deploymentName, e.getMessage());
+        }
+    }
+
+    private GenericKubernetesResource getFlinkDeployment(String name) {
+        try {
+            return k8sClient.genericKubernetesResources("flink.apache.org/v1beta1", "FlinkDeployment")
+                    .inNamespace(flinkNamespace)
+                    .withName(name)
+                    .get();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void createOrUpdateConfigMap(String name, String sql) {
+        ConfigMap configMap = new ConfigMapBuilder()
+                .withNewMetadata()
+                .withName(name)
+                .withNamespace(flinkNamespace)
+                .endMetadata()
+                .addToData("job.sql", sql)
+                .build();
+        k8sClient.configMaps().inNamespace(flinkNamespace).createOrReplace(configMap);
+    }
+
+    // ==================== YAML 生成 ====================
+
+    private String buildFlinkDeploymentYaml(String deploymentName, String configMapName,
+                                            String dsName, String subjectCode) {
+        String safeDsName = dsName.replaceAll("[^a-zA-Z0-9_]", "_");
+        return String.format("""
+                apiVersion: flink.apache.org/v1beta1
+                kind: FlinkDeployment
+                metadata:
+                  name: %s
+                  namespace: %s
+                spec:
+                  image: %s
+                  flinkVersion: v2.0
+                  jobManager:
+                    resource:
+                      memory: "2g"
+                      cpu: 1
+                  taskManager:
+                    resource:
+                      memory: "4g"
+                      cpu: 2
+                  flinkConfiguration:
+                    state.backend: rocksdb
+                    state.checkpoints.dir: s3://flink/checkpoints/cyan-dataman
+                    state.savepoints.dir: s3://flink/savepoints/cyan-dataman
+                    execution.checkpointing.interval: 60s
+                    execution.checkpointing.timeout: 600s
+                    execution.checkpointing.max-concurrent-checkpoints: 1
+                    execution.checkpointing.min-pause: 500ms
+                    execution.checkpointing.mode: EXACTLY_ONCE
+                    s3.endpoint: %s
+                    s3.access-key: %s
+                    s3.secret-key: %s
+                    s3.path.style.access: true
+                  job:
+                    jarURI: local:///opt/flink/usrlib/sql-runner.jar
+                    entryClass: com.cyan.dataman.infra.flink.SqlRunner
+                    args:
+                      - "/opt/flink/sql/job.sql"
+                    parallelism: 2
+                    upgradeMode: stateful
+                    state: running
+                  podTemplate:
+                    spec:
+                      containers:
+                        - name: flink-main-container
+                          volumeMounts:
+                            - name: sql-volume
+                              mountPath: /opt/flink/sql
+                      volumes:
+                        - name: sql-volume
+                          configMap:
+                            name: %s
+                """,
+                deploymentName, flinkNamespace, flinkImage,
+                rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
+                configMapName);
+    }
+
+    private String getDeploymentName(String dsName, String subjectCode) {
+        return "cdc-" + dsName.replaceAll("[^a-zA-Z0-9-]", "-") + "-" + subjectCode;
+    }
+
+    private String getConfigMapName(String dsName, String subjectCode) {
+        return getDeploymentName(dsName, subjectCode) + "-sql";
+    }
+
+    // ==================== SQL 生成 ====================
+
     private String buildFlinkSql(String dsName, String subjectCode) {
         String safeDsName = dsName.replaceAll("[^a-zA-Z0-9_]", "_");
         String safeSubject = subjectCode.replaceAll("[^a-zA-Z0-9_]", "_");
@@ -353,103 +413,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 odsTableName, safeDsName);
     }
 
-    /**
-     * 从完整 SQL 文本中提取单条语句
-     */
-    private String extractStatement(String fullSql, String statementPrefix) {
-        String[] statements = fullSql.split(";");
-        for (String stmt : statements) {
-            String trimmed = stmt.trim();
-            if (trimmed.toUpperCase().startsWith(statementPrefix.toUpperCase()) ||
-                trimmed.toUpperCase().contains(statementPrefix.toUpperCase())) {
-                return trimmed;
-            }
-        }
-        throw new RuntimeException("SQL 中未找到以 '" + statementPrefix + "' 开头的语句");
-    }
+    // ==================== 工具方法 ====================
 
-    // ==================== 恢复与取消 ====================
-
-    /**
-     * 从数据库恢复已运行作业的映射（服务重启后调用）
-     */
-    private void recoverRunningJobs() {
-        List<CdcFlinkJob> runningJobs = cdcFlinkJobRepository.findAllRunning();
-        for (CdcFlinkJob job : runningJobs) {
-            String dsName = job.getDsName();
-            if (dsName == null) {
-                log.warn("恢复作业映射跳过: flinkJobId={} 的 dsName 为空", job.getFlinkJobId());
-                continue;
-            }
-
-            // remote 模式下校验作业是否仍在运行
-            if ("remote".equalsIgnoreCase(flinkConfig.getFlinkMode())) {
-                if (!checkRemoteJobRunning(job.getFlinkJobId())) {
-                    job.setStatus(JobStatus.STOPPED);
-                    job.setUpdatedAt(LocalDateTime.now());
-                    job.update(cdcFlinkJobRepository);
-                    log.info("远端 Flink 作业已停止，更新状态, flinkJobId={}", job.getFlinkJobId());
-                    continue;
-                }
-            }
-
-            dsNameToFlinkJobId.putIfAbsent(dsName, job.getFlinkJobId());
-            log.info("恢复作业映射: dsName={}, flinkJobId={}", dsName, job.getFlinkJobId());
-        }
-        log.info("作业映射恢复完成, 共 {} 个运行中作业", dsNameToFlinkJobId.size());
-    }
-
-    /**
-     * 检查远端 Flink 作业是否仍在运行
-     */
-    private boolean checkRemoteJobRunning(String flinkJobId) {
-        try {
-            String url = "http://" + flinkRestUrl + "/jobs/" + flinkJobId;
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .GET()
-                    .timeout(Duration.ofSeconds(5))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            return response.statusCode() == 200;
-        } catch (Exception e) {
-            log.warn("检查远端作业状态失败, flinkJobId={}, error={}", flinkJobId, e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * 远程模式：通过 REST API 取消作业
-     */
-    private void cancelRemoteFlinkJob(String flinkJobId) {
-        try {
-            String cancelUrl = "http://" + flinkRestUrl + "/jobs/" + flinkJobId + "/cancel";
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(cancelUrl))
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .header("Content-Type", "application/json")
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200 || response.statusCode() == 202) {
-                log.info("Flink 作业取消请求发送成功，flinkJobId: {}", flinkJobId);
-            } else {
-                log.warn("取消 Flink 作业失败，flinkJobId: {}, status: {}, body: {}",
-                        flinkJobId, response.statusCode(), response.body());
-            }
-        } catch (Exception e) {
-            log.error("取消 Flink 作业异常，flinkJobId: {}", flinkJobId, e);
-        }
-    }
-
-    @Override
-    public CdcFlinkJob findByDsName(String dsName) {
-        return cdcFlinkJobRepository.findByDsName(dsName);
-    }
-
-    /**
-     * 获取所有启用且使用 FLINK 同步的 CDC 配置
-     */
     private List<CdcConfig> getEnabledFlinkConfigs() {
         CdcConfigListQuery query = new CdcConfigListQuery();
         query.setEnabled(true);

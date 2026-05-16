@@ -38,6 +38,11 @@ public class CdcFlinkJob {
     private String dsName;
 
     /**
+     * 主题编码（ODS 表前缀）
+     */
+    private String subjectCode;
+
+    /**
      * Flink 的 job id
      */
     private String flinkJobId;

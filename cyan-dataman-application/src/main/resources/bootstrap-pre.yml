@@ -50,11 +50,10 @@ debezium:
 kafka:
   url: kafka-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092
 
-# Flink 配置
+# Flink 配置（Application 模式：通过 K8s API 管理 FlinkDeployment CR）
 flink:
-  mode: remote
-  rest:
-    url: flink-jobmanager.flink.svc.cluster.local:6123
+  image: harbor.cyan.com/cyan/flink-sql:2.0.1
+  namespace: flink
   checkpoint:
     interval: 60000
     timeout: 600000
