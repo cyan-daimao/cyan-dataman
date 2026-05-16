@@ -541,7 +541,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                             .setColumns(List.of(
                                     new ColumnValObj().setName("_raw_json").setType("STRING").setComment("原始 Debezium JSON").setNullable(true),
                                     new ColumnValObj().setName("_op").setType("STRING").setComment("操作类型").setNullable(true),
-                                    new ColumnValObj().setName("_ts").setType("BIGINT").setComment("变更时间戳").setNullable(true),
+                                    new ColumnValObj().setName("_ts").setType("LONG").setComment("变更时间戳").setNullable(true),
                                     new ColumnValObj().setName("_db").setType("STRING").setComment("源数据库").setNullable(true),
                                     new ColumnValObj().setName("_table").setType("STRING").setComment("源表名").setNullable(true),
                                     new ColumnValObj().setName("_ingestion_time").setType("TIMESTAMP").setComment("入库时间").setNullable(true)
