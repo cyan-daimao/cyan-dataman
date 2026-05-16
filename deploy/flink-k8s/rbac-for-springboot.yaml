@@ -3,17 +3,21 @@
 # Spring Boot 通过 Fabric8 K8s Client 在 flink namespace 中
 # 创建/更新/删除 FlinkDeployment CR 和 ConfigMap
 # ============================================================
+# 说明：
+# - ClusterRole / ClusterRoleBinding 是集群级别的，不需要 -n flink
+# - subjects 中的 namespace 是 Spring Boot 所在的 namespace（pre / prod）
+# - 如果 Spring Boot 使用非 default 的 ServiceAccount，请修改 name 字段
 
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: flink-deployment-manager
 rules:
-  # FlinkDeployment CR 权限
+  # FlinkDeployment CR 权限（操作在 flink namespace 中）
   - apiGroups: ["flink.apache.org"]
     resources: ["flinkdeployments"]
     verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
-  # ConfigMap 权限（挂载 SQL 脚本）
+  # ConfigMap 权限（在 flink namespace 挂载 SQL 脚本）
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
@@ -27,11 +31,14 @@ kind: ClusterRoleBinding
 metadata:
   name: cyan-dataman-flink-deployment-manager
 subjects:
-  # 绑定到 cyan-dataman namespace 的 default ServiceAccount
-  # 如果你的 Spring Boot 使用其他 ServiceAccount，请修改此处
+  # pre 环境
   - kind: ServiceAccount
     name: default
-    namespace: cyan-dataman
+    namespace: pre
+  # prod 环境
+  - kind: ServiceAccount
+    name: default
+    namespace: prod
 roleRef:
   kind: ClusterRole
   name: flink-deployment-manager

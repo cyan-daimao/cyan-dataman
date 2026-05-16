@@ -73,10 +73,11 @@ docker push harbor.cyan.com/cyan/flink-sql:2.0.1
 Spring Boot 需要权限在 `flink` namespace 创建 FlinkDeployment 和 ConfigMap：
 
 ```bash
-kubectl apply -f 03-rbac-for-springboot.yaml
+kubectl apply -f rbac-for-springboot.yaml
 ```
 
-> 如果 Spring Boot 不在 `cyan-dataman` namespace，修改 `03-rbac-for-springboot.yaml` 中的 `subjects`。
+> `rbac-for-springboot.yaml` 中已绑定 `pre` 和 `prod` namespace 的 `default` ServiceAccount。
+> 如果 Spring Boot 使用其他 ServiceAccount 或 namespace，修改文件中的 `subjects`。
 
 ### 4. 部署 Spring Boot
 
