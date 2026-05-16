@@ -133,14 +133,18 @@ public class CdcConfig {
         Assert.notBlank(this.dsName, new SilentException("数据源名称不能为空"));
         Assert.notBlank(this.dbName, new SilentException("数据库名不能为空"));
         Assert.notBlank(this.tableName, new SilentException("表名不能为空"));
-        Assert.notBlank(this.icebergTableName, new SilentException("目标 Iceberg 表名不能为空"));
         Assert.notNull(this.syncTool, new SilentException("同步工具不能为空"));
+        // Spark 模式需校验目标表名；Flink 模式自动生成 ODS 表名
+        if (this.syncTool != SyncTool.FLINK) {
+            Assert.notBlank(this.icebergTableName, new SilentException("目标 Iceberg 表名不能为空"));
+        }
     }
 
     /**
      * 保存
      */
     public CdcConfig save(CdcConfigRepository repository) {
+        autoGenerateIcebergTableName();
         validate();
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
@@ -155,9 +159,22 @@ public class CdcConfig {
      * 更新
      */
     public CdcConfig update(CdcConfigRepository repository) {
+        autoGenerateIcebergTableName();
         validate();
         this.updatedAt = LocalDateTime.now();
         return repository.update(this);
+    }
+
+    /**
+     * Flink 模式下自动生成 ODS 表名
+     */
+    private void autoGenerateIcebergTableName() {
+        if (this.syncTool == SyncTool.FLINK && StrUtils.isBlank(this.icebergTableName)
+                && StrUtils.isNotBlank(this.subjectCode) && StrUtils.isNotBlank(this.dsName)) {
+            String safeSubject = this.subjectCode.replaceAll("[^a-zA-Z0-9_]", "_");
+            String safeDs = this.dsName.replaceAll("[^a-zA-Z0-9_]", "_");
+            this.icebergTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDs;
+        }
     }
 
     /**
