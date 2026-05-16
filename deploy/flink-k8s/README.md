@@ -129,3 +129,11 @@ helm uninstall flink-kubernetes-operator -n flink
 # 删除 namespace
 kubectl delete namespace flink
 ```
+
+
+
+kubectl create secret docker-registry harbor-secret \
+-n flink \
+--docker-server=harbor.cyan.com \
+--docker-username=admin \
+--docker-password=123456
