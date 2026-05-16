@@ -122,11 +122,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                     .setRunningStatus(RunningStatus.INIT);
 
             config = config.save(cdcConfigRepository);
-
-            // 只有启用时才创建 Debezium 连接器
-            if (Boolean.TRUE.equals(config.getEnabled())) {
-                createDebeziumConnector(config, dsConfig, info);
-            }
+            createDebeziumConnector(config, dsConfig, info);
         } else {
             // 复用已有 connector
             CdcConfig existingConfig = datasourceConfigs.getFirst();
@@ -135,14 +131,14 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                     .setRunningStatus(existingConfig.getRunningStatus());
 
             config = config.save(cdcConfigRepository);
-
-            // 只有启用时才更新连接器的表列表
-            if (Boolean.TRUE.equals(config.getEnabled())) {
-                updateConnectorTableList(dsConfig.getName(), existingConfig.getConnectorName(), dsConfig, info);
-            }
+            updateConnectorTableList(dsConfig.getName(), existingConfig.getConnectorName(), dsConfig, info);
         }
 
-        // 方案 B：ODS 统一表由 Flink SQL 自动管理，不再检查用户目标表
+        // Flink 类型自动启动同步
+        if (SyncTool.FLINK.equals(config.getSyncTool())) {
+            cdcFlinkSyncService.enableCdcSync(config.getId());
+        }
+
         return CdcAppConvert.INSTANCE.toBO(config);
     }
 

@@ -149,7 +149,7 @@ public class CdcConfig {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
         if (this.enabled == null) {
-            this.enabled = false;
+            this.enabled = true;
         }
         this.msg = StrUtils.isBlank(this.msg)? "" : this.msg;
         this.syncSql = StrUtils.isBlank(this.syncSql)? "" : this.syncSql;
