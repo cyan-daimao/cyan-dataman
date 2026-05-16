@@ -398,6 +398,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                         - name: harbor-secret
                       containers:
                         - name: flink-main-container
+                          imagePullPolicy: Always
                           volumeMounts:
                             - name: sql-volume
                               mountPath: /opt/flink/sql
