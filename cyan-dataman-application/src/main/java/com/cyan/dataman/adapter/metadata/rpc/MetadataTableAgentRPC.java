@@ -56,4 +56,16 @@ public class MetadataTableAgentRPC {
         List<MetadataTableAgentDTO> data = MetadataTableAgentRPCConvert.INSTANCE.toMetadataTableAgentDTOList(list);
         return Response.success(data);
     }
+
+    /**
+     * 查询表密级（供 dataauth 权限校验使用）
+     */
+    @GetMapping("{tableName}/security-level")
+    public Response<String> getSecurityLevel(@PathVariable String tableName) {
+        MetadataTableBO table = metadataTableService.findOne(new MetadataTableOneQuery().setName(tableName));
+        if (table == null) {
+            return Response.success(null);
+        }
+        return Response.success(table.getSecretLevel() == null ? null : table.getSecretLevel().name());
+    }
 }
