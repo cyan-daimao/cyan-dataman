@@ -28,8 +28,8 @@ cd deploy/flink-k8s
 docker build -t cyan/flink-sql:2.0.1 .
 
 # 推送到镜像仓库（根据实际环境调整）
-docker tag cyan/flink-sql:2.0.1 registry.cyan.com/cyan/flink-sql:2.0.1
-docker push registry.cyan.com/cyan/flink-sql:2.0.1
+docker tag cyan/flink-sql:2.0.1 harbor.cyan.com/cyan/flink-sql:2.0.1
+docker push harbor.cyan.com/cyan/flink-sql:2.0.1
 ```
 
 > **注意**：`flink-sql-connector-kafka` 的版本 `4.0.1-2.0` 需要确认是否与 Flink 2.0.1 兼容。如果下载失败，请从 Maven 仓库查询正确的版本号。

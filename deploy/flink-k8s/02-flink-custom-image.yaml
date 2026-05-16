@@ -24,7 +24,7 @@ spec:
       containers:
         - name: jobmanager
           # 使用自定义镜像（包含 Kafka + Iceberg Connector）
-          image: cyan/flink-sql:2.0.1
+          image: harbor.cyan.com/cyan/flink-sql:2.0.1
           imagePullPolicy: IfNotPresent
           args: ["jobmanager"]
           ports:
@@ -73,7 +73,7 @@ spec:
       containers:
         - name: taskmanager
           # 使用自定义镜像（包含 Kafka + Iceberg Connector）
-          image: cyan/flink-sql:2.0.1
+          image: harbor.cyan.com/cyan/flink-sql:2.0.1
           imagePullPolicy: IfNotPresent
           args: ["taskmanager"]
           ports:
