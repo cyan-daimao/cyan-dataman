@@ -28,9 +28,9 @@ import java.util.concurrent.CompletableFuture;
 /**
  * CDC Flink 同步服务实现（Application 模式）
  * <p>
- * 通过 Flink Kubernetes Operator 管理 FlinkDeployment CR，
- * 每个数据源对应一个独立的 Flink Application。
- * SQL 脚本通过 ConfigMap 挂载到 Pod，由 SqlRunner 执行。
+ * 通过 Flink Kubernetes Operator 管理 FlinkDeployment CR。
+ * 一数据源 + 一主题对应一个 FlinkDeployment，作业内通过 StatementSet
+ * 共享 Kafka Source，每个 CDC 表有独立的 Iceberg ODS Sink。
  *
  * @author cy.Y
  * @since 1.0.0
@@ -74,23 +74,24 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     @Override
     public void startFlinkSyncJob() {
         List<CdcConfig> enabledConfigs = getEnabledFlinkConfigs();
-        Map<String, List<CdcConfig>> configsByDsName = new HashMap<>();
+        Map<String, List<CdcConfig>> configsByGroup = new HashMap<>();
         for (CdcConfig config : enabledConfigs) {
-            configsByDsName.computeIfAbsent(config.getDsName(), k -> new ArrayList<>()).add(config);
+            String key = config.getDsName() + ":" + config.getSubjectCode();
+            configsByGroup.computeIfAbsent(key, k -> new ArrayList<>()).add(config);
         }
 
-        for (Map.Entry<String, List<CdcConfig>> entry : configsByDsName.entrySet()) {
-            String dsName = entry.getKey();
-            CdcConfig config = entry.getValue().getFirst();
-            String subjectCode = config.getSubjectCode();
+        for (Map.Entry<String, List<CdcConfig>> entry : configsByGroup.entrySet()) {
+            List<CdcConfig> configs = entry.getValue();
+            CdcConfig first = configs.getFirst();
+            String dsName = first.getDsName();
+            String subjectCode = first.getSubjectCode();
             String deploymentName = getDeploymentName(dsName, subjectCode);
 
-            // 检查 FlinkDeployment 是否已存在
             if (getFlinkDeployment(deploymentName) != null) {
-                log.info("数据源 {} 已有 FlinkDeployment，跳过提交", dsName);
+                log.info("数据源 {} 主题 {} 已有 FlinkDeployment，跳过提交", dsName, subjectCode);
                 continue;
             }
-            CompletableFuture.runAsync(() -> submitFlinkApplication(dsName, subjectCode, config));
+            CompletableFuture.runAsync(() -> submitFlinkApplication(dsName, subjectCode, configs));
         }
     }
 
@@ -118,12 +119,29 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         String dsName = config.getDsName();
         String subjectCode = config.getSubjectCode();
         String deploymentName = getDeploymentName(dsName, subjectCode);
+        String configMapName = getConfigMapName(dsName, subjectCode);
 
         if (getFlinkDeployment(deploymentName) == null) {
-            CompletableFuture.runAsync(() -> submitFlinkApplication(dsName, subjectCode, config));
+            // 没有 Deployment，创建新的（包含该组下所有启用的表）
+            List<CdcConfig> configs = getEnabledConfigsByDsAndSubject(dsName, subjectCode);
+            CompletableFuture.runAsync(() -> submitFlinkApplication(dsName, subjectCode, configs));
         } else {
-            log.info("数据源 {} 已有 FlinkDeployment，新表数据将由 Kafka topic pattern 自动消费, table={}.{}",
-                    dsName, config.getDbName(), config.getTableName());
+            // 已有 Deployment，动态添加 Sink
+            CdcFlinkJob job = cdcFlinkJobRepository.findByDsNameAndSubjectCode(dsName, subjectCode);
+            if (job != null) {
+                String currentSql = job.getFlinkSql();
+                String sinkMarker = sinkMarker(config.getDbName(), config.getTableName());
+                if (!currentSql.contains(sinkMarker)) {
+                    String safeDsName = safeName(dsName);
+                    String newSinkSql = buildSinkSql(config, safeDsName);
+                    String updatedSql = currentSql + "\n" + newSinkSql;
+                    createOrUpdateConfigMap(configMapName, updatedSql);
+                    job.setFlinkSql(updatedSql);
+                    job.setUpdatedAt(LocalDateTime.now());
+                    job.update(cdcFlinkJobRepository);
+                    log.info("已向 FlinkDeployment {} 添加 Sink: {}.{}", deploymentName, config.getDbName(), config.getTableName());
+                }
+            }
         }
     }
 
@@ -138,19 +156,31 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
         String dsName = config.getDsName();
         String subjectCode = config.getSubjectCode();
-        log.info("已禁用 CDC 同步, dsName={}, table={}.{}",
-                dsName, config.getDbName(), config.getTableName());
+        String deploymentName = getDeploymentName(dsName, subjectCode);
+        String configMapName = getConfigMapName(dsName, subjectCode);
 
-        // 检查该数据源下是否还有启用的表，没有则删除 FlinkDeployment
-        List<CdcConfig> remainingEnabled = cdcConfigRepository.list(
-                new CdcConfigListQuery().setDsName(dsName)
-                        .setEnabled(true)
-                        .setSyncTool(SyncTool.FLINK));
+        log.info("已禁用 CDC 同步, dsName={}, table={}.{}", dsName, config.getDbName(), config.getTableName());
+
+        // 检查该数据源+主题下是否还有启用的表
+        List<CdcConfig> remainingEnabled = getEnabledConfigsByDsAndSubject(dsName, subjectCode);
 
         if (remainingEnabled.isEmpty()) {
-            String deploymentName = getDeploymentName(dsName, subjectCode);
             deleteFlinkApplication(deploymentName);
-            log.info("数据源 {} 没有启用的表，已删除 FlinkDeployment", dsName);
+            CdcFlinkJob job = cdcFlinkJobRepository.findByDsNameAndSubjectCode(dsName, subjectCode);
+            if (job != null) {
+                job.stop(cdcFlinkJobRepository);
+            }
+            log.info("数据源 {} 主题 {} 没有启用的表，已删除 FlinkDeployment", dsName, subjectCode);
+        } else {
+            CdcFlinkJob job = cdcFlinkJobRepository.findByDsNameAndSubjectCode(dsName, subjectCode);
+            if (job != null) {
+                String updatedSql = removeSinkFromSql(job.getFlinkSql(), config.getDbName(), config.getTableName());
+                createOrUpdateConfigMap(configMapName, updatedSql);
+                job.setFlinkSql(updatedSql);
+                job.setUpdatedAt(LocalDateTime.now());
+                job.update(cdcFlinkJobRepository);
+                log.info("已从 FlinkDeployment {} 移除 Sink: {}.{}", deploymentName, config.getDbName(), config.getTableName());
+            }
         }
     }
 
@@ -194,58 +224,82 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     @Override
     public CdcFlinkJob findByDsName(String dsName) {
-        return cdcFlinkJobRepository.findByDsName(dsName);
+        // 保持接口兼容，返回该数据源下第一个主题的 FlinkJob
+        List<CdcConfig> configs = getEnabledConfigsByDsAndSubject(dsName, null);
+        if (configs.isEmpty()) {
+            return null;
+        }
+        String subjectCode = configs.getFirst().getSubjectCode();
+        return cdcFlinkJobRepository.findByDsNameAndSubjectCode(dsName, subjectCode);
     }
 
     // ==================== Application 模式作业提交 ====================
 
-    private void submitFlinkApplication(String dsName, String subjectCode, CdcConfig config) {
-        String sql = buildFlinkSql(dsName, subjectCode);
+    private void submitFlinkApplication(String dsName, String subjectCode, List<CdcConfig> configs) {
+        String sql = buildFlinkSql(dsName, subjectCode, configs);
         String deploymentName = getDeploymentName(dsName, subjectCode);
         String configMapName = getConfigMapName(dsName, subjectCode);
+        CdcConfig first = configs.getFirst();
 
         try {
-            // 1. 创建/更新 ConfigMap（包含 SQL 脚本）
             createOrUpdateConfigMap(configMapName, sql);
-            log.info("ConfigMap 创建成功: {}", configMapName);
+            log.info("ConfigMap 创建/更新成功: {}", configMapName);
 
-            // 2. 创建 FlinkDeployment CR
-            String yaml = buildFlinkDeploymentYaml(deploymentName, configMapName, dsName, subjectCode);
+            String yaml = buildFlinkDeploymentYaml(deploymentName, configMapName);
             k8sClient.load(new java.io.ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)))
                     .inNamespace(flinkNamespace)
                     .createOrReplace();
-            log.info("FlinkDeployment 创建成功: {}", deploymentName);
+            log.info("FlinkDeployment 创建/更新成功: {}", deploymentName);
 
-            // 3. 保存作业记录
-            CdcFlinkJob flinkJob = new CdcFlinkJob()
-                    .setDsName(dsName)
-                    .setSubjectCode(subjectCode)
-                    .setFlinkJobId(deploymentName)  // Application 模式用 deploymentName 作为标识
-                    .setFlinkSql(sql)
-                    .setEnabled(true)
-                    .setStatus(JobStatus.RUNNING)
-                    .setCreatedAt(LocalDateTime.now())
-                    .setUpdatedAt(LocalDateTime.now())
-                    .setCreateBy(config.getCreateBy())
-                    .setUpdateBy(config.getUpdateBy());
-            flinkJob.save(cdcFlinkJobRepository);
+            CdcFlinkJob flinkJob = cdcFlinkJobRepository.findByDsNameAndSubjectCode(dsName, subjectCode);
+            if (flinkJob == null) {
+                flinkJob = new CdcFlinkJob()
+                        .setDsName(dsName)
+                        .setSubjectCode(subjectCode)
+                        .setFlinkJobId(deploymentName)
+                        .setFlinkSql(sql)
+                        .setEnabled(true)
+                        .setStatus(JobStatus.RUNNING)
+                        .setCreatedAt(LocalDateTime.now())
+                        .setUpdatedAt(LocalDateTime.now())
+                        .setCreateBy(first.getCreateBy())
+                        .setUpdateBy(first.getUpdateBy());
+                flinkJob.save(cdcFlinkJobRepository);
+            } else {
+                flinkJob.setFlinkSql(sql)
+                        .setEnabled(true)
+                        .setStatus(JobStatus.RUNNING)
+                        .setErrorMessage("")
+                        .setUpdatedAt(LocalDateTime.now())
+                        .setUpdateBy(first.getUpdateBy());
+                flinkJob.update(cdcFlinkJobRepository);
+            }
 
-            log.info("Flink Application CDC 作业已提交, dsName={}, deploymentName={}", dsName, deploymentName);
+            log.info("Flink CDC 作业已提交, dsName={}, subjectCode={}, tables={}",
+                    dsName, subjectCode, configs.size());
         } catch (Exception e) {
-            log.error("Flink Application CDC 作业提交失败, dsName={}", dsName, e);
+            log.error("Flink CDC 作业提交失败, dsName={}, subjectCode={}", dsName, subjectCode, e);
 
-            CdcFlinkJob failedJob = new CdcFlinkJob()
-                    .setDsName(dsName)
-                    .setSubjectCode(subjectCode)
-                    .setFlinkSql(sql)
-                    .setEnabled(false)
-                    .setStatus(JobStatus.FAILED)
-                    .setErrorMessage(e.getMessage())
-                    .setCreatedAt(LocalDateTime.now())
-                    .setUpdatedAt(LocalDateTime.now())
-                    .setCreateBy(config.getCreateBy())
-                    .setUpdateBy(config.getUpdateBy());
-            failedJob.save(cdcFlinkJobRepository);
+            CdcFlinkJob failedJob = cdcFlinkJobRepository.findByDsNameAndSubjectCode(dsName, subjectCode);
+            if (failedJob == null) {
+                failedJob = new CdcFlinkJob()
+                        .setDsName(dsName)
+                        .setSubjectCode(subjectCode)
+                        .setFlinkSql(sql)
+                        .setEnabled(false)
+                        .setStatus(JobStatus.FAILED)
+                        .setErrorMessage(e.getMessage())
+                        .setCreatedAt(LocalDateTime.now())
+                        .setUpdatedAt(LocalDateTime.now())
+                        .setCreateBy(first.getCreateBy())
+                        .setUpdateBy(first.getUpdateBy());
+                failedJob.save(cdcFlinkJobRepository);
+            } else {
+                failedJob.setStatus(JobStatus.FAILED)
+                        .setErrorMessage(e.getMessage())
+                        .setUpdatedAt(LocalDateTime.now());
+                failedJob.update(cdcFlinkJobRepository);
+            }
         }
     }
 
@@ -256,7 +310,6 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     .withName(deploymentName)
                     .delete();
 
-            // 同时删除关联的 ConfigMap
             String configMapName = deploymentName + "-sql";
             k8sClient.configMaps().inNamespace(flinkNamespace).withName(configMapName).delete();
         } catch (Exception e) {
@@ -288,9 +341,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     // ==================== YAML 生成 ====================
 
-    private String buildFlinkDeploymentYaml(String deploymentName, String configMapName,
-                                            String dsName, String subjectCode) {
-        String safeDsName = dsName.replaceAll("[^a-zA-Z0-9_]", "_");
+    private String buildFlinkDeploymentYaml(String deploymentName, String configMapName) {
         return String.format("""
                 apiVersion: flink.apache.org/v1beta1
                 kind: FlinkDeployment
@@ -356,12 +407,11 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     // ==================== SQL 生成 ====================
 
-    private String buildFlinkSql(String dsName, String subjectCode) {
-        String safeDsName = dsName.replaceAll("[^a-zA-Z0-9_]", "_");
-        String safeSubject = subjectCode.replaceAll("[^a-zA-Z0-9_]", "_");
-        String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDsName;
+    private String buildFlinkSql(String dsName, String subjectCode, List<CdcConfig> configs) {
+        String safeDsName = safeName(dsName);
 
-        return String.format("""
+        StringBuilder sql = new StringBuilder();
+        sql.append(String.format("""
                 -- Kafka Source：使用 raw format 读取完整 Debezium JSON
                 CREATE TABLE IF NOT EXISTS kafka_cdc_%s (
                   _raw_json STRING
@@ -373,8 +423,23 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   'scan.startup.mode' = 'earliest-offset',
                   'format' = 'raw'
                 );
+                """, safeDsName, dsName, kafkaBootstrapServers, dsName));
 
-                -- Iceberg ODS Sink：统一 Schema，纯追加，主题前缀=%s
+        for (CdcConfig config : configs) {
+            sql.append("\n").append(buildSinkSql(config, safeDsName));
+        }
+
+        return sql.toString();
+    }
+
+    private String buildSinkSql(CdcConfig config, String safeDsName) {
+        String safeSubject = safeName(config.getSubjectCode());
+        String safeDb = safeName(config.getDbName());
+        String safeTable = safeName(config.getTableName());
+        String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
+
+        return String.format("""
+                -- ==== Sink: %s.%s ====
                 CREATE TABLE IF NOT EXISTS %s (
                   _raw_json STRING,
                   _op STRING,
@@ -397,7 +462,6 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   's3.path-style-access' = 'true'
                 );
 
-                -- 将 Debezium JSON 写入 ODS，同时提取元数据字段
                 INSERT INTO %s
                 SELECT
                   _raw_json,
@@ -406,11 +470,38 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) AS _db,
                   COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) AS _table,
                   NOW() AS _ingestion_time
-                FROM kafka_cdc_%s;
+                FROM kafka_cdc_%s
+                WHERE COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) = '%s'
+                  AND COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) = '%s';
+                -- ==== End Sink: %s.%s ====
                 """,
-                safeDsName, dsName, kafkaBootstrapServers, dsName,
-                safeSubject, odsTableName, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
-                odsTableName, safeDsName);
+                config.getDbName(), config.getTableName(),
+                odsTableName, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
+                odsTableName, safeDsName, config.getTableName(), config.getDbName(),
+                config.getDbName(), config.getTableName());
+    }
+
+    private String removeSinkFromSql(String sql, String dbName, String tableName) {
+        String startMarker = "-- ==== Sink: " + dbName + "." + tableName + " ====";
+        String endMarker = "-- ==== End Sink: " + dbName + "." + tableName + " ====";
+
+        int startIndex = sql.indexOf(startMarker);
+        if (startIndex == -1) {
+            return sql;
+        }
+        int endIndex = sql.indexOf(endMarker, startIndex);
+        if (endIndex == -1) {
+            return sql;
+        }
+        return sql.substring(0, startIndex).trim() + "\n" + sql.substring(endIndex + endMarker.length()).trim();
+    }
+
+    private String sinkMarker(String dbName, String tableName) {
+        return "-- ==== Sink: " + dbName + "." + tableName + " ====";
+    }
+
+    private String safeName(String name) {
+        return name.replaceAll("[^a-zA-Z0-9_]", "_");
     }
 
     // ==================== 工具方法 ====================
@@ -419,6 +510,19 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         CdcConfigListQuery query = new CdcConfigListQuery();
         query.setEnabled(true);
         query.setSyncTool(SyncTool.FLINK);
-        return cdcConfigRepository.list(query);
+        List<CdcConfig> list = cdcConfigRepository.list(query);
+        return list != null ? list : List.of();
+    }
+
+    private List<CdcConfig> getEnabledConfigsByDsAndSubject(String dsName, String subjectCode) {
+        CdcConfigListQuery query = new CdcConfigListQuery();
+        query.setDsName(dsName);
+        if (subjectCode != null) {
+            query.setSubjectCode(subjectCode);
+        }
+        query.setEnabled(true);
+        query.setSyncTool(SyncTool.FLINK);
+        List<CdcConfig> list = cdcConfigRepository.list(query);
+        return list != null ? list : List.of();
     }
 }

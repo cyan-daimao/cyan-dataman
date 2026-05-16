@@ -167,14 +167,17 @@ public class CdcConfig {
     }
 
     /**
-     * Flink 模式下自动生成 ODS 表名
+     * Flink 模式下自动生成 ODS 表名：ods_cdc_raw_{subjectCode}_{dbName}_{tableName}
      */
     private void autoGenerateIcebergTableName() {
         if (this.syncTool == SyncTool.FLINK && StrUtils.isBlank(this.icebergTableName)
-                && StrUtils.isNotBlank(this.subjectCode) && StrUtils.isNotBlank(this.dsName)) {
+                && StrUtils.isNotBlank(this.subjectCode)
+                && StrUtils.isNotBlank(this.dbName)
+                && StrUtils.isNotBlank(this.tableName)) {
             String safeSubject = this.subjectCode.replaceAll("[^a-zA-Z0-9_]", "_");
-            String safeDs = this.dsName.replaceAll("[^a-zA-Z0-9_]", "_");
-            this.icebergTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDs;
+            String safeDb = this.dbName.replaceAll("[^a-zA-Z0-9_]", "_");
+            String safeTable = this.tableName.replaceAll("[^a-zA-Z0-9_]", "_");
+            this.icebergTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
         }
     }
 

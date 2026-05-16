@@ -15,8 +15,8 @@ import java.time.LocalDateTime;
 /**
  * CDC Flink 作业配置实体
  * <p>
- * 一数据源对应一 Flink 作业，通过 dsName 关联。
- * 作业内通过 Kafka topic pattern 消费该数据源下所有 CDC 表的数据。
+ * 一数据源 + 一主题对应一 Flink Deployment。
+ * 作业内通过 StatementSet 共享 Kafka Source，每个 CDC 表有独立的 ODS Sink。
  *
  * @author cy.Y
  * @since 1.0.0
@@ -33,9 +33,19 @@ public class CdcFlinkJob {
     private Long id;
 
     /**
-     * 数据源名称（一数据源一作业）
+     * 数据源名称
      */
     private String dsName;
+
+    /**
+     * 数据库名
+     */
+    private String dbName;
+
+    /**
+     * 表名
+     */
+    private String tableName;
 
     /**
      * 主题编码（ODS 表前缀）

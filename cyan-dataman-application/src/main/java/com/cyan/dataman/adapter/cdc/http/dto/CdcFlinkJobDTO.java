@@ -23,9 +23,24 @@ public class CdcFlinkJobDTO {
     private String id;
 
     /**
-     * 数据源名称（一数据源一作业）
+     * 数据源名称
      */
     private String dsName;
+
+    /**
+     * 数据库名
+     */
+    private String dbName;
+
+    /**
+     * 表名
+     */
+    private String tableName;
+
+    /**
+     * 主题编码
+     */
+    private String subjectCode;
 
     /**
      * Flink 的 job id

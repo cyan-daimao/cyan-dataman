@@ -32,10 +32,22 @@ public class CdcFlinkJobDO {
     private Long id;
 
     /**
-     * 数据源名称（一数据源一作业）
+     * 数据源名称
      */
     @TableField("ds_name")
     private String dsName;
+
+    /**
+     * 数据库名
+     */
+    @TableField("db_name")
+    private String dbName;
+
+    /**
+     * 表名
+     */
+    @TableField("table_name")
+    private String tableName;
 
     /**
      * 主题编码（ODS 表前缀）
