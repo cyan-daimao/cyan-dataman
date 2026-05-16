@@ -152,6 +152,7 @@ public class CdcConfig {
             this.enabled = false;
         }
         this.msg = StrUtils.isBlank(this.msg)? "" : this.msg;
+        this.syncSql = StrUtils.isBlank(this.syncSql)? "" : this.syncSql;
         return repository.save(this);
     }
 
