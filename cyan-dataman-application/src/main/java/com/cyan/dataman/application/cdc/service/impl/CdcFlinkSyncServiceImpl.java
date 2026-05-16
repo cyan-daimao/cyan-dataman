@@ -389,7 +389,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     args:
                       - "/opt/flink/sql/job.sql"
                     parallelism: 2
-                    upgradeMode: stateful
+                    upgradeMode: last-state
                     state: running
                   podTemplate:
                     spec:
