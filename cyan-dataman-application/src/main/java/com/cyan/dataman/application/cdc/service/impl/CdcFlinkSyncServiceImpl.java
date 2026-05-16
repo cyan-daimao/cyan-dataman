@@ -299,7 +299,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   namespace: %s
                 spec:
                   image: %s
-                  flinkVersion: v2.0
+                  flinkVersion: v2_0
                   jobManager:
                     resource:
                       memory: "2g"

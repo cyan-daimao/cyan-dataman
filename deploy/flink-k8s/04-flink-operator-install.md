@@ -33,7 +33,7 @@ kubectl get pods -n flink
 
 ```bash
 # 下载官方 release YAML（包含 CRD + Deployment）
-curl -L https://github.com/apache/flink-kubernetes-operator/releases/download/release-1.9.0/flink-kubernetes-operator-1.9.0.yaml \
+curl -L https://github.com/apache/flink-kubernetes-operator/releases/download/release-1.14.0/flink-kubernetes-operator-1.14.0.yaml \
   -o flink-operator.yaml
 
 # 应用
