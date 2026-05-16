@@ -18,8 +18,7 @@ public class ManualUploadRecordDO {
     /**
      * 主键
      */
-    @TableId(type = IdType.AUTO)
-    @TableField(value = "id")
+    @TableId(value = "id",type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

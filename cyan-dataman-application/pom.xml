@@ -16,7 +16,21 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <flink.version>2.0.1</flink.version>
+        <fabric8.version>6.13.4</fabric8.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- 强制统一 Fabric8 版本，覆盖 Spring Cloud 锁定的 6.9.2 -->
+            <dependency>
+                <groupId>io.fabric8</groupId>
+                <artifactId>kubernetes-client-bom</artifactId>
+                <version>${fabric8.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
