@@ -360,6 +360,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   name: %s
                   namespace: %s
                 spec:
+                  serviceAccount: flink
                   image: %s
                   flinkVersion: v2_0
                   jobManager:
