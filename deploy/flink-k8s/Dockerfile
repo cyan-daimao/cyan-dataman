@@ -19,8 +19,8 @@ ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws
 ADD https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.767/aws-java-sdk-bundle-1.12.767.jar /opt/flink/lib/
 
 # SqlRunner JAR（Application 模式入口，从项目构建产物复制）
-# 构建前需先执行: mvn clean package -pl cyan-dataman-application -am
-COPY sql-runner.jar /opt/flink/usrlib/
+# 构建前需先执行: mvn clean package -pl cyan-dataman-flink-runner -am
+COPY cyan-dataman-flink-runner/target/sql-runner.jar /opt/flink/usrlib/
 
 # 设置 JAR 权限
 RUN chown -R flink:flink /opt/flink/lib/ && chown -R flink:flink /opt/flink/usrlib/

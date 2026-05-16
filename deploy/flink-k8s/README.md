@@ -58,7 +58,7 @@ kubectl get crd | grep flinkdeployments
 
 ```bash
 # 先打包 sql-runner.jar
-mvn clean package -pl cyan-dataman-application -am -DskipTests
+mvn clean package -pl cyan-dataman-flink-runner -am -DskipTests
 
 # 构建镜像
 cd deploy/flink-k8s

@@ -34,3 +34,4 @@ build/
 ### Mac OS ###
 .DS_Storedependency-reduced-pom.xml
 deploy/flink-k8s/sql-runner.jar
+dependency-reduced-pom.xml
