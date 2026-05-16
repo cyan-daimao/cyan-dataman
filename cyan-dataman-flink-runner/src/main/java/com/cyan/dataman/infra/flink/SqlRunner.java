@@ -37,6 +37,9 @@ public class SqlRunner {
         String sqlFile = args[0];
         String sql = Files.readString(Paths.get(sqlFile));
 
+        // 先去掉所有单行注释，避免注释和 SQL 混在同一 segment 被误跳过
+        sql = sql.replaceAll("(?m)^\\s*--.*\\n?", "");
+
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
 
@@ -46,8 +49,8 @@ public class SqlRunner {
 
         String[] statements = sql.split(";");
         for (String statement : statements) {
-            String trimmed = statement.trim();
-            if (trimmed.isEmpty() || trimmed.startsWith("--")) {
+            String trimmed = statement.trim().replaceAll("\\s+", " ");
+            if (trimmed.isEmpty()) {
                 continue;
             }
             String upper = trimmed.toUpperCase();
