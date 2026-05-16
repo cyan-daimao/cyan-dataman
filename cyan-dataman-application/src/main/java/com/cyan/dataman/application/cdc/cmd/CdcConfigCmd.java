@@ -41,9 +41,14 @@ public class CdcConfigCmd {
     private String tableName;
 
     /**
-     * 目标 Iceberg 表名
+     * 主题编码（ODS 表前缀）
      */
-    @NotBlank(message = "目标 Iceberg 表名不能为空")
+    @NotBlank(message = "主题编码不能为空")
+    private String subjectCode;
+
+    /**
+     * 目标 Iceberg 表名（方案 B 废弃，保留兼容）
+     */
     private String icebergTableName;
 
     /**

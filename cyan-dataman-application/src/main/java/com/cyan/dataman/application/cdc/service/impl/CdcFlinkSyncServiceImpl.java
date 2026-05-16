@@ -112,7 +112,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 continue;
             }
             CdcConfig config = entry.getValue().getFirst();
-            CompletableFuture.runAsync(() -> submitFlinkSqlJob(dsName, config));
+            String subjectCode = config.getSubjectCode();
+            CompletableFuture.runAsync(() -> submitFlinkSqlJob(dsName, subjectCode, config));
         }
     }
 
@@ -136,10 +137,11 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         }
 
         String dsName = config.getDsName();
+        String subjectCode = config.getSubjectCode();
 
         // 只有该数据源没有运行中的 Flink 作业时才提交新作业
         if (!dsNameToFlinkJobId.containsKey(dsName)) {
-            CompletableFuture.runAsync(() -> submitFlinkSqlJob(dsName, config));
+            CompletableFuture.runAsync(() -> submitFlinkSqlJob(dsName, subjectCode, config));
         } else {
             log.info("数据源 {} 已有运行中的 Flink 作业，新表数据将由 Kafka topic pattern 自动消费, table={}.{}",
                     dsName, config.getDbName(), config.getTableName());
@@ -229,8 +231,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     /**
      * 生成 Flink SQL 并提交作业
      */
-    private void submitFlinkSqlJob(String dsName, CdcConfig config) {
-        String sql = buildFlinkSql(dsName);
+    private void submitFlinkSqlJob(String dsName, String subjectCode, CdcConfig config) {
+        String sql = buildFlinkSql(dsName, subjectCode);
         log.info("生成 Flink SQL，dsName={}\n{}", dsName, sql);
 
         StreamExecutionEnvironment env = flinkConfig.createStreamExecutionEnvironment();
@@ -243,12 +245,14 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             log.info("Kafka Source 表创建成功，dsName={}", dsName);
 
             // 执行 Iceberg Sink DDL
-            String icebergDdl = extractStatement(sql, "CREATE TABLE ods_cdc_raw_" + dsName);
+            String safeSubject = subjectCode.replaceAll("[^a-zA-Z0-9_]", "_");
+            String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + dsName.replaceAll("[^a-zA-Z0-9_]", "_");
+            String icebergDdl = extractStatement(sql, "CREATE TABLE " + odsTableName);
             tableEnv.executeSql(icebergDdl);
             log.info("Iceberg Sink 表创建成功，dsName={}", dsName);
 
             // 执行 INSERT DML，获取 JobClient
-            String insertDml = extractStatement(sql, "INSERT INTO ods_cdc_raw_" + dsName);
+            String insertDml = extractStatement(sql, "INSERT INTO " + odsTableName);
             TableResult result = tableEnv.executeSql(insertDml);
 
             String realJobId = result.getJobClient()
@@ -292,8 +296,10 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     /**
      * 构建 Flink SQL 文本
      */
-    private String buildFlinkSql(String dsName) {
+    private String buildFlinkSql(String dsName, String subjectCode) {
         String safeDsName = dsName.replaceAll("[^a-zA-Z0-9_]", "_");
+        String safeSubject = subjectCode.replaceAll("[^a-zA-Z0-9_]", "_");
+        String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDsName;
 
         return String.format("""
                 -- Kafka Source：使用 raw format 读取完整 Debezium JSON
@@ -308,8 +314,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   'format' = 'raw'
                 );
 
-                -- Iceberg ODS Sink：统一 Schema，纯追加
-                CREATE TABLE IF NOT EXISTS ods_cdc_raw_%s (
+                -- Iceberg ODS Sink：统一 Schema，纯追加，主题前缀=%s
+                CREATE TABLE IF NOT EXISTS %s (
                   _raw_json STRING,
                   _op STRING,
                   _ts BIGINT,
@@ -332,7 +338,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 );
 
                 -- 将 Debezium JSON 写入 ODS，同时提取元数据字段
-                INSERT INTO ods_cdc_raw_%s
+                INSERT INTO %s
                 SELECT
                   _raw_json,
                   COALESCE(JSON_VALUE(_raw_json, '$.payload.op'), JSON_VALUE(_raw_json, '$.op')) AS _op,
@@ -343,8 +349,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 FROM kafka_cdc_%s;
                 """,
                 safeDsName, dsName, kafkaBootstrapServers, dsName,
-                safeDsName, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
-                safeDsName, safeDsName);
+                safeSubject, odsTableName, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
+                odsTableName, safeDsName);
     }
 
     /**

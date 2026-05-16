@@ -30,6 +30,11 @@ public class CdcConfigListQuery {
     private String tableName;
 
     /**
+     * 主题编码
+     */
+    private String subjectCode;
+
+    /**
      * 是否启用
      */
     private Boolean enabled;

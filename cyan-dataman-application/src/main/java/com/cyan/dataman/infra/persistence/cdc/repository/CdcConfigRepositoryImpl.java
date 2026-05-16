@@ -61,6 +61,7 @@ public class CdcConfigRepositoryImpl implements CdcConfigRepository {
             wrapper.eq(query.getDsName() != null, CdcConfigDO::getDsName, query.getDsName())
                     .eq(query.getDbName() != null, CdcConfigDO::getDbName, query.getDbName())
                     .eq(query.getTableName() != null, CdcConfigDO::getTableName, query.getTableName())
+                    .eq(query.getSubjectCode() != null, CdcConfigDO::getSubjectCode, query.getSubjectCode())
                     .eq(query.getEnabled() != null, CdcConfigDO::getEnabled, query.getEnabled())
                     .eq(query.getSyncTool() != null, CdcConfigDO::getSyncTool, query.getSyncTool());
         }

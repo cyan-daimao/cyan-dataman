@@ -15,6 +15,9 @@ import com.cyan.dataman.application.cdc.service.DebeziumSignalService;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
+import com.cyan.dataman.domain.metadata.MetadataSubject;
+import com.cyan.dataman.domain.metadata.query.MetadataSubjectFindQuery;
+import com.cyan.dataman.domain.metadata.repository.MetadataSubjectRepository;
 import com.cyan.dataman.domain.cdc.CdcConfig;
 import com.cyan.dataman.domain.cdc.CdcSparkJob;
 import com.cyan.dataman.domain.cdc.CdcSparkTask;
@@ -65,6 +68,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private final DebeziumRPC debeziumRpc;
     private final DebeziumSignalService debeziumSignalService;
     private final MetadataTableService metadataTableService;
+    private final MetadataSubjectRepository metadataSubjectRepository;
     private final CdcFlinkSyncService cdcFlinkSyncService;
     private final SparkJobExecutor sparkJobExecutor;
 
@@ -75,6 +79,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                                 DebeziumRPC debeziumRpc,
                                 DebeziumSignalService debeziumSignalService,
                                 MetadataTableService metadataTableService,
+                                MetadataSubjectRepository metadataSubjectRepository,
                                 CdcFlinkSyncService cdcFlinkSyncService,
                                 SparkJobExecutor sparkJobExecutor) {
         this.cdcConfigRepository = cdcConfigRepository;
@@ -84,6 +89,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         this.debeziumRpc = debeziumRpc;
         this.debeziumSignalService = debeziumSignalService;
         this.metadataTableService = metadataTableService;
+        this.metadataSubjectRepository = metadataSubjectRepository;
         this.cdcFlinkSyncService = cdcFlinkSyncService;
         this.sparkJobExecutor = sparkJobExecutor;
     }
@@ -99,6 +105,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         // 检查该数据源是否已有 CDC 配置（共用同一个 Debezium connector）
         List<CdcConfig> datasourceConfigs = cdcConfigRepository.findByDatasource(dsConfig.getName());
+
+        // 【新增】校验主题
+        validateSubject(cmd.getSubjectCode());
 
         CdcConfig config = CdcAppConvert.INSTANCE.toDomain(cmd);
         config.setDsName(dsConfig.getName());
@@ -133,11 +142,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             }
         }
 
-        // FLINK CDC 需要确保目标 Iceberg 表存在 op 字段
-        if (SyncTool.FLINK.equals(cmd.getSyncTool())) {
-            ensureOpColumnForFlinkCdc(cmd.getIcebergTableName());
-        }
-
+        // 方案 B：ODS 统一表由 Flink SQL 自动管理，不再检查用户目标表
         return CdcAppConvert.INSTANCE.toBO(config);
     }
 
@@ -179,6 +184,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setDsName(dsConfig.getName())
                 .setDbName(cmd.getDbName())
                 .setTableName(cmd.getTableName())
+                .setSubjectCode(cmd.getSubjectCode())
                 .setIcebergTableName(cmd.getIcebergTableName())
                 .setSyncTool(cmd.getSyncTool())
                 .setSyncSql(cmd.getSyncSql())
@@ -618,7 +624,20 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     }
 
     /**
-     * 为 FLINK CDC 确保 Iceberg 表存在 op 字段
+     * 校验主题编码是否有效
+     *
+     * @param subjectCode 主题编码
+     */
+    private void validateSubject(String subjectCode) {
+        Assert.notBlank(subjectCode, new SilentException("主题编码不能为空"));
+
+        MetadataSubject subject = metadataSubjectRepository
+                .find(new MetadataSubjectFindQuery().setSubjectCode(subjectCode));
+        Assert.notNull(subject, new SilentException("主题不存在: " + subjectCode));
+    }
+
+    /**
+     * 为 FLINK CDC 确保 Iceberg 表存在 op 字段（方案 B 已废弃，保留代码供参考）
      *
      * @param icebergTableName Iceberg 表名（可能是 schema.tableName 或纯表名）
      */

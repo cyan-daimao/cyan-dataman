@@ -51,7 +51,12 @@ public class CdcConfig {
     private String tableName;
 
     /**
-     * 目标 Iceberg 表名
+     * 主题编码（ODS 表前缀）
+     */
+    private String subjectCode;
+
+    /**
+     * 目标 Iceberg 表名（方案 B 废弃，保留兼容）
      */
     private String icebergTableName;
 
