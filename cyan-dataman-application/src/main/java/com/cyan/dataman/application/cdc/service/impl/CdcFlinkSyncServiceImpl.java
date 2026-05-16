@@ -242,17 +242,17 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     // ==================== Application 模式作业提交 ====================
 
     private void submitFlinkApplication(String dsName, String subjectCode, List<CdcConfig> configs) {
-        // 先通过元数据平台创建 ODS 表（Flink 只负责写入，不负责建表）
-        for (CdcConfig config : configs) {
-            ensureOdsTableExists(config);
-        }
-
         String sql = buildFlinkSql(dsName, subjectCode, configs);
         String deploymentName = getDeploymentName(dsName, subjectCode);
         String configMapName = getConfigMapName(dsName, subjectCode);
         CdcConfig first = configs.getFirst();
 
         try {
+            // 先通过元数据平台创建 ODS 表（Flink 只负责写入，不负责建表）
+            for (CdcConfig config : configs) {
+                ensureOdsTableExists(config);
+            }
+
             createOrUpdateConfigMap(configMapName, sql);
             log.info("ConfigMap 创建/更新成功: {}", configMapName);
 
