@@ -3,13 +3,16 @@ package com.cyan.dataman.application.cdc.service.impl;
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
+import com.cyan.dataman.application.metadata.MetadataTableService;
+import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.cdc.CdcConfig;
 import com.cyan.dataman.domain.cdc.CdcFlinkJob;
 import com.cyan.dataman.domain.cdc.query.CdcConfigListQuery;
 import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
 import com.cyan.dataman.domain.cdc.repository.CdcFlinkJobRepository;
-import com.cyan.dataman.enums.JobStatus;
-import com.cyan.dataman.enums.SyncTool;
+import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
+import com.cyan.dataman.enums.*;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
@@ -62,12 +65,15 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     private final CdcConfigRepository cdcConfigRepository;
     private final CdcFlinkJobRepository cdcFlinkJobRepository;
+    private final MetadataTableService metadataTableService;
     private final KubernetesClient k8sClient;
 
     public CdcFlinkSyncServiceImpl(CdcConfigRepository cdcConfigRepository,
-                                   CdcFlinkJobRepository cdcFlinkJobRepository) {
+                                   CdcFlinkJobRepository cdcFlinkJobRepository,
+                                   MetadataTableService metadataTableService) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.cdcFlinkJobRepository = cdcFlinkJobRepository;
+        this.metadataTableService = metadataTableService;
         this.k8sClient = new KubernetesClientBuilder().build();
     }
 
@@ -236,6 +242,11 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     // ==================== Application 模式作业提交 ====================
 
     private void submitFlinkApplication(String dsName, String subjectCode, List<CdcConfig> configs) {
+        // 先通过元数据平台创建 ODS 表（Flink 只负责写入，不负责建表）
+        for (CdcConfig config : configs) {
+            ensureOdsTableExists(config);
+        }
+
         String sql = buildFlinkSql(dsName, subjectCode, configs);
         String deploymentName = getDeploymentName(dsName, subjectCode);
         String configMapName = getConfigMapName(dsName, subjectCode);
@@ -502,6 +513,54 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     private String safeName(String name) {
         return name.replaceAll("[^a-zA-Z0-9_]", "_");
+    }
+
+    /**
+     * 确保 ODS 表已存在（通过元数据平台创建，Flink 只负责写入）
+     */
+    private void ensureOdsTableExists(CdcConfig config) {
+        String safeSubject = safeName(config.getSubjectCode());
+        String safeDb = safeName(config.getDbName());
+        String safeTable = safeName(config.getTableName());
+        String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
+
+        try {
+            MetadataTableCmd cmd = new MetadataTableCmd()
+                    .setName(odsTableName)
+                    .setOwner(config.getCreateBy())
+                    .setSubjectCode(config.getSubjectCode())
+                    .setLayerCode(DataLayer.ODS)
+                    .setComment("CDC ODS 表: " + config.getDbName() + "." + config.getTableName())
+                    .setSecretLevel(SecretLevel.L1)
+                    .setOnlineStatus(OnlineStatus.ONLINE)
+                    .setTableValObj(new TableValObj()
+                            .setCatalog("iceberg")
+                            .setSchema("ods")
+                            .setName(odsTableName)
+                            .setComment("CDC ODS 统一 Schema")
+                            .setColumns(List.of(
+                                    new ColumnValObj().setName("_raw_json").setType("STRING").setComment("原始 Debezium JSON").setNullable(true),
+                                    new ColumnValObj().setName("_op").setType("STRING").setComment("操作类型").setNullable(true),
+                                    new ColumnValObj().setName("_ts").setType("BIGINT").setComment("变更时间戳").setNullable(true),
+                                    new ColumnValObj().setName("_db").setType("STRING").setComment("源数据库").setNullable(true),
+                                    new ColumnValObj().setName("_table").setType("STRING").setComment("源表名").setNullable(true),
+                                    new ColumnValObj().setName("_ingestion_time").setType("TIMESTAMP").setComment("入库时间").setNullable(true)
+                            ))
+                    );
+
+            metadataTableService.save(cmd);
+            log.info("ODS 表创建成功: {}", odsTableName);
+        } catch (SilentException e) {
+            if (e.getMessage() != null && e.getMessage().contains("表已存在")) {
+                log.info("ODS 表已存在，跳过创建: {}", odsTableName);
+            } else {
+                log.error("创建 ODS 表失败: {}", odsTableName, e);
+                throw e;
+            }
+        } catch (Exception e) {
+            log.error("创建 ODS 表失败: {}", odsTableName, e);
+            throw new SilentException("创建 ODS 表失败: " + odsTableName);
+        }
     }
 
     // ==================== 工具方法 ====================
