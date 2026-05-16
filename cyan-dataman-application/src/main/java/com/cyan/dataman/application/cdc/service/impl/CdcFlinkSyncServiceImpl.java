@@ -394,6 +394,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     state: running
                   podTemplate:
                     spec:
+                      imagePullSecrets:
+                        - name: harbor-secret
                       containers:
                         - name: flink-main-container
                           volumeMounts:
