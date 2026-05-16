@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      K8s Namespace: cyan-dataman            │
+│                      K8s Namespace: flink            │
 │  ┌──────────────────┐      ┌──────────────────────────┐    │
 │  │ Flink JobManager │──────│ Flink TaskManager (xN)   │    │
 │  │  - REST API      │      │  - 执行 SQL Task         │    │
@@ -48,13 +48,13 @@ kubectl apply -f 02-flink-custom-image.yaml
 
 ```bash
 # 查看 Pod 状态
-kubectl get pods -n cyan-dataman
+kubectl get pods -n flink
 
 # 查看 JobManager 日志
-kubectl logs -n cyan-dataman -l component=jobmanager
+kubectl logs -n flink -l component=jobmanager
 
 # 端口转发访问 Flink Web UI（本地调试）
-kubectl port-forward -n cyan-dataman svc/flink-jobmanager 8081:8081
+kubectl port-forward -n flink svc/flink-jobmanager 8081:8081
 # 浏览器访问 http://localhost:8081
 ```
 
@@ -84,10 +84,10 @@ TaskManager 已配置 HPA，当 CPU > 70% 或内存 > 80% 时自动扩容：
 
 ```bash
 # 手动扩容
-kubectl scale deployment flink-taskmanager -n cyan-dataman --replicas=5
+kubectl scale deployment flink-taskmanager -n flink --replicas=5
 
 # 查看当前副本数
-kubectl get hpa -n cyan-dataman
+kubectl get hpa -n flink
 ```
 
 ## 清理
@@ -95,14 +95,14 @@ kubectl get hpa -n cyan-dataman
 ```bash
 kubectl delete -f 01-flink-session-cluster.yaml
 # 或
-kubectl delete namespace cyan-dataman
+kubectl delete namespace flink
 ```
 
 ## 故障排查
 
 | 问题 | 排查方法 |
 |------|----------|
-| SQL 提交失败 | 查看 JobManager 日志：`kubectl logs -n cyan-dataman deployment/flink-jobmanager` |
+| SQL 提交失败 | 查看 JobManager 日志：`kubectl logs -n flink deployment/flink-jobmanager` |
 | Kafka 连接失败 | 确认 TaskManager 能访问 Kafka Service DNS |
 | Iceberg 写入失败 | 确认 S3/RustFS  endpoint 和凭据正确 |
 | 类找不到 | 确认自定义镜像中包含 `iceberg-flink-runtime` 和 `flink-sql-connector-kafka` |

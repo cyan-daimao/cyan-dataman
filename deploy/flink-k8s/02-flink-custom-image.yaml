@@ -8,7 +8,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flink-jobmanager
-  namespace: cyan-dataman
+  namespace: flink
 spec:
   replicas: 1
   selector:
@@ -57,7 +57,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flink-taskmanager
-  namespace: cyan-dataman
+  namespace: flink
 spec:
   replicas: 2
   selector:

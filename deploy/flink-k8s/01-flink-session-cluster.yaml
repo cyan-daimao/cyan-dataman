@@ -7,7 +7,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: cyan-dataman
+  name: flink
 ---
 # -------------------- Flink ConfigMap --------------------
 apiVersion: v1
