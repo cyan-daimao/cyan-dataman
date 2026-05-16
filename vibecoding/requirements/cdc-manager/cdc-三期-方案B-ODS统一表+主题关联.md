@@ -127,7 +127,7 @@ private String buildFlinkSql(String dsName, String subjectCode) {
           'catalog-name' = 'rest',
           'catalog-type' = 'rest',
           'uri' = '%s',
-          'warehouse' = 's3://lakehouse/ods',
+          'warehouse' = 's3://warehouse/ods',
           'format-version' = '2',
           'write.format.default' = 'parquet',
           'write.upsert.enabled' = 'false'
