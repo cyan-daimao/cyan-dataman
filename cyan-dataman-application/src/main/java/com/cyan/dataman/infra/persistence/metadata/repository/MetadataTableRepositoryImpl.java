@@ -10,6 +10,7 @@ import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.enums.SecretLevel;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataColumnInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataTableInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO;
@@ -104,6 +105,9 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
                 col.setDataCatalog(metadataTableDO.getDataCatalog());
                 col.setDataSchema(metadataTableDO.getDataSchema());
                 col.setTbl(metadataTableDO.getTbl());
+                if (col.getSecretLevel() == null) {
+                    col.setSecretLevel(SecretLevel.L1);
+                }
                 metadataColumnMapper.insert(col);
             });
         }
