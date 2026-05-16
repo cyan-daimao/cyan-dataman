@@ -14,7 +14,10 @@ ADD https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/4.
 # Iceberg Flink Runtime（fat JAR，包含 Iceberg 核心和 Parquet 支持）
 ADD https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-2.0/1.10.1/iceberg-flink-runtime-2.0-1.10.1.jar /opt/flink/lib/
 
-# Hadoop AWS + AWS SDK（S3A 文件系统支持，用于 Checkpoint。Hadoop Client 由 sql-runner.jar 提供）
+# Hadoop Client Runtime（shaded，包含所有 Hadoop 依赖，供 iceberg-flink-runtime 使用）
+ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client-runtime/3.4.1/hadoop-client-runtime-3.4.1.jar /opt/flink/lib/
+
+# Hadoop AWS + AWS SDK（S3A 文件系统支持，用于 Checkpoint）
 ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar /opt/flink/lib/
 ADD https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.767/aws-java-sdk-bundle-1.12.767.jar /opt/flink/lib/
 
