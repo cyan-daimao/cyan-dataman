@@ -14,6 +14,9 @@ import java.time.LocalDateTime;
 
 /**
  * CDC Flink 作业配置实体
+ * <p>
+ * 一数据源对应一 Flink 作业，通过 dsName 关联。
+ * 作业内通过 Kafka topic pattern 消费该数据源下所有 CDC 表的数据。
  *
  * @author cy.Y
  * @since 1.0.0
@@ -30,9 +33,9 @@ public class CdcFlinkJob {
     private Long id;
 
     /**
-     * CDC 配置 ID
+     * 数据源名称（一数据源一作业）
      */
-    private String cdcConfigId;
+    private String dsName;
 
     /**
      * Flink 的 job id
@@ -45,7 +48,7 @@ public class CdcFlinkJob {
     private String logPath;
 
     /**
-     * Flink SQL 模板
+     * Flink SQL 文本
      */
     private String flinkSql;
 
@@ -93,7 +96,7 @@ public class CdcFlinkJob {
      * 验证
      */
     private void validate() {
-        Assert.notBlank(this.cdcConfigId, new SilentException("CDC 配置 ID 不能为空"));
+        Assert.notBlank(this.dsName, new SilentException("数据源名称不能为空"));
     }
 
     /**
@@ -106,10 +109,10 @@ public class CdcFlinkJob {
         if (this.enabled == null) {
             this.enabled = false;
         }
-        this.status = this.status==null?JobStatus.PENDING:this.status;
-        this.logPath = StrUtils.isBlank(this.logPath)?"":this.logPath;
-        this.flinkSql = StrUtils.isBlank(this.flinkSql)?"":this.flinkSql;
-        this.errorMessage = StrUtils.isBlank(this.errorMessage)?"":this.errorMessage;
+        this.status = this.status == null ? JobStatus.PENDING : this.status;
+        this.logPath = StrUtils.isBlank(this.logPath) ? "" : this.logPath;
+        this.flinkSql = StrUtils.isBlank(this.flinkSql) ? "" : this.flinkSql;
+        this.errorMessage = StrUtils.isBlank(this.errorMessage) ? "" : this.errorMessage;
         return repository.save(this);
     }
 

@@ -3,9 +3,6 @@ package com.cyan.dataman.application.cdc.service.impl;
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
-import com.cyan.dataman.application.cdc.sink.DebeziumToIcebergProcessFunction;
-import com.cyan.dataman.application.cdc.sink.IcebergBatchSink;
-import com.cyan.dataman.application.cdc.sink.IcebergWriteRecord;
 import com.cyan.dataman.domain.cdc.CdcConfig;
 import com.cyan.dataman.domain.cdc.CdcFlinkJob;
 import com.cyan.dataman.domain.cdc.query.CdcConfigListQuery;
@@ -15,12 +12,9 @@ import com.cyan.dataman.enums.JobStatus;
 import com.cyan.dataman.enums.SyncTool;
 import com.cyan.dataman.infra.config.FlinkConfig;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.connector.kafka.source.KafkaSource;
-import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
-import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -36,14 +30,22 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * CDC Flink 同步服务实现
+ * CDC Flink 同步服务实现（Flink SQL 版本）
  * <p>
- * 架构：一数据源一 Flink 作业，通过 topic pattern 自动匹配该 connector 下所有 topic，
- * ProcessFunction 定时从数据库刷新路由配置，实现动态增减表。
+ * 架构：一数据源一 Flink SQL 作业，通过 Kafka topic pattern 消费该数据源下所有 topic，
+ * 将完整的 Debezium JSON 写入统一的 ODS Iceberg 表。
  * <p>
- * 支持本地模式和远程模式：
+ * ODS 表固定 Schema：
+ * - _raw_json STRING    -- 完整 Debezium JSON
+ * - _op STRING          -- 操作类型（c/u/d）
+ * - _ts BIGINT          -- 数据变更时间戳
+ * - _db STRING          -- 来源库名
+ * - _table STRING       -- 来源表名
+ * - _ingestion_time TIMESTAMP_LTZ(3)  -- 摄入时间
+ * <p>
+ * 支持 local 和 remote 模式：
  * - local: 在 Spring Boot 进程内本地运行 Flink 作业
- * - remote: 通过 RemoteStreamEnvironment 提交到远端 Flink 集群，Spring Boot 重启不影响远程集群
+ * - remote: 通过 RemoteStreamEnvironment 提交到远端 Flink 集群
  *
  * @author cy.Y
  * @since 1.0.0
@@ -69,18 +71,6 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     @Value("${rustfs.secretKey:rustfsadmin}")
     private String rustfsSecretKey;
-
-    /**
-     * 数据源 JDBC 连接信息（供 Flink ProcessFunction 定时查库用）
-     */
-    @Value("${spring.datasource.url}")
-    private String jdbcUrl;
-
-    @Value("${spring.datasource.username}")
-    private String jdbcUsername;
-
-    @Value("${spring.datasource.password}")
-    private String jdbcPassword;
 
     /**
      * 数据源名称 -> 运行中的 Flink 作业 ID
@@ -121,9 +111,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 log.info("数据源 {} 已有运行中的 Flink 作业，跳过提交", dsName);
                 continue;
             }
-            // 取该数据源下任意一个 config 来提交作业（作业内 ProcessFunction 会自动感知所有 enabled 的表）
             CdcConfig config = entry.getValue().getFirst();
-            CompletableFuture.runAsync(() -> submitFlinkJob(dsName, config));
+            CompletableFuture.runAsync(() -> submitFlinkSqlJob(dsName, config));
         }
     }
 
@@ -149,11 +138,10 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         String dsName = config.getDsName();
 
         // 只有该数据源没有运行中的 Flink 作业时才提交新作业
-        // 已有作业时，ProcessFunction 会在下一个刷新周期自动感知新表
         if (!dsNameToFlinkJobId.containsKey(dsName)) {
-            CompletableFuture.runAsync(() -> submitFlinkJob(dsName, config));
+            CompletableFuture.runAsync(() -> submitFlinkSqlJob(dsName, config));
         } else {
-            log.info("数据源 {} 已有运行中的 Flink 作业，新表将由 ProcessFunction 自动感知, table={}.{}",
+            log.info("数据源 {} 已有运行中的 Flink 作业，新表数据将由 Kafka topic pattern 自动消费, table={}.{}",
                     dsName, config.getDbName(), config.getTableName());
         }
     }
@@ -168,7 +156,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         }
 
         String dsName = config.getDsName();
-        log.info("已禁用 CDC 同步, dsName={}, table={}.{}，Flink 作业将在刷新周期内自动跳过该表",
+        log.info("已禁用 CDC 同步, dsName={}, table={}.{}",
                 dsName, config.getDbName(), config.getTableName());
 
         // 检查该数据源下是否还有启用的表，没有则停止 Flink 作业
@@ -236,70 +224,42 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         }
     }
 
-    // ==================== 作业提交 ====================
+    // ==================== SQL 生成与作业提交 ====================
 
     /**
-     * 构建 DAG 并提交 Flink 作业
-     * <p>
-     * 每次调用创建新的 StreamExecutionEnvironment，不复用。
-     * Kafka Source 使用 topic pattern 自动匹配该 connector 下所有 topic。
-     * ProcessFunction 定时从数据库刷新路由配置，支持动态增减表。
+     * 生成 Flink SQL 并提交作业
      */
-    private void submitFlinkJob(String dsName, CdcConfig config) {
+    private void submitFlinkSqlJob(String dsName, CdcConfig config) {
+        String sql = buildFlinkSql(dsName);
+        log.info("生成 Flink SQL，dsName={}\n{}", dsName, sql);
+
         StreamExecutionEnvironment env = flinkConfig.createStreamExecutionEnvironment();
-
-        // 使用 topic pattern 匹配该数据源 connector 下所有 topic
-        // 格式: cdc-{dsName}.*，例如 cdc-mysql-x99.*
-        // Debezium topic 格式为 {connectorName}.{dbName}.{tableName}
-        String topicPattern = "cdc-" + dsName + ".*";
-
-        KafkaSource<String> kafkaSource = KafkaSource.<String>builder()
-                .setBootstrapServers(kafkaBootstrapServers)
-                .setTopicPattern(java.util.regex.Pattern.compile(topicPattern))
-                .setGroupId("flink-cdc-consumer-" + dsName)
-                .setValueOnlyDeserializer(new SimpleStringSchema())
-                .setStartingOffsets(OffsetsInitializer.committedOffsets(
-                        org.apache.kafka.clients.consumer.OffsetResetStrategy.EARLIEST))
-                .build();
-
-        DataStream<String> rawStream = env.fromSource(
-                        kafkaSource,
-                        WatermarkStrategy.noWatermarks(),
-                        "Kafka CDC Source - " + dsName)
-                .uid("kafka-source-" + dsName);
-
-        // 解析 Debezium 消息并路由到目标 Iceberg 表（定时从数据库刷新配置）
-        DataStream<IcebergWriteRecord> recordStream = rawStream
-                .process(new DebeziumToIcebergProcessFunction(
-                        dsName,
-                        icebergRestUri,
-                        rustfsEndpoint,
-                        rustfsAccessKey,
-                        rustfsSecretKey,
-                        jdbcUrl,
-                        jdbcUsername,
-                        jdbcPassword))
-                .uid("cdc-parse-" + dsName)
-                .name("CDC Parse - " + dsName);
-
-        // 批量写入 Iceberg（利用 Checkpoint 批量提交）
-        recordStream
-                .process(new IcebergBatchSink(
-                        icebergRestUri,
-                        rustfsEndpoint,
-                        rustfsAccessKey,
-                        rustfsSecretKey,
-                        128 * 1024 * 1024L))
-                .name("Iceberg Sink - " + dsName)
-                .uid("iceberg-sink-" + dsName);
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
 
         try {
-            var result = env.execute("Flink CDC Sync - " + dsName);
-            String realJobId = result.getJobID().toString();
+            // 执行 Kafka Source DDL
+            String kafkaDdl = extractStatement(sql, "CREATE TABLE kafka_cdc_" + dsName);
+            tableEnv.executeSql(kafkaDdl);
+            log.info("Kafka Source 表创建成功，dsName={}", dsName);
 
+            // 执行 Iceberg Sink DDL
+            String icebergDdl = extractStatement(sql, "CREATE TABLE ods_cdc_raw_" + dsName);
+            tableEnv.executeSql(icebergDdl);
+            log.info("Iceberg Sink 表创建成功，dsName={}", dsName);
+
+            // 执行 INSERT DML，获取 JobClient
+            String insertDml = extractStatement(sql, "INSERT INTO ods_cdc_raw_" + dsName);
+            TableResult result = tableEnv.executeSql(insertDml);
+
+            String realJobId = result.getJobClient()
+                    .map(client -> client.getJobID().toString())
+                    .orElseThrow(() -> new RuntimeException("无法获取 Flink Job ID，可能作业提交失败"));
+
+            // 保存作业记录
             CdcFlinkJob flinkJob = new CdcFlinkJob()
+                    .setDsName(dsName)
                     .setFlinkJobId(realJobId)
-                    .setCdcConfigId(config.getId())
+                    .setFlinkSql(sql)
                     .setEnabled(true)
                     .setStatus(JobStatus.RUNNING)
                     .setCreatedAt(LocalDateTime.now())
@@ -309,11 +269,97 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             flinkJob.save(cdcFlinkJobRepository);
 
             dsNameToFlinkJobId.put(dsName, realJobId);
-            log.info("Flink CDC 作业已提交, mode={}, dsName={}, flinkJobId={}, topicPattern={}",
-                    flinkConfig.getFlinkMode(), dsName, realJobId, topicPattern);
+            log.info("Flink SQL CDC 作业已提交, mode={}, dsName={}, flinkJobId={}",
+                    flinkConfig.getFlinkMode(), dsName, realJobId);
         } catch (Exception e) {
-            log.error("Flink CDC 作业提交失败, mode={}, dsName={}", flinkConfig.getFlinkMode(), dsName, e);
+            log.error("Flink SQL CDC 作业提交失败, mode={}, dsName={}", flinkConfig.getFlinkMode(), dsName, e);
+
+            // 保存失败记录
+            CdcFlinkJob failedJob = new CdcFlinkJob()
+                    .setDsName(dsName)
+                    .setFlinkSql(sql)
+                    .setEnabled(false)
+                    .setStatus(JobStatus.FAILED)
+                    .setErrorMessage(e.getMessage())
+                    .setCreatedAt(LocalDateTime.now())
+                    .setUpdatedAt(LocalDateTime.now())
+                    .setCreateBy(config.getCreateBy())
+                    .setUpdateBy(config.getUpdateBy());
+            failedJob.save(cdcFlinkJobRepository);
         }
+    }
+
+    /**
+     * 构建 Flink SQL 文本
+     */
+    private String buildFlinkSql(String dsName) {
+        String safeDsName = dsName.replaceAll("[^a-zA-Z0-9_]", "_");
+
+        return String.format("""
+                -- Kafka Source：使用 raw format 读取完整 Debezium JSON
+                CREATE TABLE IF NOT EXISTS kafka_cdc_%s (
+                  _raw_json STRING
+                ) WITH (
+                  'connector' = 'kafka',
+                  'topic' = 'cdc-%s.*',
+                  'properties.bootstrap.servers' = '%s',
+                  'properties.group.id' = 'flink-cdc-ods-%s',
+                  'scan.startup.mode' = 'earliest-offset',
+                  'format' = 'raw'
+                );
+
+                -- Iceberg ODS Sink：统一 Schema，纯追加
+                CREATE TABLE IF NOT EXISTS ods_cdc_raw_%s (
+                  _raw_json STRING,
+                  _op STRING,
+                  _ts BIGINT,
+                  _db STRING,
+                  _table STRING,
+                  _ingestion_time TIMESTAMP_LTZ(3)
+                ) WITH (
+                  'connector' = 'iceberg',
+                  'catalog-name' = 'rest',
+                  'catalog-type' = 'rest',
+                  'uri' = '%s',
+                  'warehouse' = 's3://lakehouse/ods',
+                  'format-version' = '2',
+                  'write.format.default' = 'parquet',
+                  'write.upsert.enabled' = 'false',
+                  's3.endpoint' = '%s',
+                  's3.access-key-id' = '%s',
+                  's3.secret-access-key' = '%s',
+                  's3.path-style-access' = 'true'
+                );
+
+                -- 将 Debezium JSON 写入 ODS，同时提取元数据字段
+                INSERT INTO ods_cdc_raw_%s
+                SELECT
+                  _raw_json,
+                  COALESCE(JSON_VALUE(_raw_json, '$.payload.op'), JSON_VALUE(_raw_json, '$.op')) AS _op,
+                  CAST(COALESCE(JSON_VALUE(_raw_json, '$.payload.ts_ms'), JSON_VALUE(_raw_json, '$.ts_ms')) AS BIGINT) AS _ts,
+                  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) AS _db,
+                  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) AS _table,
+                  NOW() AS _ingestion_time
+                FROM kafka_cdc_%s;
+                """,
+                safeDsName, dsName, kafkaBootstrapServers, dsName,
+                safeDsName, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
+                safeDsName, safeDsName);
+    }
+
+    /**
+     * 从完整 SQL 文本中提取单条语句
+     */
+    private String extractStatement(String fullSql, String statementPrefix) {
+        String[] statements = fullSql.split(";");
+        for (String stmt : statements) {
+            String trimmed = stmt.trim();
+            if (trimmed.toUpperCase().startsWith(statementPrefix.toUpperCase()) ||
+                trimmed.toUpperCase().contains(statementPrefix.toUpperCase())) {
+                return trimmed;
+            }
+        }
+        throw new RuntimeException("SQL 中未找到以 '" + statementPrefix + "' 开头的语句");
     }
 
     // ==================== 恢复与取消 ====================
@@ -324,10 +370,9 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     private void recoverRunningJobs() {
         List<CdcFlinkJob> runningJobs = cdcFlinkJobRepository.findAllRunning();
         for (CdcFlinkJob job : runningJobs) {
-            // 通过 cdcConfigId 反查 dsName
-            CdcConfig config = cdcConfigRepository.findById(job.getCdcConfigId());
-            if (config == null) {
-                log.warn("恢复作业映射跳过: cdcConfigId={} 不存在, flinkJobId={}", job.getCdcConfigId(), job.getFlinkJobId());
+            String dsName = job.getDsName();
+            if (dsName == null) {
+                log.warn("恢复作业映射跳过: flinkJobId={} 的 dsName 为空", job.getFlinkJobId());
                 continue;
             }
 
@@ -342,8 +387,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 }
             }
 
-            dsNameToFlinkJobId.putIfAbsent(config.getDsName(), job.getFlinkJobId());
-            log.info("恢复作业映射: dsName={}, flinkJobId={}", config.getDsName(), job.getFlinkJobId());
+            dsNameToFlinkJobId.putIfAbsent(dsName, job.getFlinkJobId());
+            log.info("恢复作业映射: dsName={}, flinkJobId={}", dsName, job.getFlinkJobId());
         }
         log.info("作业映射恢复完成, 共 {} 个运行中作业", dsNameToFlinkJobId.size());
     }
@@ -389,6 +434,11 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         } catch (Exception e) {
             log.error("取消 Flink 作业异常，flinkJobId: {}", flinkJobId, e);
         }
+    }
+
+    @Override
+    public CdcFlinkJob findByDsName(String dsName) {
+        return cdcFlinkJobRepository.findByDsName(dsName);
     }
 
     /**

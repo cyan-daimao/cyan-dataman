@@ -1,6 +1,7 @@
 package com.cyan.dataman.adapter.cdc.http.dto;
 
 import com.cyan.dataman.enums.JobStatus;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
@@ -22,9 +23,9 @@ public class CdcFlinkJobDTO {
     private String id;
 
     /**
-     * CDC 配置 ID
+     * 数据源名称（一数据源一作业）
      */
-    private String cdcConfigId;
+    private String dsName;
 
     /**
      * Flink 的 job id
@@ -37,7 +38,7 @@ public class CdcFlinkJobDTO {
     private String logPath;
 
     /**
-     * Flink SQL 模板
+     * Flink SQL 文本
      */
     private String flinkSql;
 
@@ -69,10 +70,12 @@ public class CdcFlinkJobDTO {
     /**
      * 创建时间
      */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdAt;
 
     /**
      * 更新时间
      */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updatedAt;
 }

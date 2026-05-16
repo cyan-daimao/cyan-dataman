@@ -32,10 +32,10 @@ public class CdcFlinkJobDO {
     private Long id;
 
     /**
-     * CDC 配置 ID
+     * 数据源名称（一数据源一作业）
      */
-    @TableField("cdc_config_id")
-    private String cdcConfigId;
+    @TableField("ds_name")
+    private String dsName;
 
     /**
      * flink的job id
@@ -50,7 +50,7 @@ public class CdcFlinkJobDO {
     private String logPath;
 
     /**
-     * flink SQL 模板 可以为空
+     * flink SQL 文本
      */
     @TableField("flink_sql")
     private String flinkSql;

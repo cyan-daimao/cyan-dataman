@@ -6,8 +6,8 @@ import org.springframework.stereotype.Service;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -51,17 +51,17 @@ public class DebeziumSignalServiceImpl implements DebeziumSignalService {
         String signalId = "snapshot-" + UUID.randomUUID().toString().substring(0, 8);
 
         String fullSignalTable = SIGNAL_DATABASE + "." + SIGNAL_TABLE_NAME;
-        String sql = String.format(
-                "INSERT INTO %s (id, type, data) VALUES ('%s', 'execute-snapshot', '%s')",
-                fullSignalTable, signalId, dataJson
-        );
+        String sql = "INSERT INTO " + fullSignalTable + " (id, type, data) VALUES (?, 'execute-snapshot', ?)";
 
         log.info("发送增量快照信号: id={}, tables={}", signalId, Arrays.toString(dataTables));
 
         try (Connection conn = getConnectionToSignalDatabase(hostname, port, username, password);
-             Statement stmt = conn.createStatement()) {
+             PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            int rows = stmt.executeUpdate(sql);
+            ps.setString(1, signalId);
+            ps.setString(2, dataJson);
+
+            int rows = ps.executeUpdate();
             boolean success = rows > 0;
 
             if (success) {
@@ -79,25 +79,21 @@ public class DebeziumSignalServiceImpl implements DebeziumSignalService {
 
     @Override
     public boolean ensureSignalTableExists(String hostname, String port, String username, String password) {
-        try (Connection conn = getConnectionWithoutDatabase(hostname, port, username, password);
-             Statement stmt = conn.createStatement()) {
+        String createDatabaseSql = "CREATE DATABASE IF NOT EXISTS " + SIGNAL_DATABASE + " DEFAULT CHARSET=utf8mb4";
+        String createTableSql = "CREATE TABLE IF NOT EXISTS " + SIGNAL_DATABASE + "." + SIGNAL_TABLE_NAME + " (" +
+                "  id VARCHAR(64) NOT NULL PRIMARY KEY, " +
+                "  type VARCHAR(32) NOT NULL, " +
+                "  data VARCHAR(2048)" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-            String createDatabaseSql = String.format(
-                    "CREATE DATABASE IF NOT EXISTS %s DEFAULT CHARSET=utf8mb4",
-                    SIGNAL_DATABASE
-            );
-            stmt.executeUpdate(createDatabaseSql);
+        try (Connection conn = getConnectionWithoutDatabase(hostname, port, username, password);
+             PreparedStatement psDb = conn.prepareStatement(createDatabaseSql);
+             PreparedStatement psTable = conn.prepareStatement(createTableSql)) {
+
+            psDb.executeUpdate();
             log.info("信号库已确保存在: {}", SIGNAL_DATABASE);
 
-            String createTableSql = String.format(
-                    "CREATE TABLE IF NOT EXISTS %s.%s (" +
-                    "  id VARCHAR(64) NOT NULL PRIMARY KEY, " +
-                    "  type VARCHAR(32) NOT NULL, " +
-                    "  data VARCHAR(2048)" +
-                    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-                    SIGNAL_DATABASE, SIGNAL_TABLE_NAME
-            );
-            stmt.executeUpdate(createTableSql);
+            psTable.executeUpdate();
             log.info("信号表已确保存在: {}.{}", SIGNAL_DATABASE, SIGNAL_TABLE_NAME);
 
             return true;

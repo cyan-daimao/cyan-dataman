@@ -28,9 +28,9 @@ public interface CdcFlinkJobRepository {
     CdcFlinkJob findById(Long id);
 
     /**
-     * 根据 CDC 配置 ID 查找列表
+     * 根据数据源名称查找
      */
-    List<CdcFlinkJob> findByCdcConfigId(String cdcConfigId);
+    CdcFlinkJob findByDsName(String dsName);
 
     /**
      * 根据 Flink Job ID 查找

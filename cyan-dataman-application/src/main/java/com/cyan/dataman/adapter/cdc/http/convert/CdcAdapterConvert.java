@@ -1,9 +1,11 @@
 package com.cyan.dataman.adapter.cdc.http.convert;
 
 import com.cyan.dataman.adapter.cdc.http.dto.CdcConfigDTO;
+import com.cyan.dataman.adapter.cdc.http.dto.CdcFlinkJobDTO;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcSparkJobDTO;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcSparkTaskDTO;
 import com.cyan.dataman.application.cdc.bo.CdcConfigBO;
+import com.cyan.dataman.application.cdc.bo.CdcFlinkJobBO;
 import com.cyan.dataman.application.cdc.bo.CdcSparkJobBO;
 import com.cyan.dataman.application.cdc.bo.CdcSparkTaskBO;
 import org.mapstruct.Mapper;
@@ -25,4 +27,6 @@ public interface CdcAdapterConvert {
     CdcSparkJobDTO toCdcSparkJobDTO(CdcSparkJobBO bo);
 
     CdcSparkTaskDTO toCdcSparkTaskDTO(CdcSparkTaskBO bo);
+
+    CdcFlinkJobDTO toCdcFlinkJobDTO(CdcFlinkJobBO bo);
 }

@@ -46,13 +46,11 @@ public class CdcFlinkJobRepositoryImpl implements CdcFlinkJobRepository {
     }
 
     @Override
-    public List<CdcFlinkJob> findByCdcConfigId(String cdcConfigId) {
+    public CdcFlinkJob findByDsName(String dsName) {
         LambdaQueryWrapper<CdcFlinkJobDO> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(CdcFlinkJobDO::getCdcConfigId, cdcConfigId);
-        List<CdcFlinkJobDO> dosList = cdcFlinkJobMapper.selectList(wrapper);
-        return dosList.stream()
-                .map(CdcFlinkJobInfraConvert.INSTANCE::toDomain)
-                .toList();
+        wrapper.eq(CdcFlinkJobDO::getDsName, dsName);
+        CdcFlinkJobDO dos = cdcFlinkJobMapper.selectOne(wrapper);
+        return dos != null ? CdcFlinkJobInfraConvert.INSTANCE.toDomain(dos) : null;
     }
 
     @Override

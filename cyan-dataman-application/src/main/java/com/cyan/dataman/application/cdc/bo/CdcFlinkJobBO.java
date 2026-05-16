@@ -26,9 +26,9 @@ public class CdcFlinkJobBO {
     private String id;
 
     /**
-     * CDC 配置 ID
+     * 数据源名称（一数据源一作业）
      */
-    private String cdcConfigId;
+    private String dsName;
 
     /**
      * Flink 的 job id
@@ -41,7 +41,7 @@ public class CdcFlinkJobBO {
     private String logPath;
 
     /**
-     * Flink SQL 模板
+     * Flink SQL 文本
      */
     private String flinkSql;
 
