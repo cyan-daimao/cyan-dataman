@@ -8,19 +8,26 @@
 
 ## 1. 安装 Flink Kubernetes Operator
 
+> **Operator 镜像 vs Flink 作业镜像**
+>
+> - **Operator 镜像**（`flink-kubernetes-operator:1.14.0`）：控制平面，管理 FlinkDeployment 生命周期。
+>   用官方 Helm 安装即可，**不需要**用我们的 Dockerfile。
+> - **Flink 作业镜像**（`harbor.cyan.com/cyan/flink-sql:2.0.1`）：数据平面，实际运行 SQL 的 JM + TM Pod。
+>   由我们的 `Dockerfile` 构建，在 `FlinkDeployment.spec.image` 中指定。
+
 ### 方式一：Helm（推荐）
 
 ```bash
 # 添加 Flink Operator Helm 仓库
-helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.9.0/
+helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.14.0/
 helm repo update
 
-# 安装 Operator 到 flink namespace
+# 安装 Operator 到 flink namespace（使用官方 Operator 镜像）
 helm install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator \
   --namespace flink \
   --create-namespace \
   --set image.repository=flink-kubernetes-operator \
-  --set image.tag=1.9.0
+  --set image.tag=1.14.0
 
 # 验证安装
 kubectl get pods -n flink
