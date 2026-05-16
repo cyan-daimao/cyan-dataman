@@ -1,54 +1,74 @@
 # Flink on K8s 部署指南（Application 模式）
 
-## 架构概览
+## 架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  K8s                                                       │
-│  ┌─ Namespace: flink ──────────────────────────────────┐   │
-│  │  Flink Kubernetes Operator                          │   │
-│  │  ├─ FlinkDeployment: cdc-mysql-x99-cdc  (JM+TM)    │   │
-│  │  ├─ FlinkDeployment: cdc-pg-main-cdc    (JM+TM)    │   │
-│  │  └─ FlinkDeployment: cdc-xxx-cdc        (JM+TM)    │   │
-│  └─────────────────────────────────────────────────────┘   │
-│         ↑                                                   │
-│  ┌─ Spring Boot (任意 Namespace) ──────────────────────┐    │
-│  │  - 生成 Flink SQL                                   │    │
-│  │  - 创建 ConfigMap (SQL 脚本)                        │    │
-│  │  - 创建 FlinkDeployment CR (K8s API)                │    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
+Spring Boot ──K8s API──→ Flink Kubernetes Operator ──→ FlinkDeployment CR
+                                                          │
+                                                          ↓
+                                                    ┌─ JM + TM Pod ─┐
+                                                    │  SqlRunner    │
+                                                    │  执行 SQL     │
+                                                    └───────────────┘
 ```
+
+- **Operator**：官方镜像 `apache/flink-kubernetes-operator:1.14.0`，管理 FlinkDeployment 生命周期
+- **Flink 作业镜像**：`harbor.cyan.com/cyan/flink-sql:2.0.1`，由 `Dockerfile` 构建（含 Kafka/Iceberg Connector + sql-runner.jar）
+
+## 前置条件
+
+- K8s 集群 1.24+
+- Helm 3.8+
+- kubectl 已配置集群访问
+- Harbor 已配置且可推送镜像
+
+---
 
 ## 部署步骤
 
 ### 1. 安装 Flink Kubernetes Operator
 
 ```bash
-helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.9.0/
+helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.14.0/
 helm repo update
 
 helm install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator \
-  --namespace flink --create-namespace
+  --namespace flink \
+  --create-namespace \
+  --set image.repository=apache/flink-kubernetes-operator \
+  --set image.tag=1.14.0 \
+  --set webhook.create=false
 ```
 
-详细步骤见 [04-flink-operator-install.md](04-flink-operator-install.md)
+> 如果 K8s 无法访问 Docker Hub，先把镜像推送到 Harbor：
+> ```bash
+> docker pull apache/flink-kubernetes-operator:1.14.0
+> docker tag apache/flink-kubernetes-operator:1.14.0 harbor.cyan.com/library/flink-kubernetes-operator:1.14.0
+> docker push harbor.cyan.com/library/flink-kubernetes-operator:1.14.0
+> ```
+> 然后 Helm 安装时把 `image.repository` 改成 `harbor.cyan.com/library/flink-kubernetes-operator`。
 
-### 2. 构建并推送自定义 Flink 镜像
+验证：
+```bash
+kubectl get pods -n flink
+kubectl get crd | grep flinkdeployments
+```
+
+### 2. 构建并推送 Flink 作业镜像
 
 ```bash
-# 1. 先打包 sql-runner.jar
+# 先打包 sql-runner.jar
 mvn clean package -pl cyan-dataman-application -am -DskipTests
 
-# 2. 构建镜像
+# 构建镜像
 cd deploy/flink-k8s
 docker build -t harbor.cyan.com/cyan/flink-sql:2.0.1 .
 
-# 3. 推送
+# 推送
 docker push harbor.cyan.com/cyan/flink-sql:2.0.1
 ```
 
-### 3. 配置 Spring Boot RBAC
+### 3. apply RBAC
 
 Spring Boot 需要权限在 `flink` namespace 创建 FlinkDeployment 和 ConfigMap：
 
@@ -56,48 +76,55 @@ Spring Boot 需要权限在 `flink` namespace 创建 FlinkDeployment 和 ConfigM
 kubectl apply -f 03-rbac-for-springboot.yaml
 ```
 
-> 如果你的 Spring Boot 不在 `cyan-dataman` namespace，修改 `03-rbac-for-springboot.yaml` 中的 `subjects`。
+> 如果 Spring Boot 不在 `cyan-dataman` namespace，修改 `03-rbac-for-springboot.yaml` 中的 `subjects`。
 
-### 4. 部署 Flink Application（由 Spring Boot 自动创建）
+### 4. 部署 Spring Boot
 
-Spring Boot 启动后自动调用 `CdcFlinkSyncServiceImpl.startFlinkSyncJob()`：
+按你们现有的 CI/CD 流程部署。
 
-1. 查询所有 `enabled=true` + `syncTool=FLINK` 的 CDC 配置
-2. 按 `dsName` 分组
-3. 对每个数据源生成 Flink SQL
-4. 创建 ConfigMap（SQL 脚本）
-5. 创建 FlinkDeployment CR
-6. Flink Operator 自动拉起 JM + TM Pod 执行 SQL
+---
 
-验证：
+## 验证
+
+Spring Boot 启动后，创建并启用一条 CDC 配置，然后检查 K8s：
 
 ```bash
 # 查看 FlinkDeployment
 kubectl get flinkdeployments -n flink
 
-# 查看 Pod
+# 查看 Pod（应看到 cdc-{dsName}-{subjectCode} 的 JM 和 TM）
 kubectl get pods -n flink
 
-# 查看某个 CDC 作业的 JM 日志
-kubectl logs -n flink deployment/cdc-mysql-x99-cdc-jobmanager
+# 查看 JM 日志
+kubectl logs -n flink deployment/cdc-{dsName}-{subjectCode}-jobmanager
+
+# 查看 TM 日志
+kubectl logs -n flink deployment/cdc-{dsName}-{subjectCode}-taskmanager
 ```
 
-## 文件说明
+---
 
-| 文件 | 用途 |
-|------|------|
-| `Dockerfile` | 自定义 Flink 镜像（含 Kafka/Iceberg Connector + sql-runner.jar） |
-| `01-flink-session-cluster.yaml` | Session Cluster 配置（已废弃，保留参考） |
-| `02-flink-custom-image.yaml` | 使用自定义镜像的 Session Cluster（已废弃） |
-| `03-rbac-for-springboot.yaml` | Spring Boot 操作 K8s API 所需的 RBAC |
-| `04-flink-operator-install.md` | Operator 安装详细指南 |
+## 常见问题
 
-## 故障排查
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| `ImagePullBackOff` | Operator 镜像缺少 `apache/` 前缀 | `--set image.repository=apache/flink-kubernetes-operator` |
+| `no matches for kind "Certificate"` | 未禁用 webhook 且没装 cert-manager | 加 `--set webhook.create=false` |
+| `cannot reuse a name that is still in use` | Helm release 已存在 | `helm uninstall flink-kubernetes-operator -n flink` 后再装 |
+| Pod 启动后 SQL 报错 | sql-runner.jar 或 Connector 缺失 | 确认 `docker build` 时 `sql-runner.jar` 已存在 |
+| Spring Boot 权限报错 | RBAC 未配置或 namespace 不对 | 检查 `03-rbac-for-springboot.yaml` 的 `subjects` |
 
-| 问题 | 排查方法 |
-|------|----------|
-| FlinkDeployment 状态 ERROR | `kubectl describe flinkdeployment cdc-{dsName} -n flink` |
-| Pod ImagePullBackOff | 确认镜像已推送到 Harbor，`kubectl describe pod -n flink` |
-| SQL 执行失败 | `kubectl logs -n flink deployment/{name}-jobmanager` |
-| Spring Boot 权限报错 | 确认 `03-rbac-for-springboot.yaml` 已 apply |
-| 类找不到 | 确认镜像中包含 `sql-runner.jar` 和 Connector JAR |
+---
+
+## 清理
+
+```bash
+# 删除所有 FlinkDeployment（会连带删除 JM+TM Pod）
+kubectl delete flinkdeployments --all -n flink
+
+# 卸载 Operator
+helm uninstall flink-kubernetes-operator -n flink
+
+# 删除 namespace
+kubectl delete namespace flink
+```
