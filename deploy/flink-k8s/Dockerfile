@@ -14,8 +14,11 @@ ADD https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/4.
 # Iceberg Flink Runtime（fat JAR，包含 Iceberg 核心和 Parquet 支持）
 ADD https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-2.0/1.10.1/iceberg-flink-runtime-2.0-1.10.1.jar /opt/flink/lib/
 
-# Hadoop Common（Iceberg REST Catalog 需要 Configuration 类）
+# Hadoop 依赖（Iceberg REST Catalog 需要）
 ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-common/3.4.1/hadoop-common-3.4.1.jar /opt/flink/lib/
+ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-hdfs-client/3.4.1/hadoop-hdfs-client-3.4.1.jar /opt/flink/lib/
+ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-auth/3.4.1/hadoop-auth-3.4.1.jar /opt/flink/lib/
+ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-annotations/3.4.1/hadoop-annotations-3.4.1.jar /opt/flink/lib/
 
 # Hadoop AWS（S3A 文件系统支持，用于 Checkpoint 和 Iceberg 读写）
 ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar /opt/flink/lib/
