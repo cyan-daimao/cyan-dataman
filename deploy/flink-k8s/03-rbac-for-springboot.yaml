@@ -1,0 +1,38 @@
+# ============================================================
+# Spring Boot 操作 FlinkDeployment 所需的 RBAC
+# Spring Boot 通过 Fabric8 K8s Client 在 flink namespace 中
+# 创建/更新/删除 FlinkDeployment CR 和 ConfigMap
+# ============================================================
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flink-deployment-manager
+rules:
+  # FlinkDeployment CR 权限
+  - apiGroups: ["flink.apache.org"]
+    resources: ["flinkdeployments"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  # ConfigMap 权限（挂载 SQL 脚本）
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  # 查看 Pod 状态（用于 refreshSyncStatus）
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cyan-dataman-flink-deployment-manager
+subjects:
+  # 绑定到 cyan-dataman namespace 的 default ServiceAccount
+  # 如果你的 Spring Boot 使用其他 ServiceAccount，请修改此处
+  - kind: ServiceAccount
+    name: default
+    namespace: cyan-dataman
+roleRef:
+  kind: ClusterRole
+  name: flink-deployment-manager
+  apiGroup: rbac.authorization.k8s.io
