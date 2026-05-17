@@ -55,6 +55,16 @@ public class CdcFlinkJobRepositoryImpl implements CdcFlinkJobRepository {
     }
 
     @Override
+    public CdcFlinkJob findByDsNameAndDbNameAndTableName(String dsName, String dbName, String tableName) {
+        LambdaQueryWrapper<CdcFlinkJobDO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CdcFlinkJobDO::getDsName, dsName)
+               .eq(CdcFlinkJobDO::getDbName, dbName)
+               .eq(CdcFlinkJobDO::getTableName, tableName);
+        CdcFlinkJobDO dos = cdcFlinkJobMapper.selectOne(wrapper);
+        return dos != null ? CdcFlinkJobInfraConvert.INSTANCE.toDomain(dos) : null;
+    }
+
+    @Override
     public CdcFlinkJob findByFlinkJobId(String flinkJobId) {
         LambdaQueryWrapper<CdcFlinkJobDO> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(CdcFlinkJobDO::getFlinkJobId, flinkJobId);

@@ -28,9 +28,14 @@ public interface CdcFlinkJobRepository {
     CdcFlinkJob findById(Long id);
 
     /**
-     * 根据数据源名称 + 主题编码查找
+     * 根据数据源名称 + 主题编码查找（旧分组方式，逐步废弃）
      */
     CdcFlinkJob findByDsNameAndSubjectCode(String dsName, String subjectCode);
+
+    /**
+     * 根据数据源名称 + 数据库名 + 表名查找（一表一作业）
+     */
+    CdcFlinkJob findByDsNameAndDbNameAndTableName(String dsName, String dbName, String tableName);
 
     /**
      * 根据 Flink Job ID 查找

@@ -133,7 +133,7 @@ public class CdcSchemaSyncService {
         log.info("元数据平台记录已更新: {}，新增 {} 个字段", odsTableName, newColumns.size());
 
         // 7. 重启 Flink 作业（重新生成 SQL 并提交）
-        cdcFlinkSyncService.restartFlinkJob(dsName, config.getSubjectCode());
+        cdcFlinkSyncService.restartFlinkJob(config.getId());
 
         log.info("Schema 同步完成，新增 {} 个字段，Flink 作业已重启: {}.{}.{}",
                 newColumns.size(), dsName, dbName, tableName);
