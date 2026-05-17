@@ -19,7 +19,7 @@ import java.util.List;
  * 在 Flink Kubernetes Operator 的 FlinkDeployment 中配置：
  * <pre>
  *   job:
- *     jarURI: local:///opt/flink/usrlib/sql-runner.jar
+ *     jarURI: local:///opt/flink/lib/sql-runner.jar
  *     entryClass: com.cyan.dataman.infra.flink.SqlRunner
  *     args: ["/opt/flink/sql/job.sql"]
  * </pre>

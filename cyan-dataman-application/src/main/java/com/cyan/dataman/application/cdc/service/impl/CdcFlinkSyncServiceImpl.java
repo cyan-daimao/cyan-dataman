@@ -385,7 +385,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     s3.secret-key: %s
                     s3.path.style.access: true
                   job:
-                    jarURI: local:///opt/flink/usrlib/sql-runner.jar
+                    jarURI: local:///opt/flink/lib/sql-runner.jar
                     entryClass: com.cyan.dataman.infra.flink.SqlRunner
                     args:
                       - "/opt/flink/sql/job.sql"
