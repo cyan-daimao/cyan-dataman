@@ -632,6 +632,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         Set<String> sourceColNames = sourceColumns.stream()
                 .map(ColumnValObj::getName)
                 .collect(Collectors.toSet());
+        log.info("源表 {}.{} 共 {} 个字段: {}", config.getDbName(), config.getTableName(),
+                sourceColumns.size(), sourceColNames);
 
         List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> odsColumns = new ArrayList<>();
         for (ColumnValObj sourceCol : sourceColumns) {
@@ -667,6 +669,20 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
                     .setName("_ingestion_time").setType("TIMESTAMP").setComment("入库时间").setNullable(true));
         }
+
+        // 防御性去重：若因 JDBC 驱动等原因出现重复字段名，保留第一个
+        List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> uniqueOdsColumns = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (com.cyan.dataman.domain.metadata.valobj.ColumnValObj col : odsColumns) {
+            if (seen.add(col.getName())) {
+                uniqueOdsColumns.add(col);
+            } else {
+                log.warn("ODS 表 {} 出现重复字段名 [{}]，已去重", odsTableName, col.getName());
+            }
+        }
+        odsColumns = uniqueOdsColumns;
+        log.info("ODS 表 {} 最终字段列表 ({} 个): {}", odsTableName, odsColumns.size(),
+                odsColumns.stream().map(com.cyan.dataman.domain.metadata.valobj.ColumnValObj::getName).toList());
 
         try {
             MetadataTableCmd cmd = new MetadataTableCmd()
