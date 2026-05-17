@@ -401,8 +401,8 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             log.info("更新 Debezium 连接器配置: {}", connectorName);
         }
 
-        // 等待 connector task 启动完成
-        boolean taskRunning = waitForConnectorTaskRunning(connectorName, 30);
+        // 等待 connector task 启动完成（延长超时时间到 60 秒）
+        boolean taskRunning = waitForConnectorTaskRunning(connectorName, 60);
         if (!taskRunning) {
             log.warn("Debezium 连接器 task 未能在超时时间内启动: {}", connectorName);
         }
@@ -412,12 +412,16 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         // - connector 存在 + 表从未同步过（INIT）→ 发信号触发全量快照
         // - connector 存在 + 表之前同步过（STOP）→ 不发信号，从 binlog 增量继续
         if (connectorExists && !previouslySynced) {
+            // 给 Debezium 额外时间初始化 binlog 读取，避免信号发送太早被错过
+            sleepQuietly(15000);
             boolean signalSent = debeziumSignalService.sendIncrementalSnapshotSignal(
                     info.hostname(), info.port(),
                     dsConfig.getUsername(), dsConfig.getPassword(),
                     config.getDbName() + "." + config.getTableName());
             if (signalSent) {
                 log.info("已触发增量快照信号（新表首次同步）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+                // 信号发送后再等 5 秒，让 Debezium 有时间处理
+                sleepQuietly(5000);
             } else {
                 log.warn("增量快照信号发送失败: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
             }
@@ -673,6 +677,17 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
     private String buildConnectorName(String dsName) {
         return "cdc-" + dsName;
+    }
+
+    /**
+     * 静默睡眠指定毫秒数，不抛异常
+     */
+    private void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
