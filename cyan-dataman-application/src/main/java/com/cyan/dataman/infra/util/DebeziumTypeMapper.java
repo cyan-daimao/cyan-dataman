@@ -76,6 +76,10 @@ public class DebeziumTypeMapper {
     public static String buildExtractExpr(String columnName, String flinkType) {
         String jsonPath = "JSON_VALUE(_raw_json, '$.payload.after." + escapeJsonPath(columnName) + "')";
         String quotedName = "`" + columnName + "`";
+        if ("TIMESTAMP(3)".equals(flinkType)) {
+            // Debezium 时间戳为 int64 毫秒，先转 BIGINT 再除以 1000.0 得到秒级时间戳
+            return "TO_TIMESTAMP(CAST(" + jsonPath + " AS BIGINT) / 1000.0) AS " + quotedName;
+        }
         if (needsCast(flinkType)) {
             return "CAST(" + jsonPath + " AS " + flinkType + ") AS " + quotedName;
         }
