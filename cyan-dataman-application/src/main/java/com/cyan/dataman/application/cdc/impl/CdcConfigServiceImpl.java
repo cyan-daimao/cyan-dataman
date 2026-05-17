@@ -139,7 +139,8 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                     .setRunningStatus(RunningStatus.INIT);
 
             config = config.save(cdcConfigRepository);
-            updateConnectorTableList(dsConfig.getName(), existingConfig.getConnectorName(), dsConfig, info);
+            // 走完整的启动流程：更新 include.list → stop → start → 发增量快照信号
+            startConnectorForTable(config);
         }
 
         // Flink 类型自动启动同步
