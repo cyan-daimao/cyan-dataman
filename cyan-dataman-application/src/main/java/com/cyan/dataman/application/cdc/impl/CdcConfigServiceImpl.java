@@ -414,16 +414,29 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         if (connectorExists && !previouslySynced) {
             // 给 Debezium 额外时间初始化 binlog 读取，避免信号发送太早被错过
             sleepQuietly(15000);
-            boolean signalSent = debeziumSignalService.sendIncrementalSnapshotSignal(
+            String dataTable = config.getDbName() + "." + config.getTableName();
+
+            // 第一次发送信号
+            boolean signalSent1 = debeziumSignalService.sendIncrementalSnapshotSignal(
                     info.hostname(), info.port(),
                     dsConfig.getUsername(), dsConfig.getPassword(),
-                    config.getDbName() + "." + config.getTableName());
-            if (signalSent) {
-                log.info("已触发增量快照信号（新表首次同步）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
-                // 信号发送后再等 5 秒，让 Debezium 有时间处理
-                sleepQuietly(5000);
+                    dataTable);
+            if (signalSent1) {
+                log.info("已触发增量快照信号（第1次）: connector={}, table={}", connectorName, dataTable);
             } else {
-                log.warn("增量快照信号发送失败: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+                log.warn("增量快照信号发送失败（第1次）: connector={}, table={}", connectorName, dataTable);
+            }
+
+            // 等待 30 秒后再次发送（防止第一次因 Debezium 未就绪被错过）
+            sleepQuietly(30000);
+            boolean signalSent2 = debeziumSignalService.sendIncrementalSnapshotSignal(
+                    info.hostname(), info.port(),
+                    dsConfig.getUsername(), dsConfig.getPassword(),
+                    dataTable);
+            if (signalSent2) {
+                log.info("已触发增量快照信号（第2次，重试）: connector={}, table={}", connectorName, dataTable);
+            } else {
+                log.warn("增量快照信号发送失败（第2次）: connector={}, table={}", connectorName, dataTable);
             }
         } else if (previouslySynced) {
             log.info("跳过增量快照信号（已同步过的表重新启用，从 binlog 增量继续）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
