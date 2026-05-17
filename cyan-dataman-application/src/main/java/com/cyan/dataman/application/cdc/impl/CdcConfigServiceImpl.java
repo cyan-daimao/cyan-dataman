@@ -41,9 +41,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.NewTopic;
 
 /**
  * CDC 配置服务实现
@@ -512,9 +519,45 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     }
 
     /**
+     * 为 CDC 配置列表创建对应的 Kafka topic（若不存在则创建）
+     * <p>
+     * Topic 命名格式: {@code <topicPrefix>.<dbName>.<tableName>}
+     * 如: {@code cdc-mysql-x99.cyan_databi.bi_dashboard}
+     */
+    private void createKafkaTopicsForConfigs(String topicPrefix, List<CdcConfig> configs) {
+        if (configs.isEmpty()) {
+            return;
+        }
+        Properties props = new Properties();
+        props.put("bootstrap.servers", kafkaUrl);
+        try (AdminClient admin = AdminClient.create(props)) {
+            Set<String> topicsToCreate = configs.stream()
+                    .map(c -> topicPrefix + "." + c.getDbName() + "." + c.getTableName())
+                    .collect(Collectors.toSet());
+
+            Set<String> existingTopics = admin.listTopics().names().get(10, TimeUnit.SECONDS);
+            List<NewTopic> newTopics = topicsToCreate.stream()
+                    .filter(t -> !existingTopics.contains(t))
+                    .map(t -> new NewTopic(t, 1, (short) 1))
+                    .toList();
+
+            if (!newTopics.isEmpty()) {
+                admin.createTopics(newTopics).all().get(10, TimeUnit.SECONDS);
+                log.info("创建 Kafka topics: {}", newTopics.stream().map(NewTopic::name).toList());
+            }
+        } catch (Exception e) {
+            log.warn("创建 Kafka topic 失败: {}", e.getMessage(), e);
+            // 不阻断后续 Debezium connector 创建/更新流程
+        }
+    }
+
+    /**
      * 创建 Debezium 连接器
      */
     private void createDebeziumConnector(CdcConfig config, DsConfig dsConfig, DatasourceInfo info) {
+        // 先创建 Kafka topic（避免 auto.create.topics.enable=false 时 Debezium 无法写入）
+        createKafkaTopicsForConfigs(config.getConnectorName(), List.of(config));
+
         String tableIncludeList = config.getDbName() + "." + config.getTableName();
         String historyTopic = "schema-history-" + info.hostname() + "-" + info.port();
 
@@ -576,6 +619,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .map(c -> c.getDbName() + "." + c.getTableName())
                 .distinct()
                 .collect(java.util.stream.Collectors.joining(","));
+
+        // 先创建 Kafka topic（避免 auto.create.topics.enable=false 时 Debezium 无法写入）
+        createKafkaTopicsForConfigs(connectorName, enabledConfigs);
 
         updateConnectorConfig(connectorName, info, dsConfig, tableIncludeList, serverId);
     }
