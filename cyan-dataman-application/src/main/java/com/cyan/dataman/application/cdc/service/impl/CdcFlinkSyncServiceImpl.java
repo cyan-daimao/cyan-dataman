@@ -560,6 +560,10 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             colExtract.append("  NOW() AS `_ingestion_time`,\n");
         }
 
+        // 去掉最后一个 trailing comma（Flink SQL 不允许列定义末尾有逗号）
+        String colDdlStr = stripTrailingComma(colDdl.toString());
+        String colExtractStr = stripTrailingComma(colExtract.toString());
+
         return String.format("""
                 -- ==== Sink: %s.%s ====
                 CREATE TABLE IF NOT EXISTS %s (
@@ -585,9 +589,9 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 -- ==== End Sink: %s.%s ====
                 """,
                 config.getDbName(), config.getTableName(),
-                fullTableName, colDdl.toString(),
+                fullTableName, colDdlStr,
                 icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
-                fullTableName, colExtract.toString(),
+                fullTableName, colExtractStr,
                 safeDsName, config.getTableName(), config.getDbName(),
                 config.getDbName(), config.getTableName());
     }
@@ -613,6 +617,16 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     private String safeName(String name) {
         return name.replaceAll("[^a-zA-Z0-9_]", "_");
+    }
+
+    /**
+     * 去掉字段列表字符串末尾的逗号和换行
+     */
+    private String stripTrailingComma(String s) {
+        if (s != null && s.endsWith(",\n")) {
+            return s.substring(0, s.length() - 2) + "\n";
+        }
+        return s;
     }
 
     /**
