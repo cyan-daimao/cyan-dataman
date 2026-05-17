@@ -420,20 +420,19 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         // 快照信号策略：
         // - connector 不存在 → 创建时已自动快照，不发信号
-        // - connector 存在 + 表从未同步过（INIT）→ 发信号触发全量快照
-        // - connector 存在 + 表之前同步过（STOP）→ 不发信号，从 binlog 增量继续
-        if (connectorExists && !previouslySynced) {
+        // - connector 已存在 → 无论新表（INIT）还是旧表恢复（STOP），都发增量快照信号
+        //   原因：旧表重新启用时，binlog 可能已过期或偏移量失效，直接从 binlog 继续可能永远无消息。
+        //   发信号让 Debezium 对该表重新执行增量快照（全量+增量），最可靠。
+        if (connectorExists) {
             boolean signalSent = debeziumSignalService.sendIncrementalSnapshotSignal(
                     info.hostname(), info.port(),
                     dsConfig.getUsername(), dsConfig.getPassword(),
                     config.getDbName() + "." + config.getTableName());
             if (signalSent) {
-                log.info("已触发增量快照信号（新表首次同步）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+                log.info("已触发增量快照信号: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
             } else {
                 log.warn("增量快照信号发送失败: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
             }
-        } else if (previouslySynced) {
-            log.info("跳过增量快照信号（已同步过的表重新启用，从 binlog 增量继续）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
         } else {
             log.info("跳过增量快照信号（新建 connector，Debezium 自动执行全量快照）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
         }
