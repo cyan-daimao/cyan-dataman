@@ -124,6 +124,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     @Override
     public void enableCdcSync(String cdcConfigId) {
+        log.info("enableCdcSync 开始, cdcConfigId={}", cdcConfigId);
         CdcConfig config = cdcConfigRepository.findById(cdcConfigId);
         Assert.notNull(config, new SilentException("CDC 配置不存在"));
         Assert.isTrue(SyncTool.FLINK.equals(config.getSyncTool()),
@@ -138,13 +139,35 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         String deploymentName = getDeploymentName(dsName, subjectCode);
         String configMapName = getConfigMapName(dsName, subjectCode);
 
-        if (getFlinkDeployment(deploymentName) == null) {
+        // 【关键】无论 Deployment 是否存在，都要确保 ODS 元数据表存在
+        log.info("确保 ODS 表存在, deploymentName={}, table={}.{}", deploymentName, config.getDbName(), config.getTableName());
+        try {
+            ensureOdsTableExists(config);
+            log.info("ODS 表确保完成, table={}.{}", config.getDbName(), config.getTableName());
+        } catch (Exception e) {
+            log.error("ensureOdsTableExists 异常, table={}.{}: {}", config.getDbName(), config.getTableName(), e.getMessage(), e);
+            throw new SilentException("创建 ODS 元数据表失败: " + config.getDbName() + "." + config.getTableName());
+        }
+
+        GenericKubernetesResource deployment = getFlinkDeployment(deploymentName);
+        log.info("FlinkDeployment 状态, deploymentName={}, exists={}", deploymentName, deployment != null);
+
+        if (deployment == null) {
             // 没有 Deployment，创建新的（包含该组下所有启用的表）
             List<CdcConfig> configs = getEnabledConfigsByDsAndSubject(dsName, subjectCode);
-            CompletableFuture.runAsync(() -> submitFlinkApplication(dsName, subjectCode, configs));
+            log.info("准备异步提交 Flink 作业, dsName={}, subjectCode={}, configCount={}", dsName, subjectCode, configs.size());
+            CompletableFuture.runAsync(() -> submitFlinkApplication(dsName, subjectCode, configs))
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            log.error("异步提交 Flink 作业异常, dsName={}, subjectCode={}", dsName, subjectCode, ex);
+                        } else {
+                            log.info("异步提交 Flink 作业完成, dsName={}, subjectCode={}", dsName, subjectCode);
+                        }
+                    });
         } else {
             // 已有 Deployment，动态添加 Sink
             CdcFlinkJob job = cdcFlinkJobRepository.findByDsNameAndSubjectCode(dsName, subjectCode);
+            log.info("已有 FlinkDeployment, job={}", job != null ? job.getFlinkJobId() : "null");
             if (job != null) {
                 String currentSql = job.getFlinkSql();
                 String sinkMarker = sinkMarker(config.getDbName(), config.getTableName());
@@ -158,9 +181,14 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     job.setUpdatedAt(LocalDateTime.now());
                     job.update(cdcFlinkJobRepository);
                     log.info("已向 FlinkDeployment {} 添加 Sink: {}.{}", deploymentName, config.getDbName(), config.getTableName());
+                } else {
+                    log.info("Sink 已存在于 FlinkDeployment {} 中, 跳过: {}.{}", deploymentName, config.getDbName(), config.getTableName());
                 }
+            } else {
+                log.warn("FlinkDeployment 存在但数据库中无对应 FlinkJob 记录, deploymentName={}", deploymentName);
             }
         }
+        log.info("enableCdcSync 结束, cdcConfigId={}", cdcConfigId);
     }
 
     @Override
@@ -286,6 +314,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     // ==================== Application 模式作业提交 ====================
 
     private void submitFlinkApplication(String dsName, String subjectCode, List<CdcConfig> configs) {
+        log.info("submitFlinkApplication 开始, dsName={}, subjectCode={}, configCount={}", dsName, subjectCode, configs.size());
         String sql = buildFlinkSql(dsName, subjectCode, configs);
         String deploymentName = getDeploymentName(dsName, subjectCode);
         String configMapName = getConfigMapName(dsName, subjectCode);
@@ -294,6 +323,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         try {
             // 先通过元数据平台创建 ODS 表（Flink 只负责写入，不负责建表）
             for (CdcConfig config : configs) {
+                log.info("submitFlinkApplication 确保 ODS 表, table={}.{}", config.getDbName(), config.getTableName());
                 ensureOdsTableExists(config);
             }
 

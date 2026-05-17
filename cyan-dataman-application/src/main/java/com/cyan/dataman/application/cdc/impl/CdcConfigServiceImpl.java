@@ -401,21 +401,19 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             updateConnectorTableListFromConfigs(allConfigs, connectorName, dsConfig, info);
             log.info("更新 Debezium 连接器配置: {}", connectorName);
 
-            // 仿造 cyan-cdc：显式 stop + start，确保 connector 稳定运行后再发信号
+            // 更新配置后重启 connector 使新表生效。
+            // Kafka Connect 的 updateConnector 本身会触发自动重启，但显式 restart 更可靠。
+            boolean restarted = false;
             try {
-                debeziumRpc.stopConnector(connectorName);
-                log.info("Debezium 连接器已停止: {}", connectorName);
+                debeziumRpc.restartConnector(connectorName);
+                log.info("Debezium 连接器已重启: {}", connectorName);
+                restarted = true;
             } catch (Exception e) {
-                log.warn("停止 Debezium 连接器失败（可能已停止）: {}", e.getMessage());
+                log.warn("重启 Debezium 连接器失败（将依赖 updateConnector 的自动重启）: {}", e.getMessage());
             }
-            sleepQuietly(3000);
-            try {
-                debeziumRpc.startConnector(connectorName);
-                log.info("Debezium 连接器已启动: {}", connectorName);
-            } catch (Exception e) {
-                log.error("启动 Debezium 连接器失败: {}", e.getMessage());
+            if (restarted) {
+                sleepQuietly(3000);
             }
-            sleepQuietly(3000);
         }
 
         // 快照信号策略：

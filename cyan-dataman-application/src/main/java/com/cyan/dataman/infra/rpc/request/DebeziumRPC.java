@@ -58,14 +58,35 @@ public interface DebeziumRPC {
     DebeziumDO connectorStatus(@PathVariable("connectorName") String connectorName);
 
     /**
-     * 停止连接器
+     * 暂停连接器（标准 Kafka Connect API）
+     * @param name 连接器名称
+     */
+    @PutMapping("/connectors/{name}/pause")
+    Object pauseConnector(@PathVariable("name") String name);
+
+    /**
+     * 恢复连接器（标准 Kafka Connect API）
+     * @param name 连接器名称
+     */
+    @PutMapping("/connectors/{name}/resume")
+    Object resumeConnector(@PathVariable("name") String name);
+
+    /**
+     * 重启连接器（标准 Kafka Connect API）
+     * @param name 连接器名称
+     */
+    @PostMapping("/connectors/{name}/restart")
+    Object restartConnector(@PathVariable("name") String name);
+
+    /**
+     * 停止连接器（Kafka 3.x+ 扩展 API，可能不被旧版本支持）
      * @param name 连接器名称
      */
     @PostMapping("/connectors/{name}/stop")
     Object stopConnector(@PathVariable("name") String name);
 
     /**
-     * 启动连接器
+     * 启动连接器（Kafka 3.x+ 扩展 API，可能不被旧版本支持）
      * @param name 连接器名称
      */
     @PostMapping("/connectors/{name}/start")
