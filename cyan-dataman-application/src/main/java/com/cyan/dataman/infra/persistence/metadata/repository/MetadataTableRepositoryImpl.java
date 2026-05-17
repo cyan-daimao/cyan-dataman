@@ -90,6 +90,11 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
         MetadataTableDO metadataTableDO = MetadataTableInfraConvert.INSTANCE.toMetadataTableDO(table);
         metadataTableDO.setDataCatalog("iceberg");
         metadataTableMapper.insert(metadataTableDO);
+        // 清理可能存在的孤儿字段记录（同一 catalog + schema + tbl 下）
+        metadataColumnMapper.delete(new LambdaQueryWrapper<MetadataColumnDO>()
+                .eq(MetadataColumnDO::getDataCatalog, metadataTableDO.getDataCatalog())
+                .eq(MetadataColumnDO::getDataSchema, metadataTableDO.getDataSchema())
+                .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl()));
         // 保存字段信息
         saveColumns(table, metadataTableDO);
         return findById(metadataTableDO.getId() + "");
@@ -123,6 +128,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
             return null;
         }
         LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()
+                .eq(MetadataColumnDO::getDataCatalog, metadataTableDO.getDataCatalog())
+                .eq(MetadataColumnDO::getDataSchema, metadataTableDO.getDataSchema())
                 .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl())
                 .orderByAsc(MetadataColumnDO::getId);
         List<MetadataColumnDO> metadataColumnDOS = metadataColumnMapper.selectList(queryWrapper);
@@ -138,10 +145,16 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     @Override
     public void deleteById(String id) {
         MetadataTable table = findById(id);
+        if (table == null) {
+            return;
+        }
         // 删除表
         metadataTableMapper.deleteById(id);
-        // 删除字段
-        metadataColumnMapper.delete(new LambdaQueryWrapper<MetadataColumnDO>().eq(MetadataColumnDO::getTbl, table.getName()));
+        // 删除字段（按 catalog + schema + tbl 精确匹配）
+        metadataColumnMapper.delete(new LambdaQueryWrapper<MetadataColumnDO>()
+                .eq(MetadataColumnDO::getDataCatalog, table.getTable().getCatalog())
+                .eq(MetadataColumnDO::getDataSchema, table.getTable().getSchema())
+                .eq(MetadataColumnDO::getTbl, table.getName()));
     }
 
     /**
@@ -181,6 +194,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
             return List.of();
         }
         LambdaQueryWrapper<MetadataColumnDO> queryWrapper = new LambdaQueryWrapper<MetadataColumnDO>()
+                .eq(MetadataColumnDO::getDataCatalog, metadataTableDO.getDataCatalog())
+                .eq(MetadataColumnDO::getDataSchema, metadataTableDO.getDataSchema())
                 .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl())
                 .orderByAsc(MetadataColumnDO::getId);
         List<MetadataColumnDO> columnDOs = Optional.ofNullable(metadataColumnMapper.selectList(queryWrapper)).orElse(List.of());
