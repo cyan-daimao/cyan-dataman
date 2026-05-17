@@ -372,7 +372,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                       memory: "4g"
                       cpu: 2
                   flinkConfiguration:
-                    state.backend: rocksdb
+                    state.backend.type: rocksdb
                     classloader.parent-first-patterns.additional: com.codahale.metrics
                     state.checkpoints.dir: s3://flink/checkpoints/cyan-dataman
                     state.savepoints.dir: s3://flink/savepoints/cyan-dataman
@@ -428,6 +428,17 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
         StringBuilder sql = new StringBuilder();
         sql.append(String.format("""
+                -- 创建 Iceberg REST Catalog（复用 Gravitino）
+                CREATE CATALOG IF NOT EXISTS rest WITH (
+                  'type' = 'iceberg',
+                  'catalog-type' = 'rest',
+                  'uri' = '%s',
+                  's3.endpoint' = '%s',
+                  's3.access-key-id' = '%s',
+                  's3.secret-access-key' = '%s',
+                  's3.path-style-access' = 'true'
+                );
+
                 -- Kafka Source：使用 raw format 读取完整 Debezium JSON
                 CREATE TABLE IF NOT EXISTS kafka_cdc_%s (
                   _raw_json STRING
@@ -439,7 +450,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   'scan.startup.mode' = 'earliest-offset',
                   'format' = 'raw'
                 );
-                """, safeDsName, dsName, kafkaBootstrapServers, dsName));
+                """, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
+                safeDsName, dsName, kafkaBootstrapServers, dsName));
 
         for (CdcConfig config : configs) {
             sql.append("\n").append(buildSinkSql(config, safeDsName));
@@ -453,6 +465,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         String safeDb = safeName(config.getDbName());
         String safeTable = safeName(config.getTableName());
         String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
+        String fullTableName = "rest.ods." + odsTableName;
 
         return String.format("""
                 -- ==== Sink: %s.%s ====
@@ -491,8 +504,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 -- ==== End Sink: %s.%s ====
                 """,
                 config.getDbName(), config.getTableName(),
-                odsTableName, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
-                odsTableName, safeDsName, config.getTableName(), config.getDbName(),
+                fullTableName, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
+                fullTableName, safeDsName, config.getTableName(), config.getDbName(),
                 config.getDbName(), config.getTableName());
     }
 
