@@ -37,6 +37,7 @@ import org.apache.iceberg.spark.Spark3Util;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.parser.ParseException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +54,7 @@ import java.util.stream.Collectors;
  * @author cy.Y
  * @since 1.0.0
  */
+@Slf4j
 @Service
 public class MetadataTableServiceImpl implements MetadataTableService {
     private final MetadataTableRepository metadataTableRepository;
@@ -103,10 +105,14 @@ public class MetadataTableServiceImpl implements MetadataTableService {
      * 创建表
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, noRollbackFor = SilentException.class)
     public MetadataTableBO save(MetadataTableCmd cmd) {
         MetadataTableBO one = findOne(new MetadataTableOneQuery().setName(cmd.getName()));
-        Assert.isTrue(one == null, new SilentException("表已存在"));
+        if (one != null) {
+            // 表已存在，直接返回已存在的表（避免事务回滚）
+            log.info("元数据表已存在，直接返回: {}", cmd.getName());
+            return one;
+        }
         MetadataTable metadataTable = MetadataTableAppConvert.INSTANCE.toMetadataTable(cmd);
         metadataTable.setDatasourceType(DatasourceType.ICEBERG);
         metadataTable.setLayerCode(cmd.getLayerCode().getCode().toLowerCase());

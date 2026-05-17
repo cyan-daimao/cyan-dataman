@@ -185,7 +185,27 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     log.info("Sink 已存在于 FlinkDeployment {} 中, 跳过: {}.{}", deploymentName, config.getDbName(), config.getTableName());
                 }
             } else {
-                log.warn("FlinkDeployment 存在但数据库中无对应 FlinkJob 记录, deploymentName={}", deploymentName);
+                // 【修复】FlinkDeployment 存在但数据库中无记录（此前事务回滚导致），
+                // 重新构建完整 SQL 并创建数据库记录，同步更新 ConfigMap
+                log.warn("FlinkDeployment 存在但数据库中无对应 FlinkJob 记录, 重新同步, deploymentName={}", deploymentName);
+                List<CdcConfig> configs = getEnabledConfigsByDsAndSubject(dsName, subjectCode);
+                String fullSql = buildFlinkSql(dsName, subjectCode, configs);
+                createOrUpdateConfigMap(configMapName, fullSql);
+
+                CdcConfig first = configs.getFirst();
+                job = new CdcFlinkJob()
+                        .setDsName(dsName)
+                        .setSubjectCode(subjectCode)
+                        .setFlinkJobId(deploymentName)
+                        .setFlinkSql(fullSql)
+                        .setEnabled(true)
+                        .setStatus(JobStatus.RUNNING)
+                        .setCreatedAt(LocalDateTime.now())
+                        .setUpdatedAt(LocalDateTime.now())
+                        .setCreateBy(first.getCreateBy())
+                        .setUpdateBy(first.getUpdateBy());
+                job.save(cdcFlinkJobRepository);
+                log.info("已重建 FlinkJob 记录并同步 ConfigMap: {}", deploymentName);
             }
         }
         log.info("enableCdcSync 结束, cdcConfigId={}", cdcConfigId);
