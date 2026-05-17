@@ -40,6 +40,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -632,6 +633,12 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private void updateConnectorConfig(String connectorName, DatasourceInfo info,
                                        DsConfig dsConfig, String tableIncludeList, Integer serverId) {
         String historyTopic = "schema-history-" + info.hostname() + "-" + info.port();
+        // 从 table.include.list 中提取所有唯一的数据库名
+        String databaseIncludeList = tableIncludeList.isEmpty() ? "" :
+                Arrays.stream(tableIncludeList.split(","))
+                        .map(t -> t.split("\\.")[0])
+                        .distinct()
+                        .collect(Collectors.joining(","));
         MySQLConnectorConfig mysqlConfig = new MySQLConnectorConfig()
                 .setTopicPrefix(connectorName)
                 .setTaskMax("1")
@@ -640,7 +647,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setUser(dsConfig.getUsername())
                 .setPassword(dsConfig.getPassword())
                 .setServerId(serverId)
-                .setDatabaseIncludeList(tableIncludeList.split("\\.")[0])
+                .setDatabaseIncludeList(databaseIncludeList)
                 .setTableIncludeList(tableIncludeList)
                 .setKafkaBootstrapServers(kafkaUrl)
                 .setKafkaTopic(historyTopic)
