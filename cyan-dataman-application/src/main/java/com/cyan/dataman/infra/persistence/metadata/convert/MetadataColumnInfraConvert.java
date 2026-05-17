@@ -26,7 +26,7 @@ public interface MetadataColumnInfraConvert {
     List<ColumnValObj> toColumnValObjList(List<MetadataColumnDO> metadataColumnDOs);
 
     @Mapping(target = "col", source = "name")
-    @Mapping(target = "dataType", source = "type")
+    @Mapping(target = "dataType", expression = "java(columnValObj.getColumnDataType())")
     MetadataColumnDO toMetadataColumnDO(ColumnValObj columnValObj);
 
     List<MetadataColumnDO> toMetadataColumnDOList(List<ColumnValObj> columnValObjs);
