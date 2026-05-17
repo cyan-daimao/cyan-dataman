@@ -432,7 +432,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   _raw_json STRING
                 ) WITH (
                   'connector' = 'kafka',
-                  'topic' = 'cdc-%s.*',
+                  'topic-pattern' = 'cdc-%s.*',
                   'properties.bootstrap.servers' = '%s',
                   'properties.group.id' = 'flink-cdc-ods-%s',
                   'scan.startup.mode' = 'earliest-offset',
