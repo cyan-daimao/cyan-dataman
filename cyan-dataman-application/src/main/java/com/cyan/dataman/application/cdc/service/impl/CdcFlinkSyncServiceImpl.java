@@ -567,19 +567,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         return String.format("""
                 -- ==== Sink: %s.%s ====
                 CREATE TABLE IF NOT EXISTS %s (
-                %s) WITH (
-                  'connector' = 'iceberg',
-                  'catalog-name' = 'rest',
-                  'catalog-type' = 'rest',
-                  'uri' = '%s',
-                  'format-version' = '2',
-                  'write.format.default' = 'parquet',
-                  'write.upsert.enabled' = 'false',
-                  's3.endpoint' = '%s',
-                  's3.access-key-id' = '%s',
-                  's3.secret-access-key' = '%s',
-                  's3.path-style-access' = 'true'
-                );
+                %s);
 
                 INSERT INTO %s
                 SELECT
@@ -590,7 +578,6 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 """,
                 config.getDbName(), config.getTableName(),
                 fullTableName, colDdlStr,
-                icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
                 fullTableName, colExtractStr,
                 safeDsName, config.getTableName(), config.getDbName(),
                 config.getDbName(), config.getTableName());
