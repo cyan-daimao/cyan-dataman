@@ -31,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * CDC Flink 同步服务实现（Application 模式）
@@ -511,11 +512,30 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
         String fullTableName = "rest.ods." + odsTableName;
 
+        Set<String> sourceColNames = columns.stream()
+                .map(ColumnValObj::getName)
+                .collect(Collectors.toSet());
+
         // 构建业务字段 DDL
         StringBuilder colDdl = new StringBuilder();
         for (ColumnValObj col : columns) {
             String flinkType = DebeziumTypeMapper.toFlinkSqlType(col);
             colDdl.append("  `").append(col.getName()).append("` ").append(flinkType).append(",\n");
+        }
+        if (!sourceColNames.contains("_op")) {
+            colDdl.append("  `_op` STRING,\n");
+        }
+        if (!sourceColNames.contains("_ts")) {
+            colDdl.append("  `_ts` BIGINT,\n");
+        }
+        if (!sourceColNames.contains("_db")) {
+            colDdl.append("  `_db` STRING,\n");
+        }
+        if (!sourceColNames.contains("_table")) {
+            colDdl.append("  `_table` STRING,\n");
+        }
+        if (!sourceColNames.contains("_ingestion_time")) {
+            colDdl.append("  `_ingestion_time` TIMESTAMP_LTZ(3),\n");
         }
 
         // 构建业务字段提取表达式
@@ -524,16 +544,26 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             String flinkType = DebeziumTypeMapper.toFlinkSqlType(col);
             colExtract.append("  ").append(DebeziumTypeMapper.buildExtractExpr(col.getName(), flinkType)).append(",\n");
         }
+        if (!sourceColNames.contains("_op")) {
+            colExtract.append("  COALESCE(JSON_VALUE(_raw_json, '$.payload.op'), JSON_VALUE(_raw_json, '$.op')) AS `_op`,\n");
+        }
+        if (!sourceColNames.contains("_ts")) {
+            colExtract.append("  CAST(COALESCE(JSON_VALUE(_raw_json, '$.payload.ts_ms'), JSON_VALUE(_raw_json, '$.ts_ms')) AS BIGINT) AS `_ts`,\n");
+        }
+        if (!sourceColNames.contains("_db")) {
+            colExtract.append("  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) AS `_db`,\n");
+        }
+        if (!sourceColNames.contains("_table")) {
+            colExtract.append("  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) AS `_table`,\n");
+        }
+        if (!sourceColNames.contains("_ingestion_time")) {
+            colExtract.append("  NOW() AS `_ingestion_time`,\n");
+        }
 
         return String.format("""
                 -- ==== Sink: %s.%s ====
                 CREATE TABLE IF NOT EXISTS %s (
-                %s  `_op` STRING,
-                  `_ts` BIGINT,
-                  `_db` STRING,
-                  `_table` STRING,
-                  `_ingestion_time` TIMESTAMP_LTZ(3)
-                ) WITH (
+                %s) WITH (
                   'connector' = 'iceberg',
                   'catalog-name' = 'rest',
                   'catalog-type' = 'rest',
@@ -549,12 +579,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
                 INSERT INTO %s
                 SELECT
-                %s  COALESCE(JSON_VALUE(_raw_json, '$.payload.op'), JSON_VALUE(_raw_json, '$.op')) AS `_op`,
-                  CAST(COALESCE(JSON_VALUE(_raw_json, '$.payload.ts_ms'), JSON_VALUE(_raw_json, '$.ts_ms')) AS BIGINT) AS `_ts`,
-                  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) AS `_db`,
-                  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) AS `_table`,
-                  NOW() AS `_ingestion_time`
-                FROM kafka_cdc_%s
+                %s FROM kafka_cdc_%s
                 WHERE COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) = '%s'
                   AND COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) = '%s';
                 -- ==== End Sink: %s.%s ====
@@ -593,7 +618,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     /**
      * 确保 ODS 表已存在（通过元数据平台创建，Flink 只负责写入）
      * <p>
-     * ODS 表结构为：业务字段平铺 + 5 个元数据字段（_op / _ts / _db / _table / _ingestion_time）
+     * ODS 表结构为：业务字段平铺 + 5 个元数据字段（_op / _ts / _db / _table / _ingestion_time）。
+     * 若源表已包含同名字段，则跳过该元数据字段以避免冲突。
      */
     private void ensureOdsTableExists(CdcConfig config) {
         String safeSubject = safeName(config.getSubjectCode());
@@ -603,6 +629,10 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
         // 获取源表字段并转换为元数据平台字段格式
         List<ColumnValObj> sourceColumns = fetchSourceColumns(config);
+        Set<String> sourceColNames = sourceColumns.stream()
+                .map(ColumnValObj::getName)
+                .collect(Collectors.toSet());
+
         List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> odsColumns = new ArrayList<>();
         for (ColumnValObj sourceCol : sourceColumns) {
             com.cyan.dataman.domain.metadata.valobj.ColumnValObj col =
@@ -616,17 +646,27 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             odsColumns.add(col);
         }
 
-        // 添加元数据字段
-        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                .setName("_op").setType("STRING").setComment("操作类型").setNullable(true));
-        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                .setName("_ts").setType("LONG").setComment("变更时间戳").setNullable(true));
-        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                .setName("_db").setType("STRING").setComment("源数据库").setNullable(true));
-        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                .setName("_table").setType("STRING").setComment("源表名").setNullable(true));
-        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                .setName("_ingestion_time").setType("TIMESTAMP").setComment("入库时间").setNullable(true));
+        // 添加元数据字段（跳过与源表同名的字段）
+        if (!sourceColNames.contains("_op")) {
+            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                    .setName("_op").setType("STRING").setComment("操作类型").setNullable(true));
+        }
+        if (!sourceColNames.contains("_ts")) {
+            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                    .setName("_ts").setType("LONG").setComment("变更时间戳").setNullable(true));
+        }
+        if (!sourceColNames.contains("_db")) {
+            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                    .setName("_db").setType("STRING").setComment("源数据库").setNullable(true));
+        }
+        if (!sourceColNames.contains("_table")) {
+            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                    .setName("_table").setType("STRING").setComment("源表名").setNullable(true));
+        }
+        if (!sourceColNames.contains("_ingestion_time")) {
+            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                    .setName("_ingestion_time").setType("TIMESTAMP").setComment("入库时间").setNullable(true));
+        }
 
         try {
             MetadataTableCmd cmd = new MetadataTableCmd()
