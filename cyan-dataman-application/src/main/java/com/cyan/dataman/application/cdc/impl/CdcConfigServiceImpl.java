@@ -396,15 +396,25 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             createDebeziumConnector(config, dsConfig, info);
             log.info("创建并启动 Debezium 连接器: {}", connectorName);
         } else {
-            // Connector 已存在，更新配置（PUT /config 会自动触发 connector 和 task 重启）
+            // Connector 已存在，更新配置
             updateConnectorTableListFromConfigs(allConfigs, connectorName, dsConfig, info);
             log.info("更新 Debezium 连接器配置: {}", connectorName);
-        }
 
-        // 等待 connector task 启动完成（延长超时时间到 60 秒）
-        boolean taskRunning = waitForConnectorTaskRunning(connectorName, 60);
-        if (!taskRunning) {
-            log.warn("Debezium 连接器 task 未能在超时时间内启动: {}", connectorName);
+            // 仿造 cyan-cdc：显式 stop + start，确保 connector 稳定运行后再发信号
+            try {
+                debeziumRpc.stopConnector(connectorName);
+                log.info("Debezium 连接器已停止: {}", connectorName);
+            } catch (Exception e) {
+                log.warn("停止 Debezium 连接器失败（可能已停止）: {}", e.getMessage());
+            }
+            sleepQuietly(3000);
+            try {
+                debeziumRpc.startConnector(connectorName);
+                log.info("Debezium 连接器已启动: {}", connectorName);
+            } catch (Exception e) {
+                log.error("启动 Debezium 连接器失败: {}", e.getMessage());
+            }
+            sleepQuietly(3000);
         }
 
         // 快照信号策略：
@@ -412,31 +422,14 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         // - connector 存在 + 表从未同步过（INIT）→ 发信号触发全量快照
         // - connector 存在 + 表之前同步过（STOP）→ 不发信号，从 binlog 增量继续
         if (connectorExists && !previouslySynced) {
-            // 给 Debezium 额外时间初始化 binlog 读取，避免信号发送太早被错过
-            sleepQuietly(15000);
-            String dataTable = config.getDbName() + "." + config.getTableName();
-
-            // 第一次发送信号
-            boolean signalSent1 = debeziumSignalService.sendIncrementalSnapshotSignal(
+            boolean signalSent = debeziumSignalService.sendIncrementalSnapshotSignal(
                     info.hostname(), info.port(),
                     dsConfig.getUsername(), dsConfig.getPassword(),
-                    dataTable);
-            if (signalSent1) {
-                log.info("已触发增量快照信号（第1次）: connector={}, table={}", connectorName, dataTable);
+                    config.getDbName() + "." + config.getTableName());
+            if (signalSent) {
+                log.info("已触发增量快照信号（新表首次同步）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
             } else {
-                log.warn("增量快照信号发送失败（第1次）: connector={}, table={}", connectorName, dataTable);
-            }
-
-            // 等待 30 秒后再次发送（防止第一次因 Debezium 未就绪被错过）
-            sleepQuietly(30000);
-            boolean signalSent2 = debeziumSignalService.sendIncrementalSnapshotSignal(
-                    info.hostname(), info.port(),
-                    dsConfig.getUsername(), dsConfig.getPassword(),
-                    dataTable);
-            if (signalSent2) {
-                log.info("已触发增量快照信号（第2次，重试）: connector={}, table={}", connectorName, dataTable);
-            } else {
-                log.warn("增量快照信号发送失败（第2次）: connector={}, table={}", connectorName, dataTable);
+                log.warn("增量快照信号发送失败: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
             }
         } else if (previouslySynced) {
             log.info("跳过增量快照信号（已同步过的表重新启用，从 binlog 增量继续）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
