@@ -39,9 +39,11 @@ public class DebeziumTypeMapper {
                 yield "DECIMAL(" + p + "," + s + ")";
             }
             case "BOOLEAN" -> "BOOLEAN";
-            // 时间类型统一用 STRING，避免 Debezium JSON 格式不一致导致的转换问题
-            case "DATE", "TIME", "DATETIME", "TIMESTAMP",
-                 "TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ",
+            // 时间类型映射为 TIMESTAMP，Flink 会自动 CAST ISO 8601 字符串
+            case "DATETIME", "TIMESTAMP",
+                 "TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ" -> "TIMESTAMP(3)";
+            // DATE / TIME 保持 STRING，避免精度丢失
+            case "DATE", "TIME",
                  "TIME WITH TIME ZONE", "TIMETZ" -> "STRING";
             // 字符串和二进制类型
             case "CHAR", "VARCHAR", "TEXT", "LONGTEXT", "MEDIUMTEXT", "TINYTEXT",
