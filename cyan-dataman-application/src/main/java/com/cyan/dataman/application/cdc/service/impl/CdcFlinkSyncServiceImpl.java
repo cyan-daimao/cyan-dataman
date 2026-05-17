@@ -697,8 +697,9 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     .setName("_table").setType("STRING").setComment("源表名").setNullable(true));
         }
         if (!sourceColNames.contains("_ingestion_time")) {
+            // 使用 TIMESTAMP_TZ 对应 Flink 的 TIMESTAMP_LTZ(3)，确保元数据平台与 Flink SQL 类型一致
             odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                    .setName("_ingestion_time").setType("TIMESTAMP").setComment("入库时间").setNullable(true));
+                    .setName("_ingestion_time").setType("TIMESTAMP_TZ").setComment("入库时间").setNullable(true));
         }
 
         // 防御性去重：若因 JDBC 驱动等原因出现重复字段名，保留第一个
