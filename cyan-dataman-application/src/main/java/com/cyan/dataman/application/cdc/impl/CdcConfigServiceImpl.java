@@ -570,7 +570,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setUser(dsConfig.getUsername())
                 .setPassword(dsConfig.getPassword())
                 .setServerId(config.getServerId())
-                .setDatabaseIncludeList(config.getDbName())
+                .setDatabaseIncludeList(config.getDbName() + ",debezium_cdc")
                 .setTableIncludeList(tableIncludeList)
                 .setKafkaBootstrapServers(kafkaUrl)
                 .setKafkaTopic(historyTopic)
@@ -639,6 +639,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                         .map(t -> t.split("\\.")[0])
                         .distinct()
                         .collect(Collectors.joining(","));
+        if (!databaseIncludeList.contains("debezium_cdc")) {
+            databaseIncludeList = databaseIncludeList.isEmpty() ? "debezium_cdc" : databaseIncludeList + ",debezium_cdc";
+        }
         MySQLConnectorConfig mysqlConfig = new MySQLConnectorConfig()
                 .setTopicPrefix(connectorName)
                 .setTaskMax("1")
