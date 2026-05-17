@@ -68,4 +68,14 @@ public interface CdcFlinkSyncService {
      * @return Flink 作业，不存在时返回 null
      */
     com.cyan.dataman.domain.cdc.CdcFlinkJob findByDsName(String dsName);
+
+    /**
+     * 重启指定数据源和主题的 Flink CDC 作业
+     * <p>
+     * 删除旧 Deployment 后重新提交，用于 Schema 变更等需要重新生成 SQL 的场景。
+     *
+     * @param dsName      数据源名称
+     * @param subjectCode 主题编码
+     */
+    void restartFlinkJob(String dsName, String subjectCode);
 }

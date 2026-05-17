@@ -10,9 +10,13 @@ import com.cyan.dataman.domain.cdc.CdcFlinkJob;
 import com.cyan.dataman.domain.cdc.query.CdcConfigListQuery;
 import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
 import com.cyan.dataman.domain.cdc.repository.CdcFlinkJobRepository;
-import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
-import com.cyan.dataman.domain.metadata.valobj.TableValObj;
+import com.cyan.dataman.domain.ds.DsConfig;
+import com.cyan.dataman.domain.ds.repository.DsConfigRepository;
+import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
+import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
 import com.cyan.dataman.enums.*;
+import com.cyan.dataman.infra.util.DebeziumTypeMapper;
+import com.cyan.dataman.infra.util.DsJdbcUtil;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
@@ -66,14 +70,20 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     private final CdcConfigRepository cdcConfigRepository;
     private final CdcFlinkJobRepository cdcFlinkJobRepository;
     private final MetadataTableService metadataTableService;
+    private final DsConfigRepository dsConfigRepository;
+    private final DsJdbcUtil dsJdbcUtil;
     private final KubernetesClient k8sClient;
 
     public CdcFlinkSyncServiceImpl(CdcConfigRepository cdcConfigRepository,
                                    CdcFlinkJobRepository cdcFlinkJobRepository,
-                                   MetadataTableService metadataTableService) {
+                                   MetadataTableService metadataTableService,
+                                   DsConfigRepository dsConfigRepository,
+                                   DsJdbcUtil dsJdbcUtil) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.cdcFlinkJobRepository = cdcFlinkJobRepository;
         this.metadataTableService = metadataTableService;
+        this.dsConfigRepository = dsConfigRepository;
+        this.dsJdbcUtil = dsJdbcUtil;
         this.k8sClient = new KubernetesClientBuilder().build();
     }
 
@@ -139,7 +149,8 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 String sinkMarker = sinkMarker(config.getDbName(), config.getTableName());
                 if (!currentSql.contains(sinkMarker)) {
                     String safeDsName = safeName(dsName);
-                    String newSinkSql = buildSinkSql(config, safeDsName);
+                    List<ColumnValObj> columns = fetchSourceColumns(config);
+                    String newSinkSql = buildSinkSql(config, safeDsName, columns);
                     String updatedSql = currentSql + "\n" + newSinkSql;
                     createOrUpdateConfigMap(configMapName, updatedSql);
                     job.setFlinkSql(updatedSql);
@@ -237,6 +248,38 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         }
         String subjectCode = configs.getFirst().getSubjectCode();
         return cdcFlinkJobRepository.findByDsNameAndSubjectCode(dsName, subjectCode);
+    }
+
+    @Override
+    public void restartFlinkJob(String dsName, String subjectCode) {
+        String deploymentName = getDeploymentName(dsName, subjectCode);
+        log.info("开始重启 Flink CDC 作业: {}", deploymentName);
+
+        // 1. 删除旧 Deployment
+        deleteFlinkApplication(deploymentName);
+
+        // 2. 等待 K8s 删除完成（最多 30 秒）
+        int retries = 30;
+        while (retries-- > 0) {
+            if (getFlinkDeployment(deploymentName) == null) {
+                break;
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        // 3. 重新提交
+        List<CdcConfig> configs = getEnabledConfigsByDsAndSubject(dsName, subjectCode);
+        if (!configs.isEmpty()) {
+            submitFlinkApplication(dsName, subjectCode, configs);
+            log.info("Flink CDC 作业重启完成: {}", deploymentName);
+        } else {
+            log.warn("重启时发现没有启用的 CDC 配置，跳过提交: {}", deploymentName);
+        }
     }
 
     // ==================== Application 模式作业提交 ====================
@@ -454,28 +497,42 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                 safeDsName, dsName, kafkaBootstrapServers, dsName));
 
         for (CdcConfig config : configs) {
-            sql.append("\n").append(buildSinkSql(config, safeDsName));
+            List<ColumnValObj> columns = fetchSourceColumns(config);
+            sql.append("\n").append(buildSinkSql(config, safeDsName, columns));
         }
 
         return sql.toString();
     }
 
-    private String buildSinkSql(CdcConfig config, String safeDsName) {
+    private String buildSinkSql(CdcConfig config, String safeDsName, List<ColumnValObj> columns) {
         String safeSubject = safeName(config.getSubjectCode());
         String safeDb = safeName(config.getDbName());
         String safeTable = safeName(config.getTableName());
         String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
         String fullTableName = "rest.ods." + odsTableName;
 
+        // 构建业务字段 DDL
+        StringBuilder colDdl = new StringBuilder();
+        for (ColumnValObj col : columns) {
+            String flinkType = DebeziumTypeMapper.toFlinkSqlType(col);
+            colDdl.append("  `").append(col.getName()).append("` ").append(flinkType).append(",\n");
+        }
+
+        // 构建业务字段提取表达式
+        StringBuilder colExtract = new StringBuilder();
+        for (ColumnValObj col : columns) {
+            String flinkType = DebeziumTypeMapper.toFlinkSqlType(col);
+            colExtract.append("  ").append(DebeziumTypeMapper.buildExtractExpr(col.getName(), flinkType)).append(",\n");
+        }
+
         return String.format("""
                 -- ==== Sink: %s.%s ====
                 CREATE TABLE IF NOT EXISTS %s (
-                  _raw_json STRING,
-                  _op STRING,
-                  _ts BIGINT,
-                  _db STRING,
-                  _table STRING,
-                  _ingestion_time TIMESTAMP_LTZ(3)
+                %s  `_op` STRING,
+                  `_ts` BIGINT,
+                  `_db` STRING,
+                  `_table` STRING,
+                  `_ingestion_time` TIMESTAMP_LTZ(3)
                 ) WITH (
                   'connector' = 'iceberg',
                   'catalog-name' = 'rest',
@@ -492,20 +549,21 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
                 INSERT INTO %s
                 SELECT
-                  _raw_json,
-                  COALESCE(JSON_VALUE(_raw_json, '$.payload.op'), JSON_VALUE(_raw_json, '$.op')) AS _op,
-                  CAST(COALESCE(JSON_VALUE(_raw_json, '$.payload.ts_ms'), JSON_VALUE(_raw_json, '$.ts_ms')) AS BIGINT) AS _ts,
-                  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) AS _db,
-                  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) AS _table,
-                  NOW() AS _ingestion_time
+                %s  COALESCE(JSON_VALUE(_raw_json, '$.payload.op'), JSON_VALUE(_raw_json, '$.op')) AS `_op`,
+                  CAST(COALESCE(JSON_VALUE(_raw_json, '$.payload.ts_ms'), JSON_VALUE(_raw_json, '$.ts_ms')) AS BIGINT) AS `_ts`,
+                  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) AS `_db`,
+                  COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) AS `_table`,
+                  NOW() AS `_ingestion_time`
                 FROM kafka_cdc_%s
                 WHERE COALESCE(JSON_VALUE(_raw_json, '$.payload.source.table'), JSON_VALUE(_raw_json, '$.source.table')) = '%s'
                   AND COALESCE(JSON_VALUE(_raw_json, '$.payload.source.db'), JSON_VALUE(_raw_json, '$.source.db')) = '%s';
                 -- ==== End Sink: %s.%s ====
                 """,
                 config.getDbName(), config.getTableName(),
-                fullTableName, icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
-                fullTableName, safeDsName, config.getTableName(), config.getDbName(),
+                fullTableName, colDdl.toString(),
+                icebergRestUri, rustfsEndpoint, rustfsAccessKey, rustfsSecretKey,
+                fullTableName, colExtract.toString(),
+                safeDsName, config.getTableName(), config.getDbName(),
                 config.getDbName(), config.getTableName());
     }
 
@@ -534,12 +592,41 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     /**
      * 确保 ODS 表已存在（通过元数据平台创建，Flink 只负责写入）
+     * <p>
+     * ODS 表结构为：业务字段平铺 + 5 个元数据字段（_op / _ts / _db / _table / _ingestion_time）
      */
     private void ensureOdsTableExists(CdcConfig config) {
         String safeSubject = safeName(config.getSubjectCode());
         String safeDb = safeName(config.getDbName());
         String safeTable = safeName(config.getTableName());
         String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
+
+        // 获取源表字段并转换为元数据平台字段格式
+        List<ColumnValObj> sourceColumns = fetchSourceColumns(config);
+        List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> odsColumns = new ArrayList<>();
+        for (ColumnValObj sourceCol : sourceColumns) {
+            com.cyan.dataman.domain.metadata.valobj.ColumnValObj col =
+                    new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                            .setName(sourceCol.getName())
+                            .setType(sourceCol.getType())
+                            .setComment(sourceCol.getComment())
+                            .setNullable(true)
+                            .setPrecision(sourceCol.getPrecision())
+                            .setScale(sourceCol.getScale());
+            odsColumns.add(col);
+        }
+
+        // 添加元数据字段
+        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                .setName("_op").setType("STRING").setComment("操作类型").setNullable(true));
+        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                .setName("_ts").setType("LONG").setComment("变更时间戳").setNullable(true));
+        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                .setName("_db").setType("STRING").setComment("源数据库").setNullable(true));
+        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                .setName("_table").setType("STRING").setComment("源表名").setNullable(true));
+        odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                .setName("_ingestion_time").setType("TIMESTAMP").setComment("入库时间").setNullable(true));
 
         try {
             MetadataTableCmd cmd = new MetadataTableCmd()
@@ -550,19 +637,12 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     .setComment("CDC ODS 表: " + config.getDbName() + "." + config.getTableName())
                     .setSecretLevel(SecretLevel.L1)
                     .setOnlineStatus(OnlineStatus.ONLINE)
-                    .setTableValObj(new TableValObj()
+                    .setTableValObj(new com.cyan.dataman.domain.metadata.valobj.TableValObj()
                             .setCatalog("iceberg")
                             .setSchema("ods")
                             .setName(odsTableName)
                             .setComment("CDC ODS 统一 Schema")
-                            .setColumns(List.of(
-                                    new ColumnValObj().setName("_raw_json").setType("STRING").setComment("原始 Debezium JSON").setNullable(true),
-                                    new ColumnValObj().setName("_op").setType("STRING").setComment("操作类型").setNullable(true),
-                                    new ColumnValObj().setName("_ts").setType("LONG").setComment("变更时间戳").setNullable(true),
-                                    new ColumnValObj().setName("_db").setType("STRING").setComment("源数据库").setNullable(true),
-                                    new ColumnValObj().setName("_table").setType("STRING").setComment("源表名").setNullable(true),
-                                    new ColumnValObj().setName("_ingestion_time").setType("TIMESTAMP").setComment("入库时间").setNullable(true)
-                            ))
+                            .setColumns(odsColumns)
                     );
 
             metadataTableService.save(cmd);
@@ -577,6 +657,24 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         } catch (Exception e) {
             log.error("创建 ODS 表失败: {}", odsTableName, e);
             throw new SilentException("创建 ODS 表失败: " + odsTableName);
+        }
+    }
+
+    /**
+     * 从源数据库获取表结构字段列表
+     */
+    private List<ColumnValObj> fetchSourceColumns(CdcConfig config) {
+        try {
+            DsConfig dsConfig = dsConfigRepository.findByName(config.getDsName());
+            if (dsConfig == null) {
+                log.warn("数据源不存在: {}", config.getDsName());
+                return List.of();
+            }
+            TableSchemaValObj schema = dsJdbcUtil.getTableSchema(dsConfig, config.getDbName(), config.getTableName());
+            return schema.getColumns() != null ? schema.getColumns() : List.of();
+        } catch (Exception e) {
+            log.error("获取源表结构失败: {}.{}", config.getDbName(), config.getTableName(), e);
+            return List.of();
         }
     }
 

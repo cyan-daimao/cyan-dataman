@@ -2,6 +2,7 @@ package com.cyan.dataman.application.ds.impl;
 
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
+import com.cyan.dataman.application.cdc.service.CdcSchemaSyncService;
 import com.cyan.dataman.application.ds.DsConfigService;
 import com.cyan.dataman.application.ds.bo.DsConfigBO;
 import com.cyan.dataman.application.ds.cmd.DatabaseCreateCmd;
@@ -17,6 +18,7 @@ import com.cyan.dataman.domain.ds.valobj.DatabaseValObj;
 import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
 import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.infra.util.DsJdbcUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,15 +31,20 @@ import java.util.Map;
  * @author cy.Y
  * @since 1.0.0
  */
+@Slf4j
 @Service
 public class DsConfigServiceImpl implements DsConfigService {
 
     private final DsConfigRepository dsConfigRepository;
     private final DsJdbcUtil dsJdbcUtil;
+    private final CdcSchemaSyncService cdcSchemaSyncService;
 
-    public DsConfigServiceImpl(DsConfigRepository dsConfigRepository, DsJdbcUtil dsJdbcUtil) {
+    public DsConfigServiceImpl(DsConfigRepository dsConfigRepository,
+                               DsJdbcUtil dsJdbcUtil,
+                               CdcSchemaSyncService cdcSchemaSyncService) {
         this.dsConfigRepository = dsConfigRepository;
         this.dsJdbcUtil = dsJdbcUtil;
+        this.cdcSchemaSyncService = cdcSchemaSyncService;
     }
 
     @Override
@@ -173,6 +180,14 @@ public class DsConfigServiceImpl implements DsConfigService {
                 .setIndexes(cmd.getIndexes());
         
         dsJdbcUtil.updateTable(dsConfig, dbName, tableName, tableSchema);
+
+        // 异步触发 CDC Schema 同步（不阻塞前端响应）
+        try {
+            cdcSchemaSyncService.syncSchema(dsName, dbName, tableName, tableSchema);
+        } catch (Exception e) {
+            log.error("CDC Schema 同步失败: {}.{}.{}", dsName, dbName, tableName, e);
+            // 同步失败不影响主流程，仅记录日志
+        }
     }
 
     @Override
