@@ -373,6 +373,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                       cpu: 2
                   flinkConfiguration:
                     state.backend: rocksdb
+                    classloader.parent-first-patterns.additional: com.codahale.metrics
                     state.checkpoints.dir: s3://flink/checkpoints/cyan-dataman
                     state.savepoints.dir: s3://flink/savepoints/cyan-dataman
                     execution.checkpointing.interval: 60s
