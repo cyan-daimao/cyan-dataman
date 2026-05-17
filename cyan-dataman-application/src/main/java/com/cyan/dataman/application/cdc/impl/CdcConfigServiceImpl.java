@@ -132,11 +132,11 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             config = config.save(cdcConfigRepository);
             createDebeziumConnector(config, dsConfig, info);
         } else {
-            // 复用已有 connector
+            // 复用已有 connector，但新表状态必须为 INIT（确保首次同步时触发增量快照）
             CdcConfig existingConfig = datasourceConfigs.getFirst();
             config.setConnectorName(existingConfig.getConnectorName())
                     .setServerId(existingConfig.getServerId())
-                    .setRunningStatus(existingConfig.getRunningStatus());
+                    .setRunningStatus(RunningStatus.INIT);
 
             config = config.save(cdcConfigRepository);
             updateConnectorTableList(dsConfig.getName(), existingConfig.getConnectorName(), dsConfig, info);
