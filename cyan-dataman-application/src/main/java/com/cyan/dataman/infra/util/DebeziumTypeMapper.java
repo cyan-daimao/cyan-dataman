@@ -39,9 +39,9 @@ public class DebeziumTypeMapper {
                 yield "DECIMAL(" + p + "," + s + ")";
             }
             case "BOOLEAN" -> "BOOLEAN";
-            // 时间类型映射为 TIMESTAMP，Flink 会自动 CAST ISO 8601 字符串
+            // Debezium 时间戳为 int64 毫秒，映射为 TIMESTAMP_LTZ(3)
             case "DATETIME", "TIMESTAMP",
-                 "TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ" -> "TIMESTAMP(3)";
+                 "TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ" -> "TIMESTAMP_LTZ(3)";
             // DATE / TIME 保持 STRING，避免精度丢失
             case "DATE", "TIME",
                  "TIME WITH TIME ZONE", "TIMETZ" -> "STRING";
@@ -76,9 +76,9 @@ public class DebeziumTypeMapper {
     public static String buildExtractExpr(String columnName, String flinkType) {
         String jsonPath = "JSON_VALUE(_raw_json, '$.payload.after." + escapeJsonPath(columnName) + "')";
         String quotedName = "`" + columnName + "`";
-        if ("TIMESTAMP(3)".equals(flinkType)) {
-            // Debezium 时间戳为 int64 毫秒，先转 BIGINT 再除以 1000.0 得到秒级时间戳
-            return "TO_TIMESTAMP(CAST(" + jsonPath + " AS BIGINT) / 1000.0) AS " + quotedName;
+        if ("TIMESTAMP_LTZ(3)".equals(flinkType)) {
+            // Debezium 时间戳为 int64 毫秒，直接用 TO_TIMESTAMP_LTZ 转换
+            return "TO_TIMESTAMP_LTZ(CAST(" + jsonPath + " AS BIGINT), 3) AS " + quotedName;
         }
         if (needsCast(flinkType)) {
             return "CAST(" + jsonPath + " AS " + flinkType + ") AS " + quotedName;
