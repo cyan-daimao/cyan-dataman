@@ -371,9 +371,10 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      * 启动指定表对应的 CDC，更新连接器并启动
      * <p>
      * 快照策略：
-     * - connector 不存在（数据源首次启用）→ 创建 connector，Debezium 自动对 include.list 中的表做全量快照
-     * - connector 已存在 + 表状态为 INIT（新表首次加入）→ 更新 include.list，发送增量快照信号对该表做全量快照
-     * - connector 已存在 + 表状态为 STOP（之前同步过，重新启用）→ 仅更新 include.list，从 binlog 增量继续
+     * - connector 不存在（数据源首次启用 / 关闭时 connector 已删除）→ 创建 connector，Debezium 自动对 include.list 中的表做全量快照
+     * - connector 已存在（多表场景，其他表仍在运行）→ 更新 include.list + 发增量快照信号对该表做全量快照
+     * <p>
+     * 重新启用时先清空 Iceberg ODS 表数据，保证全量写入无重复。
      */
     private void startConnectorForTable(CdcConfig config) {
         DsConfig dsConfig = getDsConfigByName(config.getDsName());
@@ -383,26 +384,26 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             throw new SilentException("连接器名称未设置");
         }
 
+        // 重新启用时，先清空 Iceberg ODS 表数据（删物理表 + 删元数据记录）
+        // 后续 ensureOdsTableExists 会自动重建空表
+        clearOdsTable(config);
+
         // 获取该数据源下所有配置
         List<CdcConfig> allConfigs = cdcConfigRepository.findByDatasource(config.getDsName());
 
         // 检查该 connector 是否已存在
         boolean connectorExists = checkConnectorExists(connectorName);
-        // 表之前是否成功同步过（STOP 表示暂停后恢复，RUNNING 表示服务重启/崩溃后恢复）
-        boolean previouslySynced = RunningStatus.STOP.equals(config.getRunningStatus())
-                || RunningStatus.RUNNING.equals(config.getRunningStatus());
 
         if (!connectorExists) {
-            // Connector 不存在，先创建（Debezium 会自动对 include.list 中的表做全量快照）
+            // Connector 不存在（数据源首次启用 / 关闭时已删除），先创建
             createDebeziumConnector(config, dsConfig, info);
             log.info("创建并启动 Debezium 连接器: {}", connectorName);
         } else {
-            // Connector 已存在，更新配置
+            // Connector 已存在（多表场景，其他表仍在运行），更新配置
             updateConnectorTableListFromConfigs(allConfigs, connectorName, dsConfig, info);
             log.info("更新 Debezium 连接器配置: {}", connectorName);
 
             // 更新配置后重启 connector 使新表生效。
-            // Kafka Connect 的 updateConnector 本身会触发自动重启，但显式 restart 更可靠。
             boolean restarted = false;
             try {
                 debeziumRpc.restartConnector(connectorName);
@@ -418,16 +419,20 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         // 快照信号策略：
         // - connector 不存在 → 创建时已自动快照，不发信号
-        // - connector 已存在 → 无论新表（INIT）还是旧表恢复（STOP），都发增量快照信号
-        //   原因：旧表重新启用时，binlog 可能已过期或偏移量失效，直接从 binlog 继续可能永远无消息。
-        //   发信号让 Debezium 对该表重新执行增量快照（全量+增量），最可靠。
+        // - connector 已存在 → 发增量快照信号（因为 Kafka topic 在关闭时被删除，需要重新全量写入）
         if (connectorExists) {
+            // 等待 connector task 启动完成后再发信号
+            boolean taskRunning = waitForConnectorTaskRunning(connectorName, 30);
+            if (!taskRunning) {
+                log.warn("Debezium 连接器 task 未能在超时时间内启动，增量快照信号可能延迟: {}", connectorName);
+            }
+
             boolean signalSent = debeziumSignalService.sendIncrementalSnapshotSignal(
                     info.hostname(), info.port(),
                     dsConfig.getUsername(), dsConfig.getPassword(),
                     config.getDbName() + "." + config.getTableName());
             if (signalSent) {
-                log.info("已触发增量快照信号: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
+                log.info("已触发增量快照信号（Kafka topic 重建后全量写入）: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
             } else {
                 log.warn("增量快照信号发送失败: connector={}, table={}.{}", connectorName, config.getDbName(), config.getTableName());
             }
@@ -496,6 +501,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
     /**
      * 停止指定表对应的 CDC
+     * <p>
+     * 关闭时会删除该表对应的 Kafka topic，确保重新开启时从零消费无重复数据。
+     * 如果该数据源没有其他启用的表，则删除 connector（而非仅停止），以便恢复时全新创建。
      */
     private void stopConnectorForTable(CdcConfig config) {
         DsConfig dsConfig = getDsConfigByName(config.getDsName());
@@ -504,6 +512,10 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         if (connectorName == null) {
             throw new SilentException("连接器名称未设置");
         }
+
+        // 删除该表对应的 Kafka topic（重新开启时从零消费）
+        String topicName = connectorName + "." + config.getDbName() + "." + config.getTableName();
+        deleteKafkaTopic(topicName);
 
         // 更新连接器的表列表（只保留启用的）
         updateConnectorTableListFromConfigs(
@@ -514,12 +526,11 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         List<CdcConfig> enabledConfigs = cdcConfigRepository.findEnabledByDatasource(config.getDsName());
         if (enabledConfigs.isEmpty()) {
             try {
-                debeziumRpc.stopConnector(connectorName);
-                config.setRunningStatus(RunningStatus.STOP);
-                cdcConfigRepository.update(config);
-                log.info("停止 Debezium 连接器: {}", connectorName);
+                // 删除 connector（而非仅停止），恢复时需全新创建才能保证全量快照
+                debeziumRpc.deleteConnector(connectorName);
+                log.info("删除 Debezium 连接器: {}", connectorName);
             } catch (Exception e) {
-                log.warn("停止连接器失败: {}", e.getMessage());
+                log.warn("删除连接器失败: {}", e.getMessage());
             }
         }
 
@@ -557,6 +568,26 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         } catch (Exception e) {
             log.warn("创建 Kafka topic 失败: {}", e.getMessage(), e);
             // 不阻断后续 Debezium connector 创建/更新流程
+        }
+    }
+
+    /**
+     * 删除指定的 Kafka topic
+     * 用于 CDC 关闭时清理该表的 topic，确保重新开启时从零消费无重复数据
+     */
+    private void deleteKafkaTopic(String topicName) {
+        Properties props = new Properties();
+        props.put("bootstrap.servers", kafkaUrl);
+        try (AdminClient admin = AdminClient.create(props)) {
+            Set<String> existingTopics = admin.listTopics().names().get(10, TimeUnit.SECONDS);
+            if (existingTopics.contains(topicName)) {
+                admin.deleteTopics(List.of(topicName)).all().get(10, TimeUnit.SECONDS);
+                log.info("已删除 Kafka topic: {}", topicName);
+            } else {
+                log.info("Kafka topic 不存在，无需删除: {}", topicName);
+            }
+        } catch (Exception e) {
+            log.warn("删除 Kafka topic 失败: {}, error: {}", topicName, e.getMessage());
         }
     }
 
@@ -805,6 +836,33 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             throw new SilentException("无法解析 JDBC URL: " + jdbcUrl);
         }
         return new DatasourceInfo(matcher.group(1), matcher.group(2));
+    }
+
+    /**
+     * 清空 Iceberg ODS 表数据（删物理表 + 删元数据记录）
+     * 后续 ensureOdsTableExists 会自动重建空表
+     */
+    private void clearOdsTable(CdcConfig config) {
+        String safeSubject = safeName(config.getSubjectCode());
+        String safeDb = safeName(config.getDbName());
+        String safeTable = safeName(config.getTableName());
+        String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
+
+        MetadataTableBO odsTable = metadataTableService.findOne(new MetadataTableOneQuery().setName(odsTableName));
+        if (odsTable != null) {
+            try {
+                metadataTableService.delete(odsTable.getId());
+                log.info("已删除 Iceberg ODS 表（重新启用时将重建空表）: {}", odsTableName);
+            } catch (Exception e) {
+                log.warn("删除 Iceberg ODS 表失败（后续 ensureOdsTableExists 将重建）: {}, error: {}", odsTableName, e.getMessage());
+            }
+        } else {
+            log.info("Iceberg ODS 表不存在，无需清空: {}", odsTableName);
+        }
+    }
+
+    private String safeName(String name) {
+        return name.replaceAll("[^a-zA-Z0-9_-]", "_");
     }
 
     private record DatasourceInfo(String hostname, String port) {
