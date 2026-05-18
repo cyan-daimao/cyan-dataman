@@ -411,7 +411,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     }
 
     private String getDeploymentName(String dsName, String dbName, String tableName) {
-        return "cdc-" + safeName(dsName) + "-" + safeName(dbName) + "-" + safeName(tableName);
+        return "cdc-" + toK8sName(dsName) + "-" + toK8sName(dbName) + "-" + toK8sName(tableName);
     }
 
     private String getConfigMapName(String dsName, String dbName, String tableName) {
@@ -421,9 +421,9 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     // ==================== SQL 生成 ====================
 
     private String buildFlinkSql(CdcConfig config) {
-        String safeDsName = safeName(config.getDsName());
+        String safeDsName = toK8sName(config.getDsName());
         String topicName = "cdc-" + config.getDsName() + "." + config.getDbName() + "." + config.getTableName();
-        String groupId = "flink-cdc-" + safeDsName + "-" + safeName(config.getDbName()) + "-" + safeName(config.getTableName());
+        String groupId = "flink-cdc-" + safeDsName + "-" + toK8sName(config.getDbName()) + "-" + toK8sName(config.getTableName());
 
         List<ColumnValObj> columns = fetchSourceColumns(config);
         String sinkSql = buildSinkSql(config, columns);
@@ -531,6 +531,14 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
 
     private String safeName(String name) {
         return name.replaceAll("[^a-zA-Z0-9_-]", "_");
+    }
+
+    /**
+     * 将名称转换为 RFC 1123 兼容格式（用于 K8s 资源命名：Deployment、ConfigMap 等）
+     * RFC 1123 要求：小写字母、数字、'-' 或 '.'，首尾必须是字母数字
+     */
+    private String toK8sName(String name) {
+        return name.toLowerCase().replaceAll("[^a-z0-9-]", "-");
     }
 
     private String stripTrailingComma(String s) {
