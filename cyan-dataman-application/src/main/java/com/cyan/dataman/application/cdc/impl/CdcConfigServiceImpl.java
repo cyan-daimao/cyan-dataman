@@ -294,9 +294,15 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             }
 
             // 转换字段列表
+            SecretLevel secretLevel = config.getSecretLevel() != null
+                    ? SecretLevel.getByCode(config.getSecretLevel())
+                    : SecretLevel.L1;
+            if (secretLevel == null) {
+                secretLevel = SecretLevel.L1;
+            }
             List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> metadataColumns =
                     tableSchema.getColumns().stream()
-                            .map(this::toMetadataColumn)
+                            .map(col -> toMetadataColumn(col, secretLevel))
                             .toList();
 
             // 转换索引列表
@@ -328,7 +334,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                     .setLayerCode(DataLayer.ODS)
                     .setComment(config.getDescription())
                     .setHeatLevel(HeatLevel.COLD)
-                    .setSecretLevel(SecretLevel.L1)
+                    .setSecretLevel(secretLevel)
                     .setOnlineStatus(OnlineStatus.ONLINE)
                     .setTableValObj(tableValObj);
 
@@ -344,7 +350,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      * 将数据源字段转换为元数据字段
      */
     private com.cyan.dataman.domain.metadata.valobj.ColumnValObj toMetadataColumn(
-            com.cyan.dataman.domain.ds.valobj.ColumnValObj dsColumn) {
+            com.cyan.dataman.domain.ds.valobj.ColumnValObj dsColumn, SecretLevel secretLevel) {
         return new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
                 .setName(dsColumn.getName())
                 .setType(dsColumn.getType())
@@ -354,7 +360,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setDefaultValue(dsColumn.getDefaultValue())
                 .setPrecision(dsColumn.getPrecision())
                 .setScale(dsColumn.getScale())
-                .setSecretLevel(SecretLevel.L1);
+                .setSecretLevel(secretLevel);
     }
 
     /**

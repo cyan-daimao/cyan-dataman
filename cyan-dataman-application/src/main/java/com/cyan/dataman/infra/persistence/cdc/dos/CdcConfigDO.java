@@ -93,6 +93,12 @@ public class CdcConfigDO {
     private String description;
 
     /**
+     * 密级（L1/L2/L3/L4）
+     */
+    @TableField("secret_level")
+    private String secretLevel;
+
+    /**
      * Debezium 连接器名称
      */
     @TableField("connector_name")
