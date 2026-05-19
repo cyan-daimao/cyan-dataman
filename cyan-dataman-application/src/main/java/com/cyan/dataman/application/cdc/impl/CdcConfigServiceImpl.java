@@ -12,6 +12,7 @@ import com.cyan.dataman.application.cdc.convert.CdcAppConvert;
 import com.cyan.dataman.application.cdc.job.SparkJobExecutor;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
 import com.cyan.dataman.application.cdc.service.DebeziumSignalService;
+import com.cyan.dataman.application.ds.DsConfigService;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
@@ -79,6 +80,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private final MetadataSubjectRepository metadataSubjectRepository;
     private final CdcFlinkSyncService cdcFlinkSyncService;
     private final SparkJobExecutor sparkJobExecutor;
+    private final DsConfigService dsConfigService;
 
     public CdcConfigServiceImpl(CdcConfigRepository cdcConfigRepository,
                                 CdcSparkJobRepository cdcSparkJobRepository,
@@ -89,7 +91,8 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                                 MetadataTableService metadataTableService,
                                 MetadataSubjectRepository metadataSubjectRepository,
                                 CdcFlinkSyncService cdcFlinkSyncService,
-                                SparkJobExecutor sparkJobExecutor) {
+                                SparkJobExecutor sparkJobExecutor,
+                                DsConfigService dsConfigService) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.cdcSparkJobRepository = cdcSparkJobRepository;
         this.cdcSparkTaskRepository = cdcSparkTaskRepository;
@@ -100,6 +103,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         this.metadataSubjectRepository = metadataSubjectRepository;
         this.cdcFlinkSyncService = cdcFlinkSyncService;
         this.sparkJobExecutor = sparkJobExecutor;
+        this.dsConfigService = dsConfigService;
     }
 
     @Override
@@ -110,6 +114,19 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         DsConfig dsConfig = getDsConfigByName(cmd.getDsName());
         DatasourceInfo info = parseJdbcUrl(dsConfig.getUrl());
+
+        // 如果 description 为空，从数据源获取业务表描述作为默认值
+        if (com.cyan.arch.common.util.StrUtils.isBlank(cmd.getDescription())) {
+            try {
+                com.cyan.dataman.domain.ds.valobj.TableSchemaValObj tableSchema =
+                        dsConfigService.getTableSchema(dsConfig.getName(), cmd.getDbName(), cmd.getTableName());
+                if (tableSchema != null && com.cyan.arch.common.util.StrUtils.isNotBlank(tableSchema.getTableComment())) {
+                    cmd.setDescription(tableSchema.getTableComment());
+                }
+            } catch (Exception e) {
+                log.warn("获取业务表描述失败: {}.{}, error: {}", cmd.getDbName(), cmd.getTableName(), e.getMessage());
+            }
+        }
 
         // 检查该数据源是否已有 CDC 配置（共用同一个 Debezium connector）
         List<CdcConfig> datasourceConfigs = cdcConfigRepository.findByDatasource(dsConfig.getName());
@@ -241,6 +258,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         config.toggle(cdcConfigRepository, enabled);
 
         if (Boolean.TRUE.equals(enabled)) {
+            // CDC 开启时创建元数据表
+            createMetadataTable(config);
+
             if (SyncTool.FLINK.equals(config.getSyncTool())) {
                 startConnectorForTable(config);
                 cdcFlinkSyncService.enableCdcSync(config.getId());
@@ -255,6 +275,86 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 stopRunningTasks(config.getId());
             }
         }
+    }
+
+    /**
+     * CDC 开启时创建对应的元数据表（ODS 层）
+     * <p>
+     * 从业务数据源获取表结构，转换为元数据表格式后保存。
+     * 表描述默认使用 CDC 配置的 description（业务表描述），用户可在前端修改。
+     */
+    private void createMetadataTable(CdcConfig config) {
+        try {
+            // 获取业务表结构
+            com.cyan.dataman.domain.ds.valobj.TableSchemaValObj tableSchema =
+                    dsConfigService.getTableSchema(config.getDsName(), config.getDbName(), config.getTableName());
+            if (tableSchema == null || tableSchema.getColumns() == null || tableSchema.getColumns().isEmpty()) {
+                log.warn("无法获取业务表结构，跳过创建元数据表: {}.{}", config.getDbName(), config.getTableName());
+                return;
+            }
+
+            // 转换字段列表
+            List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> metadataColumns =
+                    tableSchema.getColumns().stream()
+                            .map(this::toMetadataColumn)
+                            .toList();
+
+            // 转换索引列表
+            List<com.cyan.dataman.domain.metadata.valobj.IndexValObj> metadataIndexes = null;
+            if (tableSchema.getIndexes() != null && !tableSchema.getIndexes().isEmpty()) {
+                metadataIndexes = tableSchema.getIndexes().stream()
+                        .map(idx -> new com.cyan.dataman.domain.metadata.valobj.IndexValObj()
+                                .setName(idx.getName())
+                                .setIndexType(idx.getIndexType())
+                                .setFieldNames(idx.getFieldNames()))
+                        .toList();
+            }
+
+            // 构建 TableValObj（ODS 层 Iceberg 表）
+            com.cyan.dataman.domain.metadata.valobj.TableValObj tableValObj =
+                    new com.cyan.dataman.domain.metadata.valobj.TableValObj()
+                            .setCatalog("iceberg")
+                            .setSchema(DataLayer.ODS.getCode().toLowerCase())
+                            .setName(config.getIcebergTableName())
+                            .setComment(config.getDescription())
+                            .setColumns(metadataColumns)
+                            .setIndexes(metadataIndexes);
+
+            // 构建 MetadataTableCmd
+            MetadataTableCmd cmd = new MetadataTableCmd()
+                    .setName(config.getIcebergTableName())
+                    .setOwner(config.getCreateBy() != null ? config.getCreateBy() : "system")
+                    .setSubjectCode(config.getSubjectCode())
+                    .setLayerCode(DataLayer.ODS)
+                    .setComment(config.getDescription())
+                    .setHeatLevel(HeatLevel.COLD)
+                    .setSecretLevel(SecretLevel.L1)
+                    .setOnlineStatus(OnlineStatus.ONLINE)
+                    .setTableValObj(tableValObj);
+
+            metadataTableService.save(cmd);
+            log.info("CDC 开启时创建元数据表成功: {}", config.getIcebergTableName());
+        } catch (Exception e) {
+            log.warn("CDC 开启时创建元数据表失败: {}, error: {}", config.getIcebergTableName(), e.getMessage());
+            // 不阻断 CDC 启动流程
+        }
+    }
+
+    /**
+     * 将数据源字段转换为元数据字段
+     */
+    private com.cyan.dataman.domain.metadata.valobj.ColumnValObj toMetadataColumn(
+            com.cyan.dataman.domain.ds.valobj.ColumnValObj dsColumn) {
+        return new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
+                .setName(dsColumn.getName())
+                .setType(dsColumn.getType())
+                .setComment(dsColumn.getComment())
+                .setNullable(dsColumn.getNullable())
+                .setAutoIncrement(dsColumn.getAutoIncrement())
+                .setDefaultValue(dsColumn.getDefaultValue())
+                .setPrecision(dsColumn.getPrecision())
+                .setScale(dsColumn.getScale())
+                .setSecretLevel(SecretLevel.L1);
     }
 
     /**
