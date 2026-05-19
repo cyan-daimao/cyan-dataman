@@ -362,12 +362,12 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                   flinkVersion: v2_0
                   jobManager:
                     resource:
-                      memory: "2g"
-                      cpu: 1
+                      memory: "1g"
+                      cpu: 0.5
                   taskManager:
                     resource:
-                      memory: "4g"
-                      cpu: 2
+                      memory: "1g"
+                      cpu: 0.5
                   flinkConfiguration:
                     state.backend.type: rocksdb
                     classloader.parent-first-patterns.additional: com.codahale.metrics
@@ -387,7 +387,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     entryClass: com.cyan.dataman.infra.flink.SqlRunner
                     args:
                       - "/opt/flink/sql/job.sql"
-                    parallelism: 2
+                    parallelism: 1
                     upgradeMode: last-state
                     state: running
                   podTemplate:

@@ -335,16 +335,16 @@ CDC 同步：源数据库 -> Iceberg ODS 层。
 MySQL Source
   → Debezium Connector（每数据源一个）
     → Kafka Topic: cdc-{dsName}.{db}.{table}
-      → Flink SQL Job（每数据源一个，Application Mode on K8s）
-        → ODS Iceberg Table: ods.cdc_raw_{dsName}
-          → Schema: (_raw_json, _op, _ts, _db, _table, _ingestion_time)
+      → Flink SQL Job（一个 Topic 对应一个 Flink SQL，对应一个 Flink 作业，Application Mode on K8s）
+        → ODS Iceberg Table: ods.ods_cdc_raw_{subjectCode}_{db}_{table}
+          → Schema: 源表业务字段 + CDC 元数据字段（_op, _ts, _db, _table, _ingestion_time）
 ```
 
 核心实体：
 - `CdcConfig` — 同步配置（源表 + 同步工具 SPARK/FLINK）
 - `CdcSparkJob` — Spark SQL 模板、同步模式（OVERWRITE/APPEND）、Cron 表达式
 - `CdcSparkTask` — Spark 任务实例，状态追踪（PENDING/RUNNING/SUCCESS/FAILED/STOPPED）
-- `CdcFlinkJob` — Flink 作业配置（**一数据源一作业**，通过 `dsName` 关联）
+- `CdcFlinkJob` — Flink 作业配置（**一个 Kafka Topic 对应一个 Flink SQL，对应一个 Flink 作业**，通过 `dsName` + `dbName` + `tableName` 关联）
 
 **Flink CDC（ODS 层）**：
 - **技术选型**：Flink SQL（`StreamTableEnvironment.executeSql()`）替代原 DataStream API
@@ -357,7 +357,7 @@ MySQL Source
   - `_ingestion_time TIMESTAMP_LTZ(3)` — 摄入时间
 - **Kafka Source**：`format = 'raw'`，保留完整 JSON，通过 `JSON_VALUE` + `COALESCE` 提取元数据（兼容含/不含 schema 的 Debezium JSON）
 - **Iceberg Sink**：`write.upsert.enabled = 'false'`，纯追加模式保留完整变更历史
-- **动态加表**：无需重启 Flink Job，Kafka topic pattern (`cdc-{dsName}.*`) 自动匹配新表
+- **作业粒度**：一个 Kafka Topic 对应一个 Flink SQL，对应一个 Flink 作业；新增表会创建独立 Topic、独立 SQL ConfigMap 与独立 FlinkDeployment
 - **部署模式**：
   - `dev`：local 模式，Flink 嵌入 Spring Boot JVM
   - `pre/prod`：remote 模式，提交到 K8s Flink Session Cluster（JobManager + TaskManager HPA）
