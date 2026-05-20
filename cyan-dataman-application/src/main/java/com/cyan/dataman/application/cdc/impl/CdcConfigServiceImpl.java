@@ -301,9 +301,10 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             if (secretLevel == null) {
                 secretLevel = SecretLevel.L1;
             }
+            SecretLevel finalSecretLevel = secretLevel;
             List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> metadataColumns =
                     tableSchema.getColumns().stream()
-                            .map(col -> toMetadataColumn(col, secretLevel))
+                            .map(col -> toMetadataColumn(col, finalSecretLevel))
                             .toList();
 
             // 转换索引列表
