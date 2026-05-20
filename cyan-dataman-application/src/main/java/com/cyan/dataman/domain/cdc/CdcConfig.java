@@ -140,7 +140,10 @@ public class CdcConfig {
         Assert.notBlank(this.tableName, new SilentException("表名不能为空"));
         Assert.notNull(this.syncTool, new SilentException("同步工具不能为空"));
         // Spark 模式需校验目标表名；Flink 模式自动生成 ODS 表名
-        if (this.syncTool != SyncTool.FLINK) {
+        if (this.syncTool == SyncTool.FLINK) {
+            Assert.notBlank(this.subjectCode, new SilentException("主题编码不能为空"));
+            Assert.notBlank(this.icebergTableName, new SilentException("目标 ODS 表名不能为空"));
+        } else {
             Assert.notBlank(this.icebergTableName, new SilentException("目标 Iceberg 表名不能为空"));
         }
     }
@@ -175,7 +178,7 @@ public class CdcConfig {
      * Flink 模式下自动生成 ODS 表名：ods_cdc_raw_{subjectCode}_{dbName}_{tableName}
      */
     private void autoGenerateIcebergTableName() {
-        if (this.syncTool == SyncTool.FLINK && StrUtils.isBlank(this.icebergTableName)
+        if (this.syncTool == SyncTool.FLINK
                 && StrUtils.isNotBlank(this.subjectCode)
                 && StrUtils.isNotBlank(this.dbName)
                 && StrUtils.isNotBlank(this.tableName)) {

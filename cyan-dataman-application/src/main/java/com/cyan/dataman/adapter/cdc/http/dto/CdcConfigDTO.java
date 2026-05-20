@@ -74,6 +74,11 @@ public class CdcConfigDTO {
     private String description;
 
     /**
+     * 密级（L1/L2/L3/L4）
+     */
+    private String secretLevel;
+
+    /**
      * Debezium 连接器名称
      */
     private String connectorName;

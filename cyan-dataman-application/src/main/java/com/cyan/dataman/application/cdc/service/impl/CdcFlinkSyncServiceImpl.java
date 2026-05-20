@@ -2,6 +2,7 @@ package com.cyan.dataman.application.cdc.service.impl;
 
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
+import com.cyan.arch.common.util.StrUtils;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
@@ -458,10 +459,7 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     }
 
     private String buildSinkSql(CdcConfig config, List<ColumnValObj> columns) {
-        String safeSubject = safeName(config.getSubjectCode());
-        String safeDb = safeName(config.getDbName());
-        String safeTable = safeName(config.getTableName());
-        String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
+        String odsTableName = config.getIcebergTableName();
         String fullTableName = "rest.ods." + odsTableName;
 
         Set<String> sourceColNames = columns.stream()
@@ -552,10 +550,14 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
      * 确保 ODS 表已存在（通过元数据平台创建，Flink 只负责写入）
      */
     private void ensureOdsTableExists(CdcConfig config) {
-        String safeSubject = safeName(config.getSubjectCode());
-        String safeDb = safeName(config.getDbName());
-        String safeTable = safeName(config.getTableName());
-        String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
+        String odsTableName = config.getIcebergTableName();
+        String tableComment = StrUtils.isBlank(config.getDescription())
+                ? "CDC ODS 表: " + config.getDbName() + "." + config.getTableName()
+                : config.getDescription();
+        SecretLevel secretLevel = SecretLevel.getByCode(config.getSecretLevel());
+        if (secretLevel == null) {
+            secretLevel = SecretLevel.L1;
+        }
 
         List<ColumnValObj> sourceColumns = fetchSourceColumns(config);
         Set<String> sourceColNames = sourceColumns.stream()
@@ -617,14 +619,14 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
                     .setOwner(config.getCreateBy())
                     .setSubjectCode(config.getSubjectCode())
                     .setLayerCode(DataLayer.ODS)
-                    .setComment("CDC ODS 表: " + config.getDbName() + "." + config.getTableName())
-                    .setSecretLevel(SecretLevel.L1)
+                    .setComment(tableComment)
+                    .setSecretLevel(secretLevel)
                     .setOnlineStatus(OnlineStatus.ONLINE)
                     .setTableValObj(new com.cyan.dataman.domain.metadata.valobj.TableValObj()
                             .setCatalog("iceberg")
                             .setSchema("ods")
                             .setName(odsTableName)
-                            .setComment("CDC ODS 统一 Schema")
+                            .setComment(tableComment)
                             .setColumns(odsColumns)
                     );
 

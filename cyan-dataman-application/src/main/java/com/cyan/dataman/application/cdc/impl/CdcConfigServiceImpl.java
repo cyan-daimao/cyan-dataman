@@ -211,6 +211,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setSyncTool(cmd.getSyncTool())
                 .setSyncSql(cmd.getSyncSql())
                 .setDescription(cmd.getDescription())
+                .setSecretLevel(cmd.getSecretLevel())
                 .setUpdateBy(cmd.getUpdateBy());
 
         config = config.update(cdcConfigRepository);
