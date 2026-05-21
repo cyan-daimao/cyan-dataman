@@ -1,6 +1,6 @@
 package com.cyan.dataman.infra.persistence.ds.convert;
 
-import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.domain.ds.DsConfig;
 import com.cyan.dataman.infra.persistence.ds.dos.DsConfigDO;
 import org.mapstruct.Mapper;

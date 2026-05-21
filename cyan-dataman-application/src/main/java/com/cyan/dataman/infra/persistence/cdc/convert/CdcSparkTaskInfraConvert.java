@@ -1,6 +1,6 @@
 package com.cyan.dataman.infra.persistence.cdc.convert;
 
-import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.domain.cdc.CdcSparkTask;
 import com.cyan.dataman.infra.persistence.cdc.dos.CdcSparkTaskDO;
 import org.mapstruct.Mapper;

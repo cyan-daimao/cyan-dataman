@@ -1,6 +1,6 @@
 package com.cyan.dataman.application.cdc.convert;
 
-import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.application.cdc.bo.CdcConfigBO;
 import com.cyan.dataman.application.cdc.bo.CdcSparkJobBO;
 import com.cyan.dataman.application.cdc.bo.CdcSparkTaskBO;

@@ -1,6 +1,6 @@
 package com.cyan.dataman.adapter.metadata.http.convert;
 
-import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.ManualUploadRecordDTO;
 import com.cyan.dataman.domain.metadata.ManualUploadRecord;
 import org.mapstruct.Mapper;

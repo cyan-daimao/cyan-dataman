@@ -1,6 +1,6 @@
 package com.cyan.dataman.infra.persistence.metadata.convert;
 
-import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO;
 import org.mapstruct.Mapper;

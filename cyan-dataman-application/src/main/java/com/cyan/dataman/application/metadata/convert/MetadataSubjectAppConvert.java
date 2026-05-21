@@ -1,6 +1,6 @@
 package com.cyan.dataman.application.metadata.convert;
 
-import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.application.metadata.bo.MetadataSubjectBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataSubjectCmd;
 import com.cyan.dataman.domain.metadata.MetadataSubject;

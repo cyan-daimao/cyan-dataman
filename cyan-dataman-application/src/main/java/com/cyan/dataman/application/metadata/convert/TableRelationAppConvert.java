@@ -1,6 +1,6 @@
 package com.cyan.dataman.application.metadata.convert;
 
-import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.client.table.dto.TableRelationDTO;
 import com.cyan.dataman.domain.metadata.TableRelation;
 import org.mapstruct.Mapper;

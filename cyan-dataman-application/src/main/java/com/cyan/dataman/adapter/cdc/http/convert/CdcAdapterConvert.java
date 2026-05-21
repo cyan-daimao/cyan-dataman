@@ -1,6 +1,6 @@
 package com.cyan.dataman.adapter.cdc.http.convert;
 
-import com.cyan.arch.common.mapstruct.MapstructConvert;
+import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcConfigDTO;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcFlinkJobDTO;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcSparkJobDTO;
