@@ -1,5 +1,6 @@
 package com.cyan.dataman.application.metadata.convert;
 
+import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.application.metadata.bo.MetadataColumnBO;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import org.mapstruct.Mapper;
@@ -14,7 +15,7 @@ import java.util.List;
  * @author cy.Y
  * @since 1.0.0
  */
-@Mapper
+@Mapper(componentModel = "spring", uses = MapstructConvert.class)
 public interface MetadataColumnAppConvert {
     MetadataColumnAppConvert INSTANCE = Mappers.getMapper(MetadataColumnAppConvert.class);
 

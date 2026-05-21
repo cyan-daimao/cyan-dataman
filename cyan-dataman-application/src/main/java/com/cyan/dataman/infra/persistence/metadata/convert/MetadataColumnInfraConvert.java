@@ -1,5 +1,6 @@
 package com.cyan.dataman.infra.persistence.metadata.convert;
 
+import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO;
 import org.mapstruct.Mapper;
@@ -14,7 +15,7 @@ import java.util.List;
  * @author cy.Y
  * @since 1.0.0
  */
-@Mapper
+@Mapper(componentModel = "spring", uses = MapstructConvert.class)
 public interface MetadataColumnInfraConvert {
 
     MetadataColumnInfraConvert INSTANCE = Mappers.getMapper(MetadataColumnInfraConvert.class);

@@ -1,5 +1,6 @@
 package com.cyan.dataman.infra.persistence.cdc.convert;
 
+import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.domain.cdc.CdcSparkJob;
 import com.cyan.dataman.infra.persistence.cdc.dos.CdcSparkJobDO;
 import org.mapstruct.Mapper;
@@ -11,7 +12,7 @@ import org.mapstruct.factory.Mappers;
  * @author cy.Y
  * @since 1.0.0
  */
-@Mapper
+@Mapper(componentModel = "spring", uses = MapstructConvert.class)
 public interface CdcSparkJobInfraConvert {
 
     CdcSparkJobInfraConvert INSTANCE = Mappers.getMapper(CdcSparkJobInfraConvert.class);

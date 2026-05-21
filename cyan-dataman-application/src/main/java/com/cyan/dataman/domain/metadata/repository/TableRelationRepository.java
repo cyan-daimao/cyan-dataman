@@ -1,6 +1,6 @@
 package com.cyan.dataman.domain.metadata.repository;
 
-import com.cyan.dataman.infra.persistence.metadata.dos.MetadataTableRelationDO;
+import com.cyan.dataman.domain.metadata.TableRelation;
 
 import java.util.List;
 
@@ -15,10 +15,10 @@ public interface TableRelationRepository {
     /**
      * 保存表关系
      *
-     * @param relation 表关系DO
-     * @return 保存后的表关系DO
+     * @param relation 表关系领域对象
+     * @return 保存后的表关系领域对象
      */
-    MetadataTableRelationDO save(MetadataTableRelationDO relation);
+    TableRelation save(TableRelation relation);
 
     /**
      * 根据ID删除表关系
@@ -35,7 +35,7 @@ public interface TableRelationRepository {
      * @param table   源表名
      * @return 关系列表
      */
-    List<MetadataTableRelationDO> listBySource(String catalog, String schema, String table);
+    List<TableRelation> listBySource(String catalog, String schema, String table);
 
     /**
      * 根据目标表查询关系列表
@@ -45,5 +45,5 @@ public interface TableRelationRepository {
      * @param table   目标表名
      * @return 关系列表
      */
-    List<MetadataTableRelationDO> listByTarget(String catalog, String schema, String table);
+    List<TableRelation> listByTarget(String catalog, String schema, String table);
 }

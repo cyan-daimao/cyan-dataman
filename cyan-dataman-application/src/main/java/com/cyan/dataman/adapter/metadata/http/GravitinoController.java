@@ -1,9 +1,10 @@
 package com.cyan.dataman.adapter.metadata.http;
 
 import com.cyan.arch.common.api.Response;
+import com.cyan.dataman.adapter.metadata.http.convert.SchemaAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.convert.TableAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.CatalogDTO;
-import com.cyan.dataman.domain.metadata.valobj.SchemaValObj;
+import com.cyan.dataman.adapter.metadata.http.dto.SchemaDTO;
 import com.cyan.dataman.adapter.metadata.http.dto.TableDTO;
 import com.cyan.dataman.enums.DatasourceType;
 import com.cyan.dataman.infra.util.StarRocksUtil;
@@ -35,10 +36,11 @@ import java.util.Optional;
 @RequestMapping("/api/v1/gravitino")
 public class GravitinoController {
     private final GravitinoClient gravitinoClient;
+    private final StarRocksUtil starRocksUtil;
 
-    public GravitinoController(GravitinoClient gravitinoClient) {
+    public GravitinoController(GravitinoClient gravitinoClient, StarRocksUtil starRocksUtil) {
         this.gravitinoClient = gravitinoClient;
-
+        this.starRocksUtil = starRocksUtil;
     }
 
     /**
@@ -55,9 +57,11 @@ public class GravitinoController {
      * 获取库列表
      */
     @GetMapping("/catalogs/{catalog}/schemas")
-    public Response<List<SchemaValObj>> list(@PathVariable String catalog) {
+    public Response<List<SchemaDTO>> list(@PathVariable String catalog) {
         SupportsSchemas schemas = gravitinoClient.loadCatalog(catalog).asSchemas();
-        List<SchemaValObj> list = Arrays.stream(Optional.ofNullable(schemas.listSchemas()).orElse(new String[0])).map(schema -> new SchemaValObj().setName(schema)).toList();
+        List<SchemaDTO> list = Arrays.stream(Optional.ofNullable(schemas.listSchemas()).orElse(new String[0]))
+                .map(schema -> new SchemaDTO().setName(schema))
+                .toList();
         return Response.success(list);
     }
 
@@ -100,7 +104,7 @@ public class GravitinoController {
     @GetMapping("/catalogs/{catalog}/schemas/{schema}/tables/{table}/preview")
     public Response<List<Map<String, Object>>> listTableData(@PathVariable String catalog, @PathVariable String schema, @PathVariable String table) throws SQLException {
         String sql = "select * from %s.%s.%s limit 100".formatted(catalog, schema, table);
-        List<Map<String, Object>> data = StarRocksUtil.queryForList(sql);
+        List<Map<String, Object>> data = starRocksUtil.queryForList(sql);
         return Response.success(data);
     }
 }

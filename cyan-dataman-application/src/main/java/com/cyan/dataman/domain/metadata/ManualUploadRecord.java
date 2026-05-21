@@ -1,5 +1,6 @@
 package com.cyan.dataman.domain.metadata;
 
+import com.cyan.dataman.domain.metadata.repository.ManualUploadRecordRepository;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
@@ -79,4 +80,11 @@ public class ManualUploadRecord {
      * 逻辑删除时间
      */
     private LocalDateTime deletedAt;
+
+    /**
+     * 保存上传记录
+     */
+    public ManualUploadRecord save(ManualUploadRecordRepository repository) {
+        return repository.save(this);
+    }
 }

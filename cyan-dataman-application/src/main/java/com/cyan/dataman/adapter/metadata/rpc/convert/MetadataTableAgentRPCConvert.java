@@ -17,7 +17,7 @@ import java.util.List;
  * @author cy.Y
  * @since v1.0.0
  */
-@Mapper(uses = MapstructConvert.class)
+@Mapper(componentModel = "spring", uses = MapstructConvert.class)
 public interface MetadataTableAgentRPCConvert {
 
     MetadataTableAgentRPCConvert INSTANCE = Mappers.getMapper(MetadataTableAgentRPCConvert.class);

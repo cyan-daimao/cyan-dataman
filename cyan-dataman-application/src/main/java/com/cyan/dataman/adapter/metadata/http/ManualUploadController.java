@@ -2,6 +2,7 @@ package com.cyan.dataman.adapter.metadata.http;
 
 import com.cyan.arch.common.api.Page;
 import com.cyan.arch.common.api.Response;
+import com.cyan.dataman.adapter.metadata.http.convert.ManualUploadAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.ManualUploadRecordDTO;
 import com.cyan.dataman.application.metadata.ManualUploadService;
 import com.cyan.dataman.domain.metadata.ManualUploadRecord;
@@ -23,7 +24,6 @@ public class ManualUploadController {
 
     private final ManualUploadService manualUploadService;
 
-
     /**
      * 上传文件并导入数据
      *
@@ -40,7 +40,7 @@ public class ManualUploadController {
         String userId = UserContextHolder.getCurrentEmployee().getPassport();
         String userName = UserContextHolder.getCurrentEmployee().getCnName();
         ManualUploadRecord record = manualUploadService.upload(tableId, file, uploadMode, userId, userName);
-        return Response.success(toDTO(record));
+        return Response.success(ManualUploadAdapterConvert.INSTANCE.toManualUploadRecordDTO(record));
     }
 
     /**
@@ -58,28 +58,8 @@ public class ManualUploadController {
             @RequestParam(defaultValue = "10") long pageSize) {
         Page<ManualUploadRecord> page = manualUploadService.listRecords(tableId, pageNum, pageSize);
         return Response.success(new Page<>(
-                page.getData().stream().map(this::toDTO).toList(),
+                ManualUploadAdapterConvert.INSTANCE.toManualUploadRecordDTOList(page.getData()),
                 page.getCurrent(), page.getSize(), page.getTotal()
         ));
-    }
-
-    /**
-     * 领域对象转 DTO
-     *
-     * @param record 上传记录领域对象
-     * @return 上传记录 DTO
-     */
-    private ManualUploadRecordDTO toDTO(ManualUploadRecord record) {
-        ManualUploadRecordDTO dto = new ManualUploadRecordDTO();
-        dto.setId(record.getId());
-        dto.setFileName(record.getFileName());
-        dto.setFileType(record.getFileType());
-        dto.setUploadMode(record.getUploadMode());
-        dto.setRowCount(record.getRowCount());
-        dto.setUploaderName(record.getUploaderName());
-        dto.setStatus(record.getStatus());
-        dto.setErrorMessage(record.getErrorMessage());
-        dto.setCreatedAt(record.getCreatedAt());
-        return dto;
     }
 }

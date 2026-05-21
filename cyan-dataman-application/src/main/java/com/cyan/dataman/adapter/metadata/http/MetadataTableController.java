@@ -4,14 +4,17 @@ import com.cyan.arch.common.api.Page;
 import com.cyan.arch.common.api.Response;
 import com.cyan.dataman.adapter.metadata.http.convert.MetadataColumnAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.convert.MetadataTableAdapterConvert;
+import com.cyan.dataman.adapter.metadata.http.convert.TableSnapshotAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataColumnDTO;
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableDTO;
 import com.cyan.dataman.adapter.metadata.http.dto.SubjectTableTreeDTO;
+import com.cyan.dataman.adapter.metadata.http.dto.TableSnapshotDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.valobj.TableSnapshotValObj;
+import java.util.stream.Collectors;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.actions.SparkActions;
@@ -142,7 +145,7 @@ public class MetadataTableController {
      * 获取表快照
      */
     @GetMapping("/{fullName}/snapshots")
-    public Response<List<TableSnapshotValObj>> snapshot(@PathVariable String fullName) {
+    public Response<List<TableSnapshotDTO>> snapshot(@PathVariable String fullName) {
         String[] split = fullName.split("\\.");
         String schema, tbl;
         if (split.length > 2) {
@@ -153,7 +156,17 @@ public class MetadataTableController {
             tbl = split[1];
         }
         List<TableSnapshotValObj> snapshots = metadataTableService.snapshots(schema, tbl);
-        return Response.success(snapshots);
+        List<TableSnapshotDTO> dtos = snapshots.stream()
+                .map(s -> new TableSnapshotDTO()
+                        .setSnapshotId(s.getSnapshotId())
+                        .setOperation(s.getOperation())
+                        .setSequenceNumber(s.getSequenceNumber())
+                        .setCreatedAt(s.getCreatedAt())
+                        .setManifestListLocation(s.getManifestListLocation())
+                        .setTotalRecords(s.getTotalRecords())
+                        .setAddedRecords(s.getAddedRecords()))
+                .collect(Collectors.toList());
+        return Response.success(dtos);
     }
 
     /**

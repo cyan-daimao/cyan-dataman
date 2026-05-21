@@ -2,6 +2,8 @@ package com.cyan.dataman.infra.util;
 
 import com.cyan.arch.common.util.Convert;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -16,29 +18,35 @@ import java.util.Map;
  * @since 1.0.0
  */
 @Slf4j
+@Component
 public class StarRocksUtil {
 
-    // 数据库连接参数（建议从配置文件读取）
-    private static final String URL = "jdbc:mysql://10.0.0.2:32132/?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
-    private static final String USERNAME = "root";
-    private static final String PASSWORD = "123456";
+    /**
+     * 数据库连接URL
+     */
+    @Value("${starrocks.url}")
+    private String url;
 
-    static {
-        try {
-            // 加载驱动（JDBC 4.0+ 可省略，但显式加载更稳妥）
-            Class.forName("com.mysql.cj.jdbc.Driver");
-        } catch (ClassNotFoundException e) {
-            throw new ExceptionInInitializerError("MySQL JDBC Driver not found!");
-        }
-    }
+    /**
+     * 数据库用户名
+     */
+    @Value("${starrocks.username}")
+    private String username;
+
+    /**
+     * 数据库密码
+     */
+    @Value("${starrocks.password}")
+    private String password;
+
     /**
      * 执行查询 SQL，返回 List<Map<String, Object>>
      *
-     * @param sql 任意 SELECT 语句（不支持参数化，若需防注入请使用带参数版本）
+     * @param sql 任意 SELECT 语句
      * @return 查询结果，每行是一个 Map<列名, 值>
      * @throws SQLException 数据库异常
      */
-    public static List<Map<String, Object>> queryForList(String sql) throws SQLException {
+    public List<Map<String, Object>> queryForList(String sql) throws SQLException {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -48,11 +56,11 @@ public class StarRocksUtil {
             int columnCount = metaData.getColumnCount();
 
             while (rs.next()) {
-                Map<String, Object> row = new LinkedHashMap<>(); // 保持列顺序
+                Map<String, Object> row = new LinkedHashMap<>();
                 for (int i = 1; i <= columnCount; i++) {
-                    String columnName = metaData.getColumnLabel(i); // 使用别名（AS）
+                    String columnName = metaData.getColumnLabel(i);
                     Object value = rs.getObject(i);
-                    if (value instanceof LocalDateTime){
+                    if (value instanceof LocalDateTime) {
                         value = Convert.toDateTimeStr(value);
                     }
                     row.put(columnName, value);
@@ -71,11 +79,10 @@ public class StarRocksUtil {
      * @return 结果列表
      * @throws SQLException 数据库异常
      */
-    public static List<Map<String, Object>> queryForList(String sql, Object... params) throws SQLException {
+    public List<Map<String, Object>> queryForList(String sql, Object... params) throws SQLException {
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            // 设置参数
             for (int i = 0; i < params.length; i++) {
                 pstmt.setObject(i + 1, params[i]);
             }
@@ -99,12 +106,11 @@ public class StarRocksUtil {
         }
     }
 
-
     /**
      * 获取数据库连接
      */
-    public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL, USERNAME, PASSWORD);
+    private Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(url, username, password);
     }
 
     /**
@@ -121,7 +127,7 @@ public class StarRocksUtil {
     }
 
     /**
-     * 安全关闭 Statement（也适用于 PreparedStatement）
+     * 安全关闭 Statement
      */
     public static void close(Statement stmt) {
         if (stmt != null) {

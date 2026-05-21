@@ -12,7 +12,7 @@ import org.mapstruct.factory.Mappers;
  * @author cy.Y
  * @since 1.0.0
  */
-@Mapper(uses = MapstructConvert.class)
+@Mapper(componentModel = "spring", uses = MapstructConvert.class)
 public interface MetadataTableInfraConvert {
 
     MetadataTableInfraConvert INSTANCE = Mappers.getMapper(MetadataTableInfraConvert.class);

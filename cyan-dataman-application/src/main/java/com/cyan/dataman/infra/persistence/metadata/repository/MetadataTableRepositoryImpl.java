@@ -203,6 +203,24 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     }
 
     /**
+     * 根据 catalog + schema + table 查询表注释
+     */
+    @Override
+    public String findCommentByCatalogSchemaTable(String catalog, String schema, String table) {
+        try {
+            LambdaQueryWrapper<MetadataTableDO> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(MetadataTableDO::getDataCatalog, catalog)
+                    .eq(MetadataTableDO::getDataSchema, schema)
+                    .eq(MetadataTableDO::getTbl, table)
+                    .last("limit 1");
+            MetadataTableDO metadataTableDO = metadataTableMapper.selectOne(wrapper);
+            return metadataTableDO != null ? metadataTableDO.getComment() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 更新字段信息
      */
     private void updateColumns(MetadataTable table, MetadataTableDO metadataTableDO) {

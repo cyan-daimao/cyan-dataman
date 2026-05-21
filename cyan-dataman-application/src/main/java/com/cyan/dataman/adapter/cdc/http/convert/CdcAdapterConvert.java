@@ -1,5 +1,6 @@
 package com.cyan.dataman.adapter.cdc.http.convert;
 
+import com.cyan.arch.common.mapstruct.MapstructConvert;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcConfigDTO;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcFlinkJobDTO;
 import com.cyan.dataman.adapter.cdc.http.dto.CdcSparkJobDTO;
@@ -17,7 +18,7 @@ import org.mapstruct.factory.Mappers;
  * @author cy.Y
  * @since 1.0.0
  */
-@Mapper
+@Mapper(componentModel = "spring", uses = MapstructConvert.class)
 public interface CdcAdapterConvert {
 
     CdcAdapterConvert INSTANCE = Mappers.getMapper(CdcAdapterConvert.class);

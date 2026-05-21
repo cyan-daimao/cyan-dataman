@@ -32,9 +32,9 @@ import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.*;
-import com.cyan.dataman.infra.dos.DebeziumDO;
+import com.cyan.dataman.application.cdc.bo.DebeziumConnectorStatusBO;
+import com.cyan.dataman.infra.gateway.DebeziumGateway;
 import com.cyan.dataman.infra.rpc.request.ConnectorSaveRequest;
-import com.cyan.dataman.infra.rpc.request.DebeziumRPC;
 import com.cyan.dataman.infra.rpc.request.config.MySQLConnectorConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -74,7 +74,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private final CdcSparkJobRepository cdcSparkJobRepository;
     private final CdcSparkTaskRepository cdcSparkTaskRepository;
     private final DsConfigRepository dsConfigRepository;
-    private final DebeziumRPC debeziumRpc;
+    private final DebeziumGateway debeziumGateway;
     private final DebeziumSignalService debeziumSignalService;
     private final MetadataTableService metadataTableService;
     private final MetadataSubjectRepository metadataSubjectRepository;
@@ -86,7 +86,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                                 CdcSparkJobRepository cdcSparkJobRepository,
                                 CdcSparkTaskRepository cdcSparkTaskRepository,
                                 DsConfigRepository dsConfigRepository,
-                                DebeziumRPC debeziumRpc,
+                                DebeziumGateway debeziumGateway,
                                 DebeziumSignalService debeziumSignalService,
                                 MetadataTableService metadataTableService,
                                 MetadataSubjectRepository metadataSubjectRepository,
@@ -97,7 +97,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         this.cdcSparkJobRepository = cdcSparkJobRepository;
         this.cdcSparkTaskRepository = cdcSparkTaskRepository;
         this.dsConfigRepository = dsConfigRepository;
-        this.debeziumRpc = debeziumRpc;
+        this.debeziumGateway = debeziumGateway;
         this.debeziumSignalService = debeziumSignalService;
         this.metadataTableService = metadataTableService;
         this.metadataSubjectRepository = metadataSubjectRepository;
@@ -236,7 +236,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             // 该数据源下没有其他表了，删除连接器
             if (connectorName != null) {
                 try {
-                    debeziumRpc.deleteConnector(connectorName);
+                    debeziumGateway.deleteConnector(connectorName);
                     log.info("删除 Debezium 连接器: {}", connectorName);
                 } catch (Exception e) {
                     log.warn("删除 Debezium 连接器失败: {}", e.getMessage());
@@ -514,7 +514,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             // 更新配置后重启 connector 使新表生效。
             boolean restarted = false;
             try {
-                debeziumRpc.restartConnector(connectorName);
+                debeziumGateway.restartConnector(connectorName);
                 log.info("Debezium 连接器已重启: {}", connectorName);
                 restarted = true;
             } catch (Exception e) {
@@ -558,7 +558,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      */
     private boolean checkConnectorExists(String connectorName) {
         try {
-            List<String> connectors = debeziumRpc.connectors();
+            List<String> connectors = debeziumGateway.connectors();
             return connectors != null && connectors.contains(connectorName);
         } catch (Exception e) {
             log.warn("检查 connector 存在性失败: {}", e.getMessage());
@@ -578,7 +578,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
         while (System.currentTimeMillis() < deadline) {
             try {
-                DebeziumDO status = debeziumRpc.connectorStatus(connectorName);
+                DebeziumConnectorStatusBO status = debeziumGateway.connectorStatus(connectorName);
                 if (status != null && status.getTasks() != null && !status.getTasks().isEmpty()) {
                     boolean allRunning = status.getTasks().stream()
                             .allMatch(t -> "RUNNING".equals(t.getState()));
@@ -635,7 +635,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         if (enabledConfigs.isEmpty()) {
             try {
                 // 删除 connector（而非仅停止），恢复时需全新创建才能保证全量快照
-                debeziumRpc.deleteConnector(connectorName);
+                debeziumGateway.deleteConnector(connectorName);
                 log.info("删除 Debezium 连接器: {}", connectorName);
             } catch (Exception e) {
                 log.warn("删除连接器失败: {}", e.getMessage());
@@ -728,7 +728,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setIncrementalSnapshotChunkSize("1024");
 
         ConnectorSaveRequest request = new ConnectorSaveRequest(config.getConnectorName(), mysqlConfig);
-        debeziumRpc.createConnector(request);
+        debeziumGateway.createConnector(request);
 
         // 确保信号表存在
         debeziumSignalService.ensureSignalTableExists(info.hostname(), info.port(), dsConfig.getUsername(), dsConfig.getPassword());
@@ -807,7 +807,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setIncrementalSnapshotEnabled(true)
                 .setIncrementalSnapshotChunkSize("1024");
 
-        debeziumRpc.updateConnector(connectorName, mysqlConfig);
+        debeziumGateway.updateConnector(connectorName, mysqlConfig);
     }
 
     // ==================== 工具方法 ====================

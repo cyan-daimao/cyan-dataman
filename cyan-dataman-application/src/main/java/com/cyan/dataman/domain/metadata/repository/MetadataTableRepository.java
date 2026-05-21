@@ -55,5 +55,15 @@ public interface MetadataTableRepository {
      * 根据表ID获取字段列表
      */
     List<ColumnValObj> findColumnsByTableId(String tableId);
+
+    /**
+     * 根据 catalog + schema + table 查询表注释
+     *
+     * @param catalog catalog
+     * @param schema  schema
+     * @param table   表名
+     * @return 表注释
+     */
+    String findCommentByCatalogSchemaTable(String catalog, String schema, String table);
 }
 
