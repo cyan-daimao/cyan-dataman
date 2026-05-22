@@ -1,6 +1,7 @@
 package com.cyan.dataman.application.cdc.service;
 
-import com.cyan.arch.common.api.SilentException;
+import com.cyan.dataman.application.metadata.MetadataTableService;
+import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.cdc.CdcConfig;
 import com.cyan.dataman.domain.cdc.query.CdcConfigListQuery;
 import com.cyan.dataman.domain.cdc.repository.CdcConfigRepository;
@@ -9,8 +10,9 @@ import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
 import com.cyan.dataman.domain.metadata.MetadataTable;
 import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
+import com.cyan.dataman.enums.DataLayer;
 import com.cyan.dataman.enums.SyncTool;
-import com.cyan.dataman.infra.util.IcebergUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -34,16 +36,16 @@ public class CdcSchemaSyncService {
 
     private final CdcConfigRepository cdcConfigRepository;
     private final MetadataTableRepository metadataTableRepository;
-    private final IcebergUtil icebergUtil;
+    private final MetadataTableService metadataTableService;
     private final CdcFlinkSyncService cdcFlinkSyncService;
 
     public CdcSchemaSyncService(CdcConfigRepository cdcConfigRepository,
                                 MetadataTableRepository metadataTableRepository,
-                                IcebergUtil icebergUtil,
+                                MetadataTableService metadataTableService,
                                 CdcFlinkSyncService cdcFlinkSyncService) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.metadataTableRepository = metadataTableRepository;
-        this.icebergUtil = icebergUtil;
+        this.metadataTableService = metadataTableService;
         this.cdcFlinkSyncService = cdcFlinkSyncService;
     }
 
@@ -92,6 +94,11 @@ public class CdcSchemaSyncService {
                 .map(com.cyan.dataman.domain.metadata.valobj.ColumnValObj::getName)
                 .collect(Collectors.toSet());
 
+        if (newSchema.getColumns() == null || newSchema.getColumns().isEmpty()) {
+            log.info("新 Schema 字段为空，跳过 Schema 同步: {}.{}.{}", dsName, dbName, tableName);
+            return;
+        }
+
         // 4. 对比找出新增字段（排除元数据字段）
         List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> newColumns = new ArrayList<>();
         for (ColumnValObj sourceCol : newSchema.getColumns()) {
@@ -116,23 +123,30 @@ public class CdcSchemaSyncService {
 
         log.info("检测到 {} 个新增字段，开始同步 Schema: {}.{}.{}", newColumns.size(), dsName, dbName, tableName);
 
-        // 5. 更新 Iceberg 表结构（通过 Gravitino）
-        boolean icebergOk = icebergUtil.addColumns("ods", odsTableName, newColumns);
-        if (!icebergOk) {
-            log.error("更新 Iceberg 表结构失败: ods.{}", odsTableName);
-            throw new SilentException("更新 Iceberg 表结构失败: ods." + odsTableName);
+        // 5. 通过元数据平台服务统一更新元数据记录与数仓表结构
+        TableValObj tableValObj = metadataTable.getTable();
+        if (tableValObj == null) {
+            log.warn("元数据平台中的 ODS 表缺少表结构，跳过 Schema 同步: {}", odsTableName);
+            return;
         }
-
-        // 6. 更新元数据平台记录
         List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> allColumns = new ArrayList<>(existingColumns);
         allColumns.addAll(newColumns);
-        if (metadataTable.getTable() != null) {
-            metadataTable.getTable().setColumns(allColumns);
-        }
-        metadataTableRepository.updateById(metadataTable);
+        tableValObj.setColumns(allColumns);
+
+        MetadataTableCmd cmd = new MetadataTableCmd()
+                .setName(metadataTable.getName())
+                .setOwner(metadataTable.getOwner())
+                .setSubjectCode(metadataTable.getSubjectCode())
+                .setLayerCode(toDataLayer(metadataTable.getLayerCode()))
+                .setComment(metadataTable.getComment())
+                .setHeatLevel(metadataTable.getHeatLevel())
+                .setSecretLevel(metadataTable.getSecretLevel())
+                .setOnlineStatus(metadataTable.getOnlineStatus())
+                .setTableValObj(tableValObj);
+        metadataTableService.update(metadataTable.getId(), cmd);
         log.info("元数据平台记录已更新: {}，新增 {} 个字段", odsTableName, newColumns.size());
 
-        // 7. 重启 Flink 作业（重新生成 SQL 并提交）
+        // 6. 重启 Flink 作业（重新生成 SQL 并提交）
         cdcFlinkSyncService.restartFlinkJob(config.getId());
 
         log.info("Schema 同步完成，新增 {} 个字段，Flink 作业已重启: {}.{}.{}",
@@ -145,5 +159,13 @@ public class CdcSchemaSyncService {
     private boolean isMetadataColumn(String name) {
         return "_op".equals(name) || "_ts".equals(name) || "_db".equals(name)
                 || "_table".equals(name) || "_ingestion_time".equals(name);
+    }
+
+    /**
+     * 转换数据层级
+     */
+    private DataLayer toDataLayer(String layerCode) {
+        DataLayer dataLayer = DataLayer.getByCode(layerCode);
+        return dataLayer != null ? dataLayer : DataLayer.ODS;
     }
 }
