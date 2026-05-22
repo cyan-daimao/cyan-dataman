@@ -13,7 +13,7 @@ import java.util.List;
  * @author cy.Y
  * @since v1.0.0
  */
-@FeignClient(name = "debezium-rpc", url = "${debezium.url}")
+@FeignClient(name = "debezium-rpc", contextId = "debeziumRPC", url = "${debezium.url:}")
 public interface DebeziumRPC {
 
     /**

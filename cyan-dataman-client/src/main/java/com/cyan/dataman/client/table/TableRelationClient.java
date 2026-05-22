@@ -18,7 +18,7 @@ import java.util.List;
  * @author cy.Y
  * @since 1.0.0
  */
-@FeignClient(name = "cyan-dataman", path = "/rpc/v1/agent/meta/table-relations")
+@FeignClient(name = "cyan-dataman", contextId = "tableRelationClient", path = "/rpc/v1/agent/meta/table-relations", url = "${feign.cyan-dataman.url:}")
 public interface TableRelationClient {
 
     /**
