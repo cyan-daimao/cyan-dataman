@@ -21,8 +21,17 @@ public class MetadataTableOneQuery {
      */
     private String name;
 
+    /**
+     * 数据目录
+     */
+    private String catalog;
+
+    /**
+     * 数据库/schema
+     */
+    private String schema;
 
     public boolean isEmpty() {
-    	return name == null;
+    	return name == null && catalog == null && schema == null;
     }
 }

@@ -68,6 +68,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     public List<MetadataTable> list(MetadataTableListQuery query) {
         LambdaQueryWrapper<MetadataTableDO> queryWrapper = new LambdaQueryWrapper<MetadataTableDO>()
                 .in(CollUtils.isNotEmpty(query.getIds()), MetadataTableDO::getId, query.getIds())
+                .eq(StrUtils.isNotBlank(query.getCatalog()), MetadataTableDO::getDataCatalog, query.getCatalog())
+                .eq(StrUtils.isNotBlank(query.getSchema()), MetadataTableDO::getDataSchema, query.getSchema())
                 .like(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
                 .like(StrUtils.isNotBlank(query.getComment()), MetadataTableDO::getComment, query.getComment());
         // 内容搜索（同时匹配表名或描述）
@@ -179,6 +181,8 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
         }
         LambdaQueryWrapper<MetadataTableDO> queryWrapper = new LambdaQueryWrapper<MetadataTableDO>()
                 .eq(StrUtils.isNotBlank(query.getName()), MetadataTableDO::getTbl, query.getName())
+                .eq(StrUtils.isNotBlank(query.getCatalog()), MetadataTableDO::getDataCatalog, query.getCatalog())
+                .eq(StrUtils.isNotBlank(query.getSchema()), MetadataTableDO::getDataSchema, query.getSchema())
                 .last("limit 1");
         MetadataTableDO metadataTableDO = metadataTableMapper.selectOne(queryWrapper);
         return MetadataTableInfraConvert.INSTANCE.toMetadataTable(metadataTableDO);

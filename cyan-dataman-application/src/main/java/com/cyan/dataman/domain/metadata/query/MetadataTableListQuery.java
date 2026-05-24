@@ -29,6 +29,16 @@ public class MetadataTableListQuery {
     private String name;
 
     /**
+     * 数据目录
+     */
+    private String catalog;
+
+    /**
+     * 数据库/schema
+     */
+    private String schema;
+
+    /**
      * 表描述（模糊搜索）
      */
     private String comment;

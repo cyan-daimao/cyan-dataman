@@ -1,6 +1,11 @@
 package com.cyan.dataman.adapter.metadata.http;
 
 import com.cyan.arch.common.api.Response;
+import com.cyan.dataman.adapter.metadata.http.convert.AiRelationSuggestAdapterConvert;
+import com.cyan.dataman.adapter.metadata.http.dto.AiRelationSuggestRequestDTO;
+import com.cyan.dataman.adapter.metadata.http.dto.AiRelationSuggestionDTO;
+import com.cyan.dataman.application.metadata.AiRelationSuggestService;
+import com.cyan.dataman.application.metadata.bo.AiRelationSuggestionBO;
 import com.cyan.dataman.client.table.dto.JoinPathsRequestDTO;
 import com.cyan.dataman.client.table.dto.TableRelationDTO;
 import com.cyan.dataman.client.table.dto.TableRelationsResultDTO;
@@ -24,9 +29,12 @@ import java.util.Map;
 public class TableRelationController {
 
     private final TableRelationService tableRelationService;
+    private final AiRelationSuggestService aiRelationSuggestService;
 
-    public TableRelationController(TableRelationService tableRelationService) {
+    public TableRelationController(TableRelationService tableRelationService,
+                                   AiRelationSuggestService aiRelationSuggestService) {
         this.tableRelationService = tableRelationService;
+        this.aiRelationSuggestService = aiRelationSuggestService;
     }
 
     /**
@@ -60,6 +68,19 @@ public class TableRelationController {
         String createdBy = UserContextHolder.getCurrentEmployee().getPassport();
         TableRelationDTO relation = tableRelationService.createRelation(cmd, createdBy);
         return Response.success(relation);
+    }
+
+    /**
+     * AI 推荐关联关系
+     *
+     * @param request 推荐请求
+     * @return AI 推荐候选列表
+     */
+    @PostMapping("/relations/ai-suggest")
+    public Response<List<AiRelationSuggestionDTO>> suggestRelations(@RequestBody @Valid AiRelationSuggestRequestDTO request) {
+        List<AiRelationSuggestionBO> suggestions = aiRelationSuggestService.suggest(
+                request.getCatalog(), request.getSchema(), request.getTable(), request.getMaxCandidates());
+        return Response.success(AiRelationSuggestAdapterConvert.INSTANCE.toAiRelationSuggestionDTOList(suggestions));
     }
 
     /**

@@ -26,3 +26,9 @@ starrocks:
   username: root
   password: 123456
 
+# Dify AI 关联推荐配置，默认关闭，实际地址和 key 通过环境配置或 Nacos 覆盖
+dify:
+  relation:
+    enabled: true
+    base-url: "http://10.0.0.2/v1"
+    api-key: "app-TFQUkCTgneLaJuSOmaiqC2Vr"
