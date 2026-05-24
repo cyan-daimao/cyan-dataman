@@ -1,7 +1,7 @@
 package com.cyan.dataman.infra.rpc.dify;
 
 import com.cyan.dataman.infra.rpc.dify.request.DifyChatMessageRequest;
-import com.cyan.dataman.infra.rpc.dify.response.DifyChatMessageResponse;
+import feign.Response;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,6 +24,6 @@ public interface DifyRelationRPC {
      * @return 对话响应
      */
     @PostMapping("/chat-messages")
-    DifyChatMessageResponse chat(@RequestHeader("Authorization") String authorization,
-                                 @RequestBody DifyChatMessageRequest request);
+    Response chat(@RequestHeader("Authorization") String authorization,
+                  @RequestBody DifyChatMessageRequest request);
 }
