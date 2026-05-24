@@ -17,15 +17,16 @@ import com.cyan.dataman.application.metadata.cmd.CreateRelationCmd;
 import com.cyan.employee.login.filter.UserContextHolder;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * 表关系控制器
@@ -37,7 +38,7 @@ import java.util.concurrent.CompletableFuture;
 @RequestMapping("/api/v1/metadata/tables")
 public class TableRelationController {
 
-    private static final MediaType SSE_JSON_UTF8 = new MediaType("application", "json", StandardCharsets.UTF_8);
+    private static final MediaType TEXT_EVENT_STREAM_UTF8 = new MediaType("text", "event-stream", StandardCharsets.UTF_8);
 
     private final TableRelationService tableRelationService;
     private final AiRelationSuggestService aiRelationSuggestService;
@@ -100,36 +101,36 @@ public class TableRelationController {
      * @param request 推荐请求
      * @return SSE 响应
      */
-    @PostMapping(value = "/relations/ai-suggest/stream", produces = "text/event-stream;charset=UTF-8")
-    public SseEmitter suggestRelationsStream(@RequestBody @Valid AiRelationSuggestRequestDTO request) {
-        SseEmitter emitter = new SseEmitter(0L);
-        CompletableFuture.runAsync(() -> {
+    @PostMapping(value = "/relations/ai-suggest/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<StreamingResponseBody> suggestRelationsStream(@RequestBody @Valid AiRelationSuggestRequestDTO request) {
+        StreamingResponseBody body = outputStream -> {
+            AiRelationSuggestStreamWriter writer = new AiRelationSuggestStreamWriter(outputStream);
             try {
                 aiRelationSuggestService.suggestStream(
                         request.getCatalog(),
                         request.getSchema(),
                         request.getTable(),
                         request.getMaxCandidates(),
-                        new AiRelationSuggestStreamEmitter(emitter)
+                        writer
                 );
-                sendEvent(emitter, "done", new JSONObject().fluentPut("message", "AI 推荐完成"));
-                emitter.complete();
+                sendEvent(outputStream, "done", new JSONObject().fluentPut("message", "AI 推荐完成"));
             } catch (Exception e) {
-                sendEvent(emitter, "error", new JSONObject().fluentPut("message", e.getMessage()));
-                emitter.complete();
+                sendEvent(outputStream, "error", new JSONObject().fluentPut("message", e.getMessage()));
             }
-        });
-        return emitter;
+        };
+        return ResponseEntity.ok()
+                .contentType(TEXT_EVENT_STREAM_UTF8)
+                .body(body);
     }
 
     /**
      * SSE 推荐监听器
      */
-    private static class AiRelationSuggestStreamEmitter implements AiRelationSuggestStreamListener {
-        private final SseEmitter emitter;
+    private static class AiRelationSuggestStreamWriter implements AiRelationSuggestStreamListener {
+        private final OutputStream outputStream;
 
-        private AiRelationSuggestStreamEmitter(SseEmitter emitter) {
-            this.emitter = emitter;
+        private AiRelationSuggestStreamWriter(OutputStream outputStream) {
+            this.outputStream = outputStream;
         }
 
         /**
@@ -137,7 +138,7 @@ public class TableRelationController {
          */
         @Override
         public void onStatus(String message) {
-            sendEvent(emitter, "status", new JSONObject().fluentPut("message", message));
+            sendEvent(outputStream, "status", new JSONObject().fluentPut("message", message));
         }
 
         /**
@@ -145,7 +146,7 @@ public class TableRelationController {
          */
         @Override
         public void onAnswer(String content) {
-            sendEvent(emitter, "answer", new JSONObject().fluentPut("content", content));
+            sendEvent(outputStream, "answer", new JSONObject().fluentPut("content", content));
         }
 
         /**
@@ -154,20 +155,21 @@ public class TableRelationController {
         @Override
         public void onResult(List<AiRelationSuggestionBO> suggestions) {
             List<AiRelationSuggestionDTO> dtos = AiRelationSuggestAdapterConvert.INSTANCE.toAiRelationSuggestionDTOList(suggestions);
-            sendEvent(emitter, "result", new JSONObject().fluentPut("data", dtos == null ? Collections.emptyList() : dtos));
+            sendEvent(outputStream, "result", new JSONObject().fluentPut("data", dtos == null ? Collections.emptyList() : dtos));
         }
     }
 
     /**
      * 发送 SSE 事件
      */
-    private static void sendEvent(SseEmitter emitter, String eventName, Object data) {
+    private static void sendEvent(OutputStream outputStream, String eventName, Object data) {
         try {
-            emitter.send(SseEmitter.event()
-                    .name(eventName)
-                    .data(JSON.toJSONString(data), SSE_JSON_UTF8));
-        } catch (IOException ignored) {
-            emitter.complete();
+            String payload = "event:" + eventName + "\n"
+                    + "data:" + JSON.toJSONString(data) + "\n\n";
+            outputStream.write(payload.getBytes(StandardCharsets.UTF_8));
+            outputStream.flush();
+        } catch (IOException e) {
+            throw new IllegalStateException("SSE 事件发送失败", e);
         }
     }
 
