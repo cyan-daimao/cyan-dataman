@@ -1,10 +1,13 @@
 package com.cyan.dataman.infra.gateway;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.infra.rpc.dify.DifyRelationRPC;
 import com.cyan.dataman.infra.rpc.dify.request.DifyChatMessageRequest;
 import com.cyan.dataman.infra.rpc.dify.response.DifyChatMessageResponse;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +21,7 @@ import java.util.List;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class DifyRelationGateway {
 
     private final DifyRelationRPC difyRelationRPC;
@@ -65,7 +69,13 @@ public class DifyRelationGateway {
                 .setResponseMode("blocking")
                 .setUser("cyan-dataman")
                 .setFiles(List.of());
-        DifyChatMessageResponse response = difyRelationRPC.chat("Bearer " + apiKey, request);
-        return response == null ? null : response.getAnswer();
+        try {
+            DifyChatMessageResponse response = difyRelationRPC.chat("Bearer " + apiKey, request);
+            return response == null ? null : response.getAnswer();
+        } catch (FeignException e) {
+            log.warn("Dify 关联推荐调用失败, baseUrl: {}, status: {}, response: {}",
+                    baseUrl, e.status(), e.contentUTF8());
+            throw new SilentException("Dify 关联推荐调用失败，请检查 dify.relation.base-url 是否指向 Dify API 地址");
+        }
     }
 }
