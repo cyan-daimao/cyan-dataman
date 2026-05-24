@@ -19,7 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/metadata/tables/{tableId}/upload")
+@RequestMapping("/api/v1/metadata/tables/{tableIdentifier}/upload")
 public class ManualUploadController {
 
     private final ManualUploadService manualUploadService;
@@ -27,36 +27,36 @@ public class ManualUploadController {
     /**
      * 上传文件并导入数据
      *
-     * @param tableId    元数据表ID
+     * @param tableIdentifier 元数据表ID或表名
      * @param file       上传的文件
      * @param uploadMode 上传模式: overwrite/append
      * @return 上传记录
      */
     @PostMapping
     public Response<ManualUploadRecordDTO> upload(
-            @PathVariable("tableId") Long tableId,
+            @PathVariable("tableIdentifier") String tableIdentifier,
             @RequestParam("file") MultipartFile file,
             @RequestParam("uploadMode") String uploadMode) {
         String userId = UserContextHolder.getCurrentEmployee().getPassport();
         String userName = UserContextHolder.getCurrentEmployee().getCnName();
-        ManualUploadRecord record = manualUploadService.upload(tableId, file, uploadMode, userId, userName);
+        ManualUploadRecord record = manualUploadService.upload(tableIdentifier, file, uploadMode, userId, userName);
         return Response.success(ManualUploadAdapterConvert.INSTANCE.toManualUploadRecordDTO(record));
     }
 
     /**
      * 分页查询上传记录
      *
-     * @param tableId  元数据表ID
+     * @param tableIdentifier 元数据表ID或表名
      * @param pageNum  页码
      * @param pageSize 页大小
      * @return 上传记录分页列表
      */
     @GetMapping("/records")
     public Response<Page<ManualUploadRecordDTO>> listRecords(
-            @PathVariable("tableId") Long tableId,
+            @PathVariable("tableIdentifier") String tableIdentifier,
             @RequestParam(defaultValue = "1") long pageNum,
             @RequestParam(defaultValue = "10") long pageSize) {
-        Page<ManualUploadRecord> page = manualUploadService.listRecords(tableId, pageNum, pageSize);
+        Page<ManualUploadRecord> page = manualUploadService.listRecords(tableIdentifier, pageNum, pageSize);
         return Response.success(new Page<>(
                 ManualUploadAdapterConvert.INSTANCE.toManualUploadRecordDTOList(page.getData()),
                 page.getCurrent(), page.getSize(), page.getTotal()

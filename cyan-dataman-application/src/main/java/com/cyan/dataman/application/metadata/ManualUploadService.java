@@ -15,22 +15,22 @@ public interface ManualUploadService {
     /**
      * 上传文件并导入数据
      *
-     * @param tableId       元数据表ID
+     * @param tableIdentifier 元数据表ID或表名
      * @param file          上传的文件
      * @param uploadMode    上传模式: overwrite/append
      * @param uploader      上传人passport
      * @param uploaderName  上传人姓名
      * @return 上传记录
      */
-    ManualUploadRecord upload(Long tableId, MultipartFile file, String uploadMode, String uploader, String uploaderName);
+    ManualUploadRecord upload(String tableIdentifier, MultipartFile file, String uploadMode, String uploader, String uploaderName);
 
     /**
      * 分页查询上传记录
      *
-     * @param tableId   元数据表ID
+     * @param tableIdentifier 元数据表ID或表名
      * @param pageNum   页码
      * @param pageSize  页大小
      * @return 上传记录分页结果
      */
-    Page<ManualUploadRecord> listRecords(Long tableId, long pageNum, long pageSize);
+    Page<ManualUploadRecord> listRecords(String tableIdentifier, long pageNum, long pageSize);
 }

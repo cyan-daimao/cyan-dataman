@@ -3,9 +3,11 @@ package com.cyan.dataman.application.metadata.impl;
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.Page;
 import com.cyan.arch.common.api.SilentException;
+import com.cyan.arch.common.util.StrUtils;
 import com.cyan.dataman.application.metadata.ManualUploadService;
 import com.cyan.dataman.domain.metadata.ManualUploadRecord;
 import com.cyan.dataman.domain.metadata.MetadataTable;
+import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.repository.ManualUploadRecordRepository;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.opencsv.CSVReader;
@@ -69,7 +71,9 @@ public class ManualUploadServiceImpl implements ManualUploadService {
      */
     @Override
     @Transactional
-    public ManualUploadRecord upload(Long tableId, MultipartFile file, String uploadMode, String uploader, String uploaderName) {
+    public ManualUploadRecord upload(String tableIdentifier, MultipartFile file, String uploadMode, String uploader, String uploaderName) {
+        MetadataTable table = resolveMetadataTable(tableIdentifier);
+        Long tableId = resolveTableId(table);
         ManualUploadRecord record = new ManualUploadRecord()
                 .setTableId(tableId)
                 .setFileName(file.getOriginalFilename())
@@ -80,8 +84,6 @@ public class ManualUploadServiceImpl implements ManualUploadService {
                 .setStatus("success");
 
         try {
-            MetadataTable table = metadataTableRepository.findById(String.valueOf(tableId));
-            Assert.notNull(table, new SilentException("表不存在"));
             String dbName = table.getTable().getSchema();
             String tableName = table.getTable().getName();
             String fullTableName = "rest." + dbName + "." + tableName;
@@ -107,8 +109,51 @@ public class ManualUploadServiceImpl implements ManualUploadService {
      * {@inheritDoc}
      */
     @Override
-    public Page<ManualUploadRecord> listRecords(Long tableId, long pageNum, long pageSize) {
+    public Page<ManualUploadRecord> listRecords(String tableIdentifier, long pageNum, long pageSize) {
+        Long tableId = resolveTableId(resolveMetadataTable(tableIdentifier));
         return manualUploadRecordRepository.pageByTableId(tableId, pageNum, pageSize);
+    }
+
+    /**
+     * 根据表ID或表名解析元数据表
+     *
+     * @param tableIdentifier 元数据表ID或表名
+     * @return 元数据表
+     */
+    private MetadataTable resolveMetadataTable(String tableIdentifier) {
+        Assert.notBlank(tableIdentifier, new SilentException("表标识不能为空"));
+        MetadataTable table;
+        if (isNumeric(tableIdentifier)) {
+            table = metadataTableRepository.findById(tableIdentifier);
+        } else {
+            table = metadataTableRepository.findOne(new MetadataTableOneQuery().setName(tableIdentifier));
+        }
+        Assert.notNull(table, new SilentException("表不存在: " + tableIdentifier));
+        return table;
+    }
+
+    /**
+     * 解析元数据表ID
+     *
+     * @param table 元数据表
+     * @return 元数据表ID
+     */
+    private Long resolveTableId(MetadataTable table) {
+        try {
+            return Long.valueOf(table.getId());
+        } catch (NumberFormatException e) {
+            throw new SilentException("无效的表ID: " + table.getId());
+        }
+    }
+
+    /**
+     * 判断字符串是否为数字
+     *
+     * @param value 字符串
+     * @return 是否为数字
+     */
+    private boolean isNumeric(String value) {
+        return StrUtils.isNotBlank(value) && value.chars().allMatch(Character::isDigit);
     }
 
     /**
