@@ -134,6 +134,9 @@ public class MetadataTableRPC {
                 .setNullable(col.getNullable() != null ? col.getNullable() : true);
     }
 
+    /**
+     * 转换为客户端字段 DTO。
+     */
     private com.cyan.dataman.client.table.dto.MetadataColumnDTO toClientColumnDTO(MetadataColumnBO bo) {
         return new com.cyan.dataman.client.table.dto.MetadataColumnDTO()
                 .setId(bo.getId())
