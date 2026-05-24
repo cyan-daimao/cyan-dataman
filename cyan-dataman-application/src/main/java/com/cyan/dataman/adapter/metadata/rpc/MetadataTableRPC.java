@@ -5,10 +5,12 @@ import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.adapter.metadata.http.convert.MetadataTableAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.MetadataTableDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
+import com.cyan.dataman.application.metadata.bo.MetadataColumnBO;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.client.table.request.MetadataColumnCreateRequest;
 import com.cyan.dataman.client.table.request.MetadataTableCreateRequest;
+import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.DataLayer;
@@ -66,6 +68,27 @@ public class MetadataTableRPC {
         return Response.success(dto);
     }
 
+    /**
+     * 根据表标识查询字段列表
+     */
+    @GetMapping("/columns")
+    public Response<List<com.cyan.dataman.client.table.dto.MetadataColumnDTO>> listColumns(
+            @RequestParam(required = false) String catalog,
+            @RequestParam(required = false) String schema,
+            @RequestParam String name) {
+        MetadataTableBO table = metadataTableService.findOne(new MetadataTableOneQuery()
+                .setCatalog(catalog)
+                .setSchema(schema)
+                .setName(name));
+        if (table == null) {
+            return Response.success(List.of());
+        }
+        List<MetadataColumnBO> columnBOs = metadataTableService.listColumns(table.getId());
+        return Response.success(columnBOs.stream()
+                .map(this::toClientColumnDTO)
+                .toList());
+    }
+
     private MetadataTableCmd toCmd(MetadataTableCreateRequest request) {
         DataLayer layer = DataLayer.getByCode(request.getLayerCode());
         if (layer == null) {
@@ -109,5 +132,17 @@ public class MetadataTableRPC {
                 .setType(col.getType())
                 .setComment(col.getComment())
                 .setNullable(col.getNullable() != null ? col.getNullable() : true);
+    }
+
+    private com.cyan.dataman.client.table.dto.MetadataColumnDTO toClientColumnDTO(MetadataColumnBO bo) {
+        return new com.cyan.dataman.client.table.dto.MetadataColumnDTO()
+                .setId(bo.getId())
+                .setCol(bo.getCol())
+                .setDataType(bo.getDataType())
+                .setComment(bo.getComment())
+                .setNullable(bo.getNullable())
+                .setSecretLevel(bo.getSecretLevel())
+                .setDefaultValue(bo.getDefaultValue())
+                .setAutoIncrement(bo.getAutoIncrement());
     }
 }

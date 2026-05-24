@@ -23,7 +23,7 @@ public interface DifyRelationRPC {
      * @param request       请求体
      * @return 对话响应
      */
-    @PostMapping("/v1/chat-messages")
+    @PostMapping("/chat-messages")
     DifyChatMessageResponse chat(@RequestHeader("Authorization") String authorization,
                                  @RequestBody DifyChatMessageRequest request);
 }
