@@ -16,10 +16,12 @@ import com.cyan.dataman.application.metadata.TableRelationService;
 import com.cyan.dataman.application.metadata.cmd.CreateRelationCmd;
 import com.cyan.employee.login.filter.UserContextHolder;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +36,8 @@ import java.util.concurrent.CompletableFuture;
 @RestController
 @RequestMapping("/api/v1/metadata/tables")
 public class TableRelationController {
+
+    private static final MediaType SSE_JSON_UTF8 = new MediaType("application", "json", StandardCharsets.UTF_8);
 
     private final TableRelationService tableRelationService;
     private final AiRelationSuggestService aiRelationSuggestService;
@@ -161,7 +165,7 @@ public class TableRelationController {
         try {
             emitter.send(SseEmitter.event()
                     .name(eventName)
-                    .data(JSON.toJSONString(data)));
+                    .data(JSON.toJSONString(data), SSE_JSON_UTF8));
         } catch (IOException ignored) {
             emitter.complete();
         }
