@@ -84,6 +84,14 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
 
         sendStatus(listener, "正在构建候选表池");
         Map<String, MetadataTable> tablePool = buildCandidatePool(current);
+        Set<String> existingRelationTableKeys = buildExistingRelationTableKeys(catalog, schema, table);
+        int beforeFilterSize = tablePool.size();
+        tablePool.entrySet().removeIf(entry -> !tableKey(current).equals(entry.getKey())
+                && existingRelationTableKeys.contains(entry.getKey()));
+        int filteredSize = beforeFilterSize - tablePool.size();
+        if (filteredSize > 0) {
+            sendStatus(listener, "已过滤 " + filteredSize + " 张已有关系表");
+        }
         if (tablePool.size() <= 1) {
             sendStatus(listener, "没有找到可分析的候选表");
             return List.of();
@@ -488,6 +496,18 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
                 .forEach(relation -> keys.add(relationKey(relation)));
         Optional.ofNullable(tableRelationRepository.listByTarget(catalog, schema, table)).orElse(List.of())
                 .forEach(relation -> keys.add(relationKey(relation)));
+        return keys;
+    }
+
+    /**
+     * 构建已有关系表键
+     */
+    private Set<String> buildExistingRelationTableKeys(String catalog, String schema, String table) {
+        Set<String> keys = new LinkedHashSet<>();
+        Optional.ofNullable(tableRelationRepository.listBySource(catalog, schema, table)).orElse(List.of())
+                .forEach(relation -> keys.add(tableKey(relation.getTargetCatalog(), relation.getTargetSchema(), relation.getTargetTable())));
+        Optional.ofNullable(tableRelationRepository.listByTarget(catalog, schema, table)).orElse(List.of())
+                .forEach(relation -> keys.add(tableKey(relation.getSourceCatalog(), relation.getSourceSchema(), relation.getSourceTable())));
         return keys;
     }
 
