@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.application.metadata.AiRelationSuggestService;
+import com.cyan.dataman.application.metadata.AiRelationSuggestStreamListener;
 import com.cyan.dataman.application.metadata.bo.AiRelationColumnBO;
 import com.cyan.dataman.application.metadata.bo.AiRelationSuggestionBO;
 import com.cyan.dataman.domain.metadata.MetadataTable;
@@ -14,6 +15,7 @@ import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.repository.TableRelationRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.infra.gateway.DifyRelationGateway;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -51,29 +53,57 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
      */
     @Override
     public List<AiRelationSuggestionBO> suggest(String catalog, String schema, String table, Integer maxCandidates) {
+        return doSuggest(catalog, schema, table, maxCandidates, null);
+    }
+
+    /**
+     * 流式推荐表关联关系
+     */
+    @Override
+    public void suggestStream(String catalog, String schema, String table, Integer maxCandidates,
+                              AiRelationSuggestStreamListener listener) {
+        List<AiRelationSuggestionBO> suggestions = doSuggest(catalog, schema, table, maxCandidates, listener);
+        listener.onResult(suggestions);
+    }
+
+    /**
+     * 执行推荐
+     */
+    private List<AiRelationSuggestionBO> doSuggest(String catalog, String schema, String table, Integer maxCandidates,
+                                                   AiRelationSuggestStreamListener listener) {
         int limit = normalizeLimit(maxCandidates);
+        sendStatus(listener, "正在读取当前表元数据");
         MetadataTable current = findTable(catalog, schema, table);
         if (current == null) {
             throw new SilentException("当前表不存在: " + catalog + "." + schema + "." + table);
         }
         if (!difyRelationGateway.available()) {
+            sendStatus(listener, "Dify 关联推荐未启用或配置不完整");
             return List.of();
         }
 
+        sendStatus(listener, "正在构建候选表池");
         Map<String, MetadataTable> tablePool = buildCandidatePool(current);
         if (tablePool.size() <= 1) {
+            sendStatus(listener, "没有找到可分析的候选表");
             return List.of();
         }
 
+        sendStatus(listener, "已找到 " + (tablePool.size() - 1) + " 张候选表，正在请求 AI 分析");
         String prompt = buildPrompt(current, tablePool.values().stream()
                 .filter(t -> !tableKey(current).equals(tableKey(t)))
                 .toList(), limit);
-        String answer = difyRelationGateway.suggestRelations(prompt);
+        String answer = listener == null
+                ? difyRelationGateway.suggestRelations(prompt)
+                : difyRelationGateway.streamSuggestRelations(prompt, listener::onAnswer);
+        sendStatus(listener, "AI 分析完成，正在解析推荐结果");
         JSONArray suggestions = parseSuggestions(answer);
         if (suggestions == null || suggestions.isEmpty()) {
+            sendStatus(listener, "AI 未返回可解析的推荐结果");
             return List.of();
         }
 
+        sendStatus(listener, "正在校验表字段和过滤重复关系");
         Set<String> existingRelationKeys = buildExistingRelationKeys(catalog, schema, table);
         List<AiRelationSuggestionBO> result = new ArrayList<>();
         Set<String> acceptedKeys = new LinkedHashSet<>();
@@ -90,7 +120,17 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
                 result.add(suggestion);
             }
         }
+        sendStatus(listener, "校验完成，保留 " + result.size() + " 条推荐关系");
         return result;
+    }
+
+    /**
+     * 输出状态信息
+     */
+    private void sendStatus(AiRelationSuggestStreamListener listener, String message) {
+        if (listener != null) {
+            listener.onStatus(message);
+        }
     }
 
     /**
@@ -188,7 +228,7 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
         addKeywordParts(keywords, current.getName());
         addKeywordParts(keywords, current.getComment());
         Optional.ofNullable(current.getTable())
-                .map(t -> t.getColumns())
+                .map(TableValObj::getColumns)
                 .orElse(List.of())
                 .stream()
                 .limit(12)
@@ -418,7 +458,7 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
             return false;
         }
         return Optional.ofNullable(table.getTable())
-                .map(t -> t.getColumns())
+                .map(TableValObj::getColumns)
                 .orElse(List.of())
                 .stream()
                 .anyMatch(c -> columnName.equals(c.getName()));
@@ -429,7 +469,7 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
      */
     private List<AiRelationColumnBO> toColumnBOList(MetadataTable table) {
         return Optional.ofNullable(table.getTable())
-                .map(t -> t.getColumns())
+                .map(TableValObj::getColumns)
                 .orElse(List.of())
                 .stream()
                 .map(c -> new AiRelationColumnBO()

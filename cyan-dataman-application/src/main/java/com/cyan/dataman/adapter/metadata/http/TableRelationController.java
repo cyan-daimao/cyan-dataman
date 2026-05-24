@@ -1,10 +1,13 @@
 package com.cyan.dataman.adapter.metadata.http;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.cyan.arch.common.api.Response;
 import com.cyan.dataman.adapter.metadata.http.convert.AiRelationSuggestAdapterConvert;
 import com.cyan.dataman.adapter.metadata.http.dto.AiRelationSuggestRequestDTO;
 import com.cyan.dataman.adapter.metadata.http.dto.AiRelationSuggestionDTO;
 import com.cyan.dataman.application.metadata.AiRelationSuggestService;
+import com.cyan.dataman.application.metadata.AiRelationSuggestStreamListener;
 import com.cyan.dataman.application.metadata.bo.AiRelationSuggestionBO;
 import com.cyan.dataman.client.table.dto.JoinPathsRequestDTO;
 import com.cyan.dataman.client.table.dto.TableRelationDTO;
@@ -14,9 +17,13 @@ import com.cyan.dataman.application.metadata.cmd.CreateRelationCmd;
 import com.cyan.employee.login.filter.UserContextHolder;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 表关系控制器
@@ -81,6 +88,83 @@ public class TableRelationController {
         List<AiRelationSuggestionBO> suggestions = aiRelationSuggestService.suggest(
                 request.getCatalog(), request.getSchema(), request.getTable(), request.getMaxCandidates());
         return Response.success(AiRelationSuggestAdapterConvert.INSTANCE.toAiRelationSuggestionDTOList(suggestions));
+    }
+
+    /**
+     * AI 流式推荐关联关系
+     *
+     * @param request 推荐请求
+     * @return SSE 响应
+     */
+    @PostMapping(value = "/relations/ai-suggest/stream", produces = "text/event-stream;charset=UTF-8")
+    public SseEmitter suggestRelationsStream(@RequestBody @Valid AiRelationSuggestRequestDTO request) {
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                aiRelationSuggestService.suggestStream(
+                        request.getCatalog(),
+                        request.getSchema(),
+                        request.getTable(),
+                        request.getMaxCandidates(),
+                        new AiRelationSuggestStreamEmitter(emitter)
+                );
+                sendEvent(emitter, "done", new JSONObject().fluentPut("message", "AI 推荐完成"));
+                emitter.complete();
+            } catch (Exception e) {
+                sendEvent(emitter, "error", new JSONObject().fluentPut("message", e.getMessage()));
+                emitter.complete();
+            }
+        });
+        return emitter;
+    }
+
+    /**
+     * SSE 推荐监听器
+     */
+    private static class AiRelationSuggestStreamEmitter implements AiRelationSuggestStreamListener {
+        private final SseEmitter emitter;
+
+        private AiRelationSuggestStreamEmitter(SseEmitter emitter) {
+            this.emitter = emitter;
+        }
+
+        /**
+         * 输出状态信息
+         */
+        @Override
+        public void onStatus(String message) {
+            sendEvent(emitter, "status", new JSONObject().fluentPut("message", message));
+        }
+
+        /**
+         * 输出 AI 原始回复片段
+         */
+        @Override
+        public void onAnswer(String content) {
+            sendEvent(emitter, "answer", new JSONObject().fluentPut("content", content));
+        }
+
+        /**
+         * 输出推荐结果
+         */
+        @Override
+        public void onResult(List<AiRelationSuggestionBO> suggestions) {
+            List<AiRelationSuggestionDTO> dtos = AiRelationSuggestAdapterConvert.INSTANCE.toAiRelationSuggestionDTOList(suggestions);
+            sendEvent(emitter, "result", new JSONObject().fluentPut("data", dtos == null ? Collections.emptyList() : dtos));
+        }
+    }
+
+    /**
+     * 发送 SSE 事件
+     */
+    private static void sendEvent(SseEmitter emitter, String eventName, Object data) {
+        try {
+            emitter.send(SseEmitter.event()
+                    .name(eventName)
+                    .data(JSON.toJSONString(data)));
+        } catch (IOException ignored) {
+            emitter.complete();
+        }
     }
 
     /**

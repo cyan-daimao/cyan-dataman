@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Dify 关联推荐网关
@@ -65,6 +66,17 @@ public class DifyRelationGateway {
      * @return Dify answer
      */
     public String suggestRelations(String prompt) {
+        return streamSuggestRelations(prompt, null);
+    }
+
+    /**
+     * 流式请求 Dify 生成关联推荐
+     *
+     * @param prompt         提示词
+     * @param answerConsumer 回复片段消费者
+     * @return 完整 Dify answer
+     */
+    public String streamSuggestRelations(String prompt, Consumer<String> answerConsumer) {
         if (!available()) {
             return null;
         }
@@ -76,7 +88,7 @@ public class DifyRelationGateway {
                 .setFiles(List.of());
         try {
             Response response = difyRelationRPC.chat("Bearer " + apiKey, request);
-            return readStreamingAnswer(response);
+            return readStreamingAnswer(response, answerConsumer);
         } catch (FeignException e) {
             log.warn("Dify 关联推荐调用失败, baseUrl: {}, status: {}, response: {}",
                     baseUrl, e.status(), e.contentUTF8());
@@ -90,7 +102,7 @@ public class DifyRelationGateway {
     /**
      * 读取 Dify streaming 响应中的 answer 片段
      */
-    private String readStreamingAnswer(Response response) throws IOException {
+    private String readStreamingAnswer(Response response, Consumer<String> answerConsumer) throws IOException {
         if (response == null || response.body() == null) {
             return null;
         }
@@ -112,6 +124,9 @@ public class DifyRelationGateway {
                     String part = event.getString("answer");
                     if (part != null) {
                         answer.append(part);
+                        if (answerConsumer != null) {
+                            answerConsumer.accept(part);
+                        }
                     }
                 }
                 if ("error".equals(eventName)) {
