@@ -7,6 +7,7 @@ import com.cyan.arch.common.util.CollUtils;
 import com.cyan.arch.common.util.Convert;
 import com.cyan.dataman.adapter.metadata.http.dto.SubjectTableTreeDTO;
 import com.cyan.dataman.application.metadata.MetadataTableService;
+import com.cyan.dataman.application.metadata.RelationVectorIndexService;
 import com.cyan.dataman.application.metadata.bo.MetadataColumnBO;
 import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
@@ -61,14 +62,17 @@ public class MetadataTableServiceImpl implements MetadataTableService {
     private final MetadataSubjectRepository metadataSubjectRepository;
     private final GravitinoClient gravitinoClient;
     private final SparkSession sparkSession;
+    private final RelationVectorIndexService relationVectorIndexService;
 
     public MetadataTableServiceImpl(MetadataTableRepository metadataTableRepository,
                                     MetadataSubjectRepository metadataSubjectRepository,
-                                    GravitinoClient gravitinoClient, SparkSession sparkSession) {
+                                    GravitinoClient gravitinoClient, SparkSession sparkSession,
+                                    RelationVectorIndexService relationVectorIndexService) {
         this.metadataTableRepository = metadataTableRepository;
         this.metadataSubjectRepository = metadataSubjectRepository;
         this.gravitinoClient = gravitinoClient;
         this.sparkSession = sparkSession;
+        this.relationVectorIndexService = relationVectorIndexService;
     }
 
     /**
@@ -121,6 +125,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         metadataTable = metadataTable.save(metadataTableRepository);
         // 在Gravitino中创建表
         createTableInGravitino(metadataTable);
+        syncRelationVectorIndex(metadataTable);
         return MetadataTableAppConvert.INSTANCE.toMetadataTableBO(metadataTable);
     }
 
@@ -181,6 +186,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         metadataTable = metadataTable.update(metadataTableRepository);
         // 在Gravitino中更新表
         updateTableInGravitino(existingTable, metadataTable);
+        syncRelationVectorIndex(metadataTable);
         return MetadataTableAppConvert.INSTANCE.toMetadataTableBO(metadataTable);
     }
 
@@ -329,6 +335,29 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         metadataTableRepository.deleteById(id);
         // 在Gravitino中删除表
         dropTableInGravitino(existingTable);
+        deleteRelationVectorIndex(existingTable);
+    }
+
+    /**
+     * 同步关联推荐向量索引
+     */
+    private void syncRelationVectorIndex(MetadataTable table) {
+        try {
+            relationVectorIndexService.upsert(table);
+        } catch (Exception e) {
+            log.warn("同步关联推荐向量索引失败, tableId: {}", table == null ? null : table.getId(), e);
+        }
+    }
+
+    /**
+     * 删除关联推荐向量索引
+     */
+    private void deleteRelationVectorIndex(MetadataTable table) {
+        try {
+            relationVectorIndexService.delete(table);
+        } catch (Exception e) {
+            log.warn("删除关联推荐向量索引失败, tableId: {}", table == null ? null : table.getId(), e);
+        }
     }
 
     /**

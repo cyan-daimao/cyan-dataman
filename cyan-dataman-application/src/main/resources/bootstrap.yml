@@ -32,3 +32,22 @@ dify:
     enabled: true
     base-url: "http://10.0.0.2:20080/v1"
     api-key: "app-TFQUkCTgneLaJuSOmaiqC2Vr"
+
+# 元数据表关联推荐 Embedding 配置，base-url 支持 OpenAI-compatible 根地址或完整 /embeddings 地址
+embedding:
+  relation:
+    enabled: ${EMBEDDING_RELATION_ENABLED:false}
+    base-url: ${EMBEDDING_RELATION_BASE_URL:https://open.bigmodel.cn/api/paas/v4/embeddings}
+    api-key: ${EMBEDDING_RELATION_API_KEY:}
+    model: ${EMBEDDING_RELATION_MODEL:embedding-3}
+    dimension: ${EMBEDDING_RELATION_DIMENSION:512}
+
+# 元数据表关联推荐 Qdrant 配置
+qdrant:
+  relation:
+    enabled: ${QDRANT_RELATION_ENABLED:false}
+    base-url: ${QDRANT_RELATION_BASE_URL:http://10.0.0.2:6333}
+    api-key: ${QDRANT_RELATION_API_KEY:}
+    collection: ${QDRANT_RELATION_COLLECTION:metadata_table_relation}
+    top-k: ${QDRANT_RELATION_TOP_K:30}
+    score-threshold: ${QDRANT_RELATION_SCORE_THRESHOLD:0.3}

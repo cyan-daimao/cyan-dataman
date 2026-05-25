@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.application.metadata.AiRelationSuggestService;
 import com.cyan.dataman.application.metadata.AiRelationSuggestStreamListener;
+import com.cyan.dataman.application.metadata.RelationVectorIndexService;
 import com.cyan.dataman.application.metadata.bo.AiRelationColumnBO;
 import com.cyan.dataman.application.metadata.bo.AiRelationSuggestionBO;
 import com.cyan.dataman.domain.metadata.MetadataTable;
@@ -47,6 +48,7 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
     private final MetadataTableRepository metadataTableRepository;
     private final TableRelationRepository tableRelationRepository;
     private final DifyRelationGateway difyRelationGateway;
+    private final RelationVectorIndexService relationVectorIndexService;
 
     /**
      * 推荐表关联关系
@@ -83,7 +85,7 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
         }
 
         sendStatus(listener, "正在构建候选表池");
-        Map<String, MetadataTable> tablePool = buildCandidatePool(current);
+        Map<String, MetadataTable> tablePool = buildCandidatePool(current, listener);
         Set<String> existingRelationTableKeys = buildExistingRelationTableKeys(catalog, schema, table);
         int beforeFilterSize = tablePool.size();
         tablePool.entrySet().removeIf(entry -> !tableKey(current).equals(entry.getKey())
@@ -168,10 +170,44 @@ public class AiRelationSuggestServiceImpl implements AiRelationSuggestService {
     /**
      * 构建候选表池
      */
-    private Map<String, MetadataTable> buildCandidatePool(MetadataTable current) {
+    private Map<String, MetadataTable> buildCandidatePool(MetadataTable current, AiRelationSuggestStreamListener listener) {
+        Map<String, MetadataTable> pool = buildVectorCandidatePool(current, listener);
+        if (pool.size() > 1) {
+            return pool;
+        }
+        sendStatus(listener, "向量召回不可用或无结果，降级规则召回");
+        return buildRuleCandidatePool(current);
+    }
+
+    /**
+     * 构建向量候选表池
+     */
+    private Map<String, MetadataTable> buildVectorCandidatePool(MetadataTable current, AiRelationSuggestStreamListener listener) {
         Map<String, MetadataTable> pool = new LinkedHashMap<>();
         pool.put(tableKey(current), current);
+        if (!relationVectorIndexService.available()) {
+            return pool;
+        }
+        try {
+            sendStatus(listener, "正在向量检索相似表");
+            List<MetadataTable> vectorTables = relationVectorIndexService.searchSimilarTables(current);
+            addTables(pool, vectorTables, relationVectorIndexService.available() ? vectorTables.size() : 0);
+            if (pool.size() > 1) {
+                sendStatus(listener, "向量召回 " + (pool.size() - 1) + " 张候选表");
+            }
+            return pool;
+        } catch (Exception e) {
+            sendStatus(listener, "向量召回失败，降级规则召回");
+            return new LinkedHashMap<>(Map.of(tableKey(current), current));
+        }
+    }
 
+    /**
+     * 构建规则候选表池
+     */
+    private Map<String, MetadataTable> buildRuleCandidatePool(MetadataTable current) {
+        Map<String, MetadataTable> pool = new LinkedHashMap<>();
+        pool.put(tableKey(current), current);
         List<MetadataTable> sameSchemaTables = metadataTableRepository.list(new MetadataTableListQuery()
                 .setCatalog(current.getTable().getCatalog())
                 .setSchema(current.getTable().getSchema()));
