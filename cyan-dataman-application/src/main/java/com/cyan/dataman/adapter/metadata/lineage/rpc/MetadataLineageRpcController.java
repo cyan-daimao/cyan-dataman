@@ -6,7 +6,10 @@ import com.cyan.dataman.application.metadata.lineage.MetadataLineageService;
 import com.cyan.dataman.application.metadata.lineage.cmd.MetadataLineageSyncCmd;
 import com.cyan.dataman.client.lineage.MetadataLineageClient;
 import com.cyan.dataman.client.lineage.request.MetadataLineageSyncRequest;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -16,18 +19,18 @@ import org.springframework.web.bind.annotation.RestController;
  * @since 1.0.0
  */
 @RestController
+@RequestMapping("/rpc/v1/metadata/lineage")
+@RequiredArgsConstructor
 public class MetadataLineageRpcController implements MetadataLineageClient {
 
     private final MetadataLineageService metadataLineageService;
 
-    public MetadataLineageRpcController(MetadataLineageService metadataLineageService) {
-        this.metadataLineageService = metadataLineageService;
-    }
 
     /**
      * 同步血缘节点与边
      */
     @Override
+    @PostMapping("/sync")
     public Response<Void> sync(@RequestBody MetadataLineageSyncRequest request) {
         MetadataLineageSyncCmd cmd = new MetadataLineageSyncCmd()
                 .setServiceName(request.getServiceName())
