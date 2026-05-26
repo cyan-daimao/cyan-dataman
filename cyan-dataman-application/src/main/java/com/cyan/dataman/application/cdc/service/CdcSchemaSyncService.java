@@ -38,15 +38,18 @@ public class CdcSchemaSyncService {
     private final MetadataTableRepository metadataTableRepository;
     private final MetadataTableService metadataTableService;
     private final CdcFlinkSyncService cdcFlinkSyncService;
+    private final CdcFieldLineageSyncService cdcFieldLineageSyncService;
 
     public CdcSchemaSyncService(CdcConfigRepository cdcConfigRepository,
                                 MetadataTableRepository metadataTableRepository,
                                 MetadataTableService metadataTableService,
-                                CdcFlinkSyncService cdcFlinkSyncService) {
+                                CdcFlinkSyncService cdcFlinkSyncService,
+                                CdcFieldLineageSyncService cdcFieldLineageSyncService) {
         this.cdcConfigRepository = cdcConfigRepository;
         this.metadataTableRepository = metadataTableRepository;
         this.metadataTableService = metadataTableService;
         this.cdcFlinkSyncService = cdcFlinkSyncService;
+        this.cdcFieldLineageSyncService = cdcFieldLineageSyncService;
     }
 
     /**
@@ -70,7 +73,7 @@ public class CdcSchemaSyncService {
             log.info("未找到 CDC 配置，跳过 Schema 同步: {}.{}.{}", dsName, dbName, tableName);
             return;
         }
-        CdcConfig config = configs.get(0);
+        CdcConfig config = configs.getFirst();
 
         // 2. 获取 ODS 表名
         String odsTableName = config.getIcebergTableName();
@@ -148,6 +151,7 @@ public class CdcSchemaSyncService {
 
         // 6. 重启 Flink 作业（重新生成 SQL 并提交）
         cdcFlinkSyncService.restartFlinkJob(config.getId());
+        cdcFieldLineageSyncService.syncFlinkConfig(config);
 
         log.info("Schema 同步完成，新增 {} 个字段，Flink 作业已重启: {}.{}.{}",
                 newColumns.size(), dsName, dbName, tableName);

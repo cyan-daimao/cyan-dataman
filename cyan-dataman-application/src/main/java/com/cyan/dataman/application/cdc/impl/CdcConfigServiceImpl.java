@@ -10,6 +10,7 @@ import com.cyan.dataman.application.cdc.cmd.CdcConfigCmd;
 import com.cyan.dataman.application.cdc.cmd.CdcSparkJobCmd;
 import com.cyan.dataman.application.cdc.convert.CdcAppConvert;
 import com.cyan.dataman.application.cdc.job.SparkJobExecutor;
+import com.cyan.dataman.application.cdc.service.CdcFieldLineageSyncService;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
 import com.cyan.dataman.application.cdc.service.DebeziumSignalService;
 import com.cyan.dataman.application.ds.DsConfigService;
@@ -43,7 +44,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -79,6 +79,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     private final MetadataTableService metadataTableService;
     private final MetadataSubjectRepository metadataSubjectRepository;
     private final CdcFlinkSyncService cdcFlinkSyncService;
+    private final CdcFieldLineageSyncService cdcFieldLineageSyncService;
     private final SparkJobExecutor sparkJobExecutor;
     private final DsConfigService dsConfigService;
 
@@ -91,6 +92,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                                 MetadataTableService metadataTableService,
                                 MetadataSubjectRepository metadataSubjectRepository,
                                 CdcFlinkSyncService cdcFlinkSyncService,
+                                CdcFieldLineageSyncService cdcFieldLineageSyncService,
                                 SparkJobExecutor sparkJobExecutor,
                                 DsConfigService dsConfigService) {
         this.cdcConfigRepository = cdcConfigRepository;
@@ -102,6 +104,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         this.metadataTableService = metadataTableService;
         this.metadataSubjectRepository = metadataSubjectRepository;
         this.cdcFlinkSyncService = cdcFlinkSyncService;
+        this.cdcFieldLineageSyncService = cdcFieldLineageSyncService;
         this.sparkJobExecutor = sparkJobExecutor;
         this.dsConfigService = dsConfigService;
     }
@@ -163,6 +166,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         // Flink 类型自动启动同步
         if (SyncTool.FLINK.equals(config.getSyncTool())) {
             cdcFlinkSyncService.enableCdcSync(config.getId());
+            cdcFieldLineageSyncService.syncFlinkConfig(config);
         }
 
         return CdcAppConvert.INSTANCE.toBO(config);
@@ -195,6 +199,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     public CdcConfigBO update(String id, CdcConfigCmd cmd) {
         CdcConfig config = cdcConfigRepository.findById(id);
         Assert.notNull(config, new SilentException("CDC 配置不存在"));
+        SyncTool oldSyncTool = config.getSyncTool();
 
         CdcConfig existing = cdcConfigRepository.findByName(cmd.getName());
         if (existing != null && !existing.getId().equals(id)) {
@@ -215,6 +220,8 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setUpdateBy(cmd.getUpdateBy());
 
         config = config.update(cdcConfigRepository);
+        clearChangedToolLineage(config, oldSyncTool);
+        syncCdcConfigLineage(config);
         return CdcAppConvert.INSTANCE.toBO(config);
     }
 
@@ -225,9 +232,13 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         Assert.notNull(config, new SilentException("CDC 配置不存在"));
 
         String connectorName = config.getConnectorName();
+        List<CdcSparkJob> sparkJobs = cdcSparkJobRepository.findByCdcConfigId(config.getId());
 
         // 先删除数据库记录
         config.delete(cdcConfigRepository);
+        cdcFieldLineageSyncService.clearFlinkConfig(config.getId());
+        Optional.ofNullable(sparkJobs).orElse(List.of())
+                .forEach(job -> cdcFieldLineageSyncService.clearSparkJob(job.getId()));
 
         // 查询该数据源下剩余的配置
         List<CdcConfig> remainingConfigs = cdcConfigRepository.findByDatasource(config.getDsName());
@@ -268,6 +279,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             } else if (SyncTool.SPARK.equals(config.getSyncTool())) {
                 triggerSparkSyncIfNeeded(config);
             }
+            syncCdcConfigLineage(config);
         } else {
             if (SyncTool.FLINK.equals(config.getSyncTool())) {
                 stopConnectorForTable(config);
@@ -378,6 +390,39 @@ public class CdcConfigServiceImpl implements CdcConfigService {
     }
 
     /**
+     * 重建 CDC 配置相关字段血缘
+     */
+    private void syncCdcConfigLineage(CdcConfig config) {
+        if (SyncTool.FLINK.equals(config.getSyncTool())) {
+            cdcFieldLineageSyncService.syncFlinkConfig(config);
+            return;
+        }
+        if (SyncTool.SPARK.equals(config.getSyncTool())) {
+            List<CdcSparkJob> sparkJobs = cdcSparkJobRepository.findByCdcConfigId(config.getId());
+            Optional.ofNullable(sparkJobs).orElse(List.of())
+                    .forEach(job -> cdcFieldLineageSyncService.syncSparkJob(job, config));
+        }
+    }
+
+    /**
+     * 清理同步工具变更前的旧血缘
+     */
+    private void clearChangedToolLineage(CdcConfig config, SyncTool oldSyncTool) {
+        if (oldSyncTool == null || oldSyncTool.equals(config.getSyncTool())) {
+            return;
+        }
+        if (SyncTool.FLINK.equals(oldSyncTool)) {
+            cdcFieldLineageSyncService.clearFlinkConfig(config.getId());
+            return;
+        }
+        if (SyncTool.SPARK.equals(oldSyncTool)) {
+            List<CdcSparkJob> sparkJobs = cdcSparkJobRepository.findByCdcConfigId(config.getId());
+            Optional.ofNullable(sparkJobs).orElse(List.of())
+                    .forEach(job -> cdcFieldLineageSyncService.clearSparkJob(job.getId()));
+        }
+    }
+
+    /**
      * 停止该 CDC 配置下所有运行中的 Spark 任务
      */
     private void stopRunningTasks(String cdcConfigId) {
@@ -397,6 +442,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         CdcSparkJob job = CdcAppConvert.INSTANCE.toDomain(cmd);
         job = job.save(cdcSparkJobRepository);
+        cdcFieldLineageSyncService.syncSparkJob(job, config);
         return CdcAppConvert.INSTANCE.toBO(job);
     }
 
@@ -420,6 +466,10 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                 .setUpdateBy(cmd.getUpdateBy());
 
         job = job.update(cdcSparkJobRepository);
+        CdcConfig config = cdcConfigRepository.findById(job.getCdcConfigId());
+        if (config != null) {
+            cdcFieldLineageSyncService.syncSparkJob(job, config);
+        }
         return CdcAppConvert.INSTANCE.toBO(job);
     }
 
@@ -429,6 +479,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         CdcSparkJob job = cdcSparkJobRepository.findById(id);
         Assert.notNull(job, new SilentException("Spark 作业配置不存在"));
         job.delete(cdcSparkJobRepository);
+        cdcFieldLineageSyncService.clearSparkJob(id);
     }
 
     // ==================== Spark 任务实例管理 ====================
