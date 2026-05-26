@@ -13,7 +13,9 @@ import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.DataLayer;
 import com.cyan.dataman.enums.SyncTool;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -32,25 +34,16 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CdcSchemaSyncService {
 
     private final CdcConfigRepository cdcConfigRepository;
     private final MetadataTableRepository metadataTableRepository;
     private final MetadataTableService metadataTableService;
     private final CdcFlinkSyncService cdcFlinkSyncService;
+    @Lazy
     private final CdcFieldLineageSyncService cdcFieldLineageSyncService;
 
-    public CdcSchemaSyncService(CdcConfigRepository cdcConfigRepository,
-                                MetadataTableRepository metadataTableRepository,
-                                MetadataTableService metadataTableService,
-                                CdcFlinkSyncService cdcFlinkSyncService,
-                                CdcFieldLineageSyncService cdcFieldLineageSyncService) {
-        this.cdcConfigRepository = cdcConfigRepository;
-        this.metadataTableRepository = metadataTableRepository;
-        this.metadataTableService = metadataTableService;
-        this.cdcFlinkSyncService = cdcFlinkSyncService;
-        this.cdcFieldLineageSyncService = cdcFieldLineageSyncService;
-    }
 
     /**
      * 同步源表 Schema 变更到 CDC ODS 表

@@ -10,7 +10,10 @@ import com.cyan.dataman.domain.cdc.CdcConfig;
 import com.cyan.dataman.domain.cdc.CdcSparkJob;
 import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
 import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -28,6 +31,7 @@ import java.util.Set;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CdcFieldLineageSyncServiceImpl implements CdcFieldLineageSyncService {
 
     private static final String SERVICE_NAME = "cyan-dataman";
@@ -37,14 +41,10 @@ public class CdcFieldLineageSyncServiceImpl implements CdcFieldLineageSyncServic
     private static final String EDGE_WRITES_FIELD = "WRITES_FIELD";
     private static final List<String> FLINK_CDC_SYSTEM_COLUMNS = List.of("_op", "_ts", "_db", "_table", "_ingestion_time");
 
+    @Lazy
     private final MetadataLineageService metadataLineageService;
-    private final DsConfigService dsConfigService;
+    private final ObjectProvider<DsConfigService> dsConfigServiceProvider;
 
-    public CdcFieldLineageSyncServiceImpl(MetadataLineageService metadataLineageService,
-                                          DsConfigService dsConfigService) {
-        this.metadataLineageService = metadataLineageService;
-        this.dsConfigService = dsConfigService;
-    }
 
     /**
      * 同步 Flink CDC 配置字段血缘
@@ -170,7 +170,8 @@ public class CdcFieldLineageSyncServiceImpl implements CdcFieldLineageSyncServic
      */
     private FieldFetchResult fetchSourceFieldNames(CdcConfig config) {
         try {
-            TableSchemaValObj schema = dsConfigService.getTableSchema(config.getDsName(), config.getDbName(), config.getTableName());
+            TableSchemaValObj schema = dsConfigServiceProvider.getObject()
+                    .getTableSchema(config.getDsName(), config.getDbName(), config.getTableName());
             List<String> fieldNames = schema == null || schema.getColumns() == null
                     ? List.of()
                     : schema.getColumns().stream()

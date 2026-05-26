@@ -10,6 +10,7 @@ import com.cyan.dataman.domain.metadata.lineage.MetadataLineageEdge;
 import com.cyan.dataman.domain.metadata.lineage.MetadataLineageNode;
 import com.cyan.dataman.domain.metadata.lineage.query.MetadataFieldLineageQuery;
 import com.cyan.dataman.domain.metadata.lineage.repository.MetadataLineageRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ import java.util.Set;
  * @since 1.0.0
  */
 @Service
+@RequiredArgsConstructor
 public class MetadataLineageServiceImpl implements MetadataLineageService {
 
     private static final String EDGE_WRITES_FIELD = "WRITES_FIELD";
@@ -40,9 +42,6 @@ public class MetadataLineageServiceImpl implements MetadataLineageService {
 
     private final MetadataLineageRepository metadataLineageRepository;
 
-    public MetadataLineageServiceImpl(MetadataLineageRepository metadataLineageRepository) {
-        this.metadataLineageRepository = metadataLineageRepository;
-    }
 
     /**
      * 同步血缘节点与边
