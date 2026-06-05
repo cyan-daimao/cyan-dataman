@@ -1,0 +1,81 @@
+CREATE TABLE IF NOT EXISTS metadata_quality_rule (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    table_id BIGINT NOT NULL COMMENT '元数据表ID',
+    rule_name VARCHAR(128) NOT NULL COMMENT '规则名称',
+    rule_type VARCHAR(32) NOT NULL COMMENT '规则类型',
+    dimension VARCHAR(32) NOT NULL COMMENT '质量维度',
+    column_name VARCHAR(128) COMMENT '字段名',
+    config_json TEXT COMMENT '规则配置JSON',
+    filter_sql TEXT COMMENT '过滤条件SQL',
+    severity VARCHAR(16) NOT NULL DEFAULT 'WARN' COMMENT '严重等级: WARN/FAIL',
+    enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted_at DATETIME DEFAULT NULL COMMENT '删除时间',
+    INDEX idx_table_id (table_id),
+    INDEX idx_rule_type (rule_type),
+    INDEX idx_enabled (enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='元数据质量规则表';
+
+CREATE TABLE IF NOT EXISTS metadata_quality_run (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    table_id BIGINT NOT NULL COMMENT '元数据表ID',
+    status VARCHAR(16) NOT NULL COMMENT '运行状态: RUNNING/SUCCESS/FAILED',
+    score DECIMAL(5,2) COMMENT '质量分数',
+    pass_count INT NOT NULL DEFAULT 0 COMMENT '通过规则数',
+    warn_count INT NOT NULL DEFAULT 0 COMMENT '警告规则数',
+    fail_count INT NOT NULL DEFAULT 0 COMMENT '失败规则数',
+    error_message TEXT COMMENT '错误信息',
+    started_at DATETIME NOT NULL COMMENT '开始时间',
+    ended_at DATETIME COMMENT '结束时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted_at DATETIME DEFAULT NULL COMMENT '删除时间',
+    INDEX idx_table_id (table_id),
+    INDEX idx_status (status),
+    INDEX idx_started_at (started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='元数据质量运行表';
+
+CREATE TABLE IF NOT EXISTS metadata_quality_result (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    run_id BIGINT NOT NULL COMMENT '质量运行ID',
+    rule_id BIGINT NOT NULL COMMENT '质量规则ID',
+    rule_name VARCHAR(128) NOT NULL COMMENT '规则名称',
+    rule_type VARCHAR(32) NOT NULL COMMENT '规则类型',
+    dimension VARCHAR(32) NOT NULL COMMENT '质量维度',
+    column_name VARCHAR(128) COMMENT '字段名',
+    status VARCHAR(16) NOT NULL COMMENT '检查状态: PASS/WARN/FAIL',
+    actual_value VARCHAR(256) COMMENT '实际值',
+    expected_value VARCHAR(256) COMMENT '期望值',
+    total_count BIGINT COMMENT '总行数',
+    fail_count BIGINT COMMENT '失败行数',
+    sample_sql TEXT COMMENT '失败样本查询SQL',
+    detail_json TEXT COMMENT '结果详情JSON',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted_at DATETIME DEFAULT NULL COMMENT '删除时间',
+    INDEX idx_run_id (run_id),
+    INDEX idx_rule_id (rule_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='元数据质量结果表';
+
+CREATE TABLE IF NOT EXISTS metadata_quality_alert (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    table_id BIGINT NOT NULL COMMENT '元数据表ID',
+    run_id BIGINT NOT NULL COMMENT '质量运行ID',
+    result_id BIGINT NOT NULL COMMENT '质量结果ID',
+    rule_id BIGINT NOT NULL COMMENT '质量规则ID',
+    title VARCHAR(256) NOT NULL COMMENT '告警标题',
+    message TEXT COMMENT '告警内容',
+    severity VARCHAR(16) NOT NULL COMMENT '严重等级',
+    status VARCHAR(16) NOT NULL DEFAULT 'OPEN' COMMENT '告警状态: OPEN/CLOSED',
+    closed_by VARCHAR(64) COMMENT '关闭人',
+    closed_at DATETIME COMMENT '关闭时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted_at DATETIME DEFAULT NULL COMMENT '删除时间',
+    INDEX idx_table_id (table_id),
+    INDEX idx_run_id (run_id),
+    INDEX idx_rule_id (rule_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='元数据质量告警表';
