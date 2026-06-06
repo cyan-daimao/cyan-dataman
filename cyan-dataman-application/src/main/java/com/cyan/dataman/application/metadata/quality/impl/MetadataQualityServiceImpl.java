@@ -6,9 +6,11 @@ import com.alibaba.fastjson2.JSONObject;
 import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.dataman.application.metadata.quality.MetadataQualityService;
+import com.cyan.dataman.application.metadata.quality.QualityRuleRecommendStreamListener;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityAlertBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityResultBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleBO;
+import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleSuggestionBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleTemplateBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRunBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualitySummaryBO;
@@ -26,6 +28,7 @@ import com.cyan.dataman.domain.metadata.quality.repository.MetadataQualityRunRep
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
+import com.cyan.dataman.infra.gateway.DifyQualityGateway;
 import com.cyan.dataman.infra.util.StarRocksUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,6 +41,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -64,19 +68,22 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
     private final MetadataQualityResultRepository resultRepository;
     private final MetadataQualityAlertRepository alertRepository;
     private final StarRocksUtil starRocksUtil;
+    private final DifyQualityGateway difyQualityGateway;
 
     public MetadataQualityServiceImpl(MetadataTableRepository metadataTableRepository,
                                       MetadataQualityRuleRepository ruleRepository,
                                       MetadataQualityRunRepository runRepository,
                                       MetadataQualityResultRepository resultRepository,
                                       MetadataQualityAlertRepository alertRepository,
-                                      StarRocksUtil starRocksUtil) {
+                                      StarRocksUtil starRocksUtil,
+                                      DifyQualityGateway difyQualityGateway) {
         this.metadataTableRepository = metadataTableRepository;
         this.ruleRepository = ruleRepository;
         this.runRepository = runRepository;
         this.resultRepository = resultRepository;
         this.alertRepository = alertRepository;
         this.starRocksUtil = starRocksUtil;
+        this.difyQualityGateway = difyQualityGateway;
     }
 
     /**
@@ -108,6 +115,7 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
                 template("MAX_VALUE", "统计值", "最大值", "检查字段最大值是否满足阈值", true, "{\"operator\":\"<=\",\"expected\":100}"),
                 template("AVG_VALUE", "统计值", "平均值", "检查字段平均值是否满足阈值", true, "{\"min\":0,\"max\":100}"),
                 template("SUM_VALUE", "统计值", "汇总值", "检查字段汇总值是否满足阈值", true, "{\"operator\":\">=\",\"expected\":0}"),
+                template("FRESHNESS", "及时性", "数据新鲜度", "检查日期时间字段最大值距离当前时间是否超出阈值", true, "{\"maxDelayMinutes\":1440}"),
                 template("ENUM_MISMATCH_COUNT", "枚举/离散", "枚举不匹配行数", "检查字段值不在枚举集合内的行数", true, "{\"values\":[\"A\",\"B\"],\"allowNull\":true,\"operator\":\"<=\",\"expected\":0}"),
                 template("ENUM_MISMATCH_COUNT_ZERO", "枚举/离散", "枚举不匹配行数为0", "检查字段值是否都在枚举集合内", true, "{\"values\":[\"A\",\"B\"],\"allowNull\":true}"),
                 template("ENUM_MISMATCH_DISTINCT_COUNT", "枚举/离散", "枚举不匹配去重数", "检查不在枚举集合内的不同取值数量", true, "{\"values\":[\"A\",\"B\"],\"allowNull\":true,\"operator\":\"<=\",\"expected\":0}"),
@@ -195,48 +203,11 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
     public List<MetadataQualityRuleBO> recommendRules(String tableId) {
         MetadataTable table = requireTable(tableId);
         List<MetadataQualityRule> existingRules = ruleRepository.listByTableId(tableId);
-        Set<String> existingKeys = new HashSet<>();
-        existingRules.forEach(rule -> existingKeys.add(ruleKey(rule.getRuleType(), rule.getColumnName())));
-
+        List<MetadataQualityRuleSuggestionBO> suggestions = buildFallbackSuggestions(table, existingRules);
         List<MetadataQualityRule> createdRules = new ArrayList<>();
-        for (ColumnValObj column : columns(table)) {
-            String type = normalizeType(column.getType());
-            String searchText = normalizeType(column.getName() + " " + Optional.ofNullable(column.getComment()).orElse(""));
-            if (Boolean.FALSE.equals(column.getNullable())) {
-                addRecommendedRule(tableId, createdRules, existingKeys, "NULL_COUNT_ZERO", "空值",
-                        column.getName(), column.getName() + " 空值行数为0", "FAIL", "{}");
-            }
-            if (searchText.contains("mobile") || searchText.contains("phone") || searchText.contains("手机号")) {
-                addRecommendedRule(tableId, createdRules, existingKeys, "MOBILE_FORMAT", "格式校验",
-                        column.getName(), column.getName() + " 手机号格式校验", "WARN", "{\"allowNull\":true}");
-            }
-            if (searchText.contains("id_card") || searchText.contains("idcard") || searchText.contains("身份证")) {
-                addRecommendedRule(tableId, createdRules, existingKeys, "ID_CARD_FORMAT", "格式校验",
-                        column.getName(), column.getName() + " 身份证格式校验", "WARN", "{\"allowNull\":true}");
-            }
-            if (searchText.contains("email") || searchText.contains("邮箱")) {
-                addRecommendedRule(tableId, createdRules, existingKeys, "EMAIL_FORMAT", "格式校验",
-                        column.getName(), column.getName() + " 邮箱格式校验", "WARN", "{\"allowNull\":true}");
-            }
-            if (isDateTimeType(type)) {
-                addRecommendedRule(tableId, createdRules, existingKeys, "FRESHNESS", "及时性",
-                        column.getName(), column.getName() + " 及时性检查", "WARN", "{\"maxDelayMinutes\":1440}");
-            }
-            if (isNumericType(type)) {
-                addRecommendedRule(tableId, createdRules, existingKeys, "MIN_VALUE", "统计值",
-                        column.getName(), column.getName() + " 最小值检查", "WARN", "{\"operator\":\">=\",\"expected\":0}");
-            }
-        }
-
-        for (IndexValObj index : Optional.ofNullable(table.getTable().getIndexes()).orElse(List.of())) {
-            String indexType = Optional.ofNullable(index.getIndexType()).orElse("").toUpperCase(Locale.ROOT);
-            if ((indexType.contains("UNIQUE") || indexType.contains("PRIMARY"))
-                    && index.getFieldNames() != null && index.getFieldNames().size() == 1) {
-                String columnName = index.getFieldNames().get(0);
-                if (hasColumn(table, columnName)) {
-                    addRecommendedRule(tableId, createdRules, existingKeys, "DUPLICATE_COUNT_ZERO", "重复/唯一",
-                            columnName, columnName + " 重复值行数为0", "FAIL", "{}");
-                }
+        for (MetadataQualityRuleSuggestionBO suggestion : suggestions) {
+            if (!Boolean.TRUE.equals(suggestion.getExists())) {
+                createdRules.add(saveSuggestion(tableId, suggestion));
             }
         }
         if (createdRules.isEmpty()) {
@@ -246,6 +217,40 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
         allRules.addAll(createdRules);
         allRules.sort(Comparator.comparing(MetadataQualityRule::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
         return MetadataQualityAppConvert.INSTANCE.toRuleBOList(allRules);
+    }
+
+    /**
+     * 流式推荐规则候选
+     */
+    @Override
+    public List<MetadataQualityRuleSuggestionBO> recommendRulesStream(String tableId, QualityRuleRecommendStreamListener listener) {
+        MetadataTable table = requireTable(tableId);
+        List<MetadataQualityRule> existingRules = ruleRepository.listByTableId(tableId);
+        sendStatus(listener, "正在读取表结构和已有质量规则");
+        List<MetadataQualityRuleSuggestionBO> fallbackSuggestions = buildFallbackSuggestions(table, existingRules);
+        if (!difyQualityGateway.available()) {
+            sendStatus(listener, "Dify 数据质量推荐未启用或配置不完整，使用基础规则推荐");
+            sendSuggestions(listener, fallbackSuggestions);
+            return fallbackSuggestions;
+        }
+        try {
+            sendStatus(listener, "正在调用 AI 分析数据质量规则");
+            String answer = difyQualityGateway.streamSuggestRules(buildQualityPrompt(table, existingRules), listener::onAnswer);
+            sendStatus(listener, "正在解析 AI 推荐结果");
+            List<MetadataQualityRuleSuggestionBO> aiSuggestions = parseAiSuggestions(table, existingRules, answer);
+            if (aiSuggestions.isEmpty()) {
+                sendStatus(listener, "AI 未返回有效候选，使用基础规则推荐");
+                sendSuggestions(listener, fallbackSuggestions);
+                return fallbackSuggestions;
+            }
+            sendSuggestions(listener, aiSuggestions);
+            return aiSuggestions;
+        } catch (Exception e) {
+            log.warn("AI 数据质量规则推荐失败, tableId: {}", tableId, e);
+            sendStatus(listener, "AI 推荐不可用，使用基础规则推荐：" + Optional.ofNullable(e.getMessage()).orElse(e.getClass().getSimpleName()));
+            sendSuggestions(listener, fallbackSuggestions);
+            return fallbackSuggestions;
+        }
     }
 
     /**
@@ -666,6 +671,376 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
                 .setDescription(description)
                 .setColumnRequired(columnRequired)
                 .setConfigExample(configExample);
+    }
+
+    /**
+     * 构建基础推荐候选
+     */
+    private List<MetadataQualityRuleSuggestionBO> buildFallbackSuggestions(MetadataTable table, List<MetadataQualityRule> existingRules) {
+        Map<String, MetadataQualityRuleSuggestionBO> suggestions = new LinkedHashMap<>();
+        Set<String> existingKeys = existingSuggestionKeys(existingRules);
+        addSuggestion(suggestions, existingKeys, "TABLE_ROW_COUNT", "表级", "表行数检查",
+                null, "{\"operator\":\">=\",\"expected\":1}", null, "WARN",
+                "基础表级规则，用于发现空表或异常无数据。", BigDecimal.valueOf(0.70));
+        for (ColumnValObj column : columns(table)) {
+            String type = normalizeType(column.getType());
+            String searchText = normalizeType(column.getName() + " " + Optional.ofNullable(column.getComment()).orElse(""));
+            addSuggestion(suggestions, existingKeys, "NULL_RATE", "空值", column.getName() + " 空值率检查",
+                    column.getName(), "{\"operator\":\"<=\",\"expected\":0.1}", null, "WARN",
+                    "基础字段规则，用于发现字段空值占比异常。", BigDecimal.valueOf(0.62));
+            if (Boolean.FALSE.equals(column.getNullable())) {
+                addSuggestion(suggestions, existingKeys, "NULL_COUNT_ZERO", "空值", column.getName() + " 空值行数为0",
+                        column.getName(), "{}", null, "FAIL",
+                        "字段元数据标记为不可为空，适合作为强规则监控空值。", BigDecimal.valueOf(0.88));
+            }
+            if (searchText.contains("mobile") || searchText.contains("phone") || searchText.contains("手机号")) {
+                addSuggestion(suggestions, existingKeys, "MOBILE_FORMAT", "格式校验", column.getName() + " 手机号格式校验",
+                        column.getName(), "{\"allowNull\":true}", null, "WARN",
+                        "字段名或注释包含手机号/phone/mobile，适合做手机号格式校验。", BigDecimal.valueOf(0.86));
+            }
+            if (searchText.contains("id_card") || searchText.contains("idcard") || searchText.contains("身份证")) {
+                addSuggestion(suggestions, existingKeys, "ID_CARD_FORMAT", "格式校验", column.getName() + " 身份证格式校验",
+                        column.getName(), "{\"allowNull\":true}", null, "WARN",
+                        "字段名或注释包含身份证/id_card，适合做身份证格式校验。", BigDecimal.valueOf(0.86));
+            }
+            if (searchText.contains("email") || searchText.contains("邮箱")) {
+                addSuggestion(suggestions, existingKeys, "EMAIL_FORMAT", "格式校验", column.getName() + " 邮箱格式校验",
+                        column.getName(), "{\"allowNull\":true}", null, "WARN",
+                        "字段名或注释包含邮箱/email，适合做邮箱格式校验。", BigDecimal.valueOf(0.86));
+            }
+            if (isDateTimeType(type)) {
+                addSuggestion(suggestions, existingKeys, "FRESHNESS", "及时性", column.getName() + " 及时性检查",
+                        column.getName(), "{\"maxDelayMinutes\":1440}", null, "WARN",
+                        "字段类型为日期时间，适合监控数据新鲜度。", BigDecimal.valueOf(0.78));
+            }
+            if (isNumericType(type)) {
+                addSuggestion(suggestions, existingKeys, "MIN_VALUE", "统计值", column.getName() + " 最小值检查",
+                        column.getName(), "{\"operator\":\">=\",\"expected\":0}", null, "WARN",
+                        "字段类型为数值，适合做基础统计阈值监控。", BigDecimal.valueOf(0.66));
+            }
+        }
+        for (IndexValObj index : Optional.ofNullable(table.getTable().getIndexes()).orElse(List.of())) {
+            String indexType = Optional.ofNullable(index.getIndexType()).orElse("").toUpperCase(Locale.ROOT);
+            if ((indexType.contains("UNIQUE") || indexType.contains("PRIMARY"))
+                    && index.getFieldNames() != null && index.getFieldNames().size() == 1) {
+                String columnName = index.getFieldNames().get(0);
+                if (hasColumn(table, columnName)) {
+                    addSuggestion(suggestions, existingKeys, "DUPLICATE_COUNT_ZERO", "重复/唯一", columnName + " 重复值行数为0",
+                            columnName, "{}", null, "FAIL",
+                            "字段来自主键或唯一索引，适合作为唯一性强规则。", BigDecimal.valueOf(0.90));
+                }
+            }
+        }
+        return new ArrayList<>(suggestions.values());
+    }
+
+    /**
+     * 添加推荐候选
+     */
+    private void addSuggestion(Map<String, MetadataQualityRuleSuggestionBO> suggestions, Set<String> existingKeys,
+                               String type, String dimension, String name, String column, String configJson,
+                               String filterSql, String severity, String reason, BigDecimal confidence) {
+        String key = ruleSuggestionKey(type, column, configJson);
+        if (suggestions.containsKey(key)) {
+            return;
+        }
+        suggestions.put(key, new MetadataQualityRuleSuggestionBO()
+                .setRuleType(normalizeRuleType(type))
+                .setDimension(dimension)
+                .setRuleName(name)
+                .setColumnName(column)
+                .setConfigJson(configJson)
+                .setFilterSql(filterSql)
+                .setSeverity(severity)
+                .setReason(reason)
+                .setConfidence(confidence)
+                .setExists(existingKeys.contains(key)));
+    }
+
+    /**
+     * 保存推荐候选
+     */
+    private MetadataQualityRule saveSuggestion(String tableId, MetadataQualityRuleSuggestionBO suggestion) {
+        return new MetadataQualityRule()
+                .setTableId(tableId)
+                .setRuleType(suggestion.getRuleType())
+                .setDimension(suggestion.getDimension())
+                .setColumnName(suggestion.getColumnName())
+                .setRuleName(suggestion.getRuleName())
+                .setConfigJson(Optional.ofNullable(suggestion.getConfigJson()).filter(this::hasText).orElse("{}"))
+                .setFilterSql(suggestion.getFilterSql())
+                .setSeverity(Optional.ofNullable(suggestion.getSeverity()).filter(this::hasText).orElse("WARN"))
+                .setEnabled(true)
+                .save(ruleRepository);
+    }
+
+    /**
+     * 构建AI提示词
+     */
+    private String buildQualityPrompt(MetadataTable table, List<MetadataQualityRule> existingRules) {
+        JSONObject payload = new JSONObject();
+        payload.put("currentTable", toPromptTable(table));
+        payload.put("existingRules", existingRules.stream().map(this::toPromptRule).toList());
+        payload.put("ruleTemplates", listRuleTemplates().stream().map(this::toPromptTemplate).toList());
+        return """
+                你是数据治理平台的数据质量规则推荐助手。请根据输入的元数据表结构、已有质量规则和可用规则模板，推荐适合当前表的数据质量规则。
+
+                输出要求：
+                1. 必须只输出严格 JSON，不要输出 Markdown、解释文字或代码块。
+                2. JSON 顶层格式为 {"suggestions":[...]}。
+                3. 每个 suggestions 元素必须包含 ruleType、dimension、ruleName、configJson、severity、reason、confidence，可选 columnName、filterSql、exists。
+                4. ruleType 只能使用 ruleTemplates 中提供的类型。
+                5. 字段级规则的 columnName 必须来自 currentTable.columns。
+                6. configJson 必须是 JSON 字符串；多字段唯一规则通过 configJson.columns 返回。
+                7. severity 只能是 WARN 或 FAIL。强约束用 FAIL，探索性统计规则用 WARN。
+                8. 不要推荐 existingRules 中已有的重复规则；如果判断重复但仍返回，请设置 exists=true。
+                9. CUSTOM_SQL 必须返回 fail_count，可选 total_count，并在 SQL 内自行写 WHERE 范围。
+
+                推荐重点：
+                - 不可空字段推荐 NULL_COUNT_ZERO。
+                - 主键或唯一索引字段推荐 DUPLICATE_COUNT_ZERO。
+                - 手机号、身份证、邮箱等字段推荐对应格式规则。
+                - 日期时间字段推荐 FRESHNESS。
+                - 普通字段可推荐 NULL_RATE，数值字段可推荐统计值规则。
+
+                输入数据：
+                %s
+                """.formatted(JSON.toJSONString(payload));
+    }
+
+    /**
+     * 表结构转为提示词对象
+     */
+    private JSONObject toPromptTable(MetadataTable table) {
+        JSONObject object = new JSONObject();
+        object.put("catalog", table.getTable().getCatalog());
+        object.put("schema", table.getTable().getSchema());
+        object.put("table", table.getName());
+        object.put("fullName", table.getTable().getCatalog() + "." + table.getTable().getSchema() + "." + table.getName());
+        object.put("comment", table.getComment());
+        object.put("columns", columns(table).stream().map(column -> new JSONObject()
+                .fluentPut("name", column.getName())
+                .fluentPut("type", column.getType())
+                .fluentPut("comment", column.getComment())
+                .fluentPut("nullable", column.getNullable())
+        ).toList());
+        object.put("indexes", Optional.ofNullable(table.getTable().getIndexes()).orElse(List.of()).stream().map(index -> new JSONObject()
+                .fluentPut("name", index.getName())
+                .fluentPut("indexType", index.getIndexType())
+                .fluentPut("fieldNames", index.getFieldNames())
+        ).toList());
+        return object;
+    }
+
+    /**
+     * 已有规则转为提示词对象
+     */
+    private JSONObject toPromptRule(MetadataQualityRule rule) {
+        return new JSONObject()
+                .fluentPut("ruleType", normalizeRuleType(rule.getRuleType()))
+                .fluentPut("dimension", rule.getDimension())
+                .fluentPut("ruleName", rule.getRuleName())
+                .fluentPut("columnName", rule.getColumnName())
+                .fluentPut("configJson", rule.getConfigJson())
+                .fluentPut("filterSql", rule.getFilterSql())
+                .fluentPut("severity", rule.getSeverity());
+    }
+
+    /**
+     * 规则模板转为提示词对象
+     */
+    private JSONObject toPromptTemplate(MetadataQualityRuleTemplateBO template) {
+        return new JSONObject()
+                .fluentPut("ruleType", template.getRuleType())
+                .fluentPut("dimension", template.getDimension())
+                .fluentPut("name", template.getName())
+                .fluentPut("description", template.getDescription())
+                .fluentPut("columnRequired", template.getColumnRequired())
+                .fluentPut("configExample", template.getConfigExample());
+    }
+
+    /**
+     * 解析AI推荐候选
+     */
+    private List<MetadataQualityRuleSuggestionBO> parseAiSuggestions(MetadataTable table, List<MetadataQualityRule> existingRules, String answer) {
+        if (!hasText(answer)) {
+            return List.of();
+        }
+        String json = extractJson(answer);
+        JSONArray array;
+        if (json.startsWith("[")) {
+            array = JSON.parseArray(json);
+        } else {
+            JSONObject root = JSON.parseObject(json);
+            array = root.getJSONArray("suggestions");
+        }
+        if (array == null || array.isEmpty()) {
+            return List.of();
+        }
+        Set<String> existingKeys = existingSuggestionKeys(existingRules);
+        Map<String, MetadataQualityRuleSuggestionBO> validSuggestions = new LinkedHashMap<>();
+        for (Object item : array) {
+            if (!(item instanceof JSONObject object)) {
+                continue;
+            }
+            Optional<MetadataQualityRuleSuggestionBO> suggestion = parseAiSuggestion(table, existingKeys, object);
+            suggestion.ifPresent(value -> validSuggestions.put(ruleSuggestionKey(value.getRuleType(), value.getColumnName(), value.getConfigJson()), value));
+        }
+        return new ArrayList<>(validSuggestions.values());
+    }
+
+    /**
+     * 解析单条AI推荐候选
+     */
+    private Optional<MetadataQualityRuleSuggestionBO> parseAiSuggestion(MetadataTable table, Set<String> existingKeys, JSONObject object) {
+        String ruleType = normalizeRuleType(object.getString("ruleType"));
+        if (!supportedRuleTypes().contains(ruleType)) {
+            return Optional.empty();
+        }
+        String columnName = object.getString("columnName");
+        if (singleColumnRuleTypes().contains(ruleType) && !hasColumn(table, columnName)) {
+            return Optional.empty();
+        }
+        String configJson = normalizeConfigJson(object.get("configJson"));
+        JSONObject config = JSON.parseObject(configJson);
+        if ("MULTI_FIELD_DUPLICATE_COUNT_ZERO".equals(ruleType)) {
+            List<String> columns = configColumns(config);
+            if (columns.isEmpty() || columns.stream().anyMatch(column -> !hasColumn(table, column))) {
+                return Optional.empty();
+            }
+        }
+        String severity = Optional.ofNullable(object.getString("severity")).orElse("WARN").toUpperCase(Locale.ROOT);
+        if (!List.of("WARN", "FAIL").contains(severity)) {
+            severity = "WARN";
+        }
+        String key = ruleSuggestionKey(ruleType, columnName, configJson);
+        return Optional.of(new MetadataQualityRuleSuggestionBO()
+                .setRuleType(ruleType)
+                .setDimension(Optional.ofNullable(object.getString("dimension")).filter(this::hasText).orElse(defaultDimension(ruleType)))
+                .setRuleName(Optional.ofNullable(object.getString("ruleName")).filter(this::hasText).orElse(defaultRuleName(ruleType, columnName)))
+                .setColumnName(columnName)
+                .setConfigJson(configJson)
+                .setFilterSql(object.getString("filterSql"))
+                .setSeverity(severity)
+                .setReason(object.getString("reason"))
+                .setConfidence(Optional.ofNullable(object.getBigDecimal("confidence")).orElse(BigDecimal.valueOf(0.80)))
+                .setExists(Boolean.TRUE.equals(object.getBoolean("exists")) || existingKeys.contains(key)));
+    }
+
+    /**
+     * 标准化配置JSON
+     */
+    private String normalizeConfigJson(Object configValue) {
+        if (configValue == null) {
+            return "{}";
+        }
+        if (configValue instanceof JSONObject || configValue instanceof JSONArray) {
+            return JSON.toJSONString(configValue);
+        }
+        String text = String.valueOf(configValue);
+        if (!hasText(text)) {
+            return "{}";
+        }
+        JSON.parseObject(text);
+        return text;
+    }
+
+    /**
+     * 提取JSON内容
+     */
+    private String extractJson(String answer) {
+        String text = answer.trim();
+        if (text.startsWith("```")) {
+            text = text.replaceFirst("^```json\\s*", "").replaceFirst("^```\\s*", "");
+            int fenceIndex = text.lastIndexOf("```");
+            if (fenceIndex >= 0) {
+                text = text.substring(0, fenceIndex).trim();
+            }
+        }
+        int objectStart = text.indexOf('{');
+        int arrayStart = text.indexOf('[');
+        if (objectStart < 0 && arrayStart < 0) {
+            throw new SilentException("AI 返回内容不包含 JSON");
+        }
+        if (arrayStart >= 0 && (objectStart < 0 || arrayStart < objectStart)) {
+            return text.substring(arrayStart, text.lastIndexOf(']') + 1);
+        }
+        return text.substring(objectStart, text.lastIndexOf('}') + 1);
+    }
+
+    /**
+     * 已有规则推荐键
+     */
+    private Set<String> existingSuggestionKeys(List<MetadataQualityRule> existingRules) {
+        Set<String> existingKeys = new HashSet<>();
+        Optional.ofNullable(existingRules).orElse(List.of())
+                .forEach(rule -> existingKeys.add(ruleSuggestionKey(rule.getRuleType(), rule.getColumnName(), rule.getConfigJson())));
+        return existingKeys;
+    }
+
+    /**
+     * 推荐候选去重键
+     */
+    private String ruleSuggestionKey(String type, String columnName, String configJson) {
+        String ruleType = normalizeRuleType(type);
+        if ("MULTI_FIELD_DUPLICATE_COUNT_ZERO".equals(ruleType)) {
+            List<String> columns = configColumns(safeParseConfig(configJson));
+            List<String> sortedColumns = new ArrayList<>(columns);
+            sortedColumns.sort(String::compareTo);
+            return ruleType + ":" + String.join(",", sortedColumns);
+        }
+        return ruleType + ":" + Optional.ofNullable(columnName).orElse("");
+    }
+
+    /**
+     * 安全解析配置JSON
+     */
+    private JSONObject safeParseConfig(String configJson) {
+        if (!hasText(configJson)) {
+            return new JSONObject();
+        }
+        try {
+            return JSON.parseObject(configJson);
+        } catch (Exception e) {
+            return new JSONObject();
+        }
+    }
+
+    /**
+     * 默认维度
+     */
+    private String defaultDimension(String ruleType) {
+        return listRuleTemplates().stream()
+                .filter(template -> Objects.equals(template.getRuleType(), ruleType))
+                .map(MetadataQualityRuleTemplateBO::getDimension)
+                .findFirst()
+                .orElse("自定义");
+    }
+
+    /**
+     * 默认规则名称
+     */
+    private String defaultRuleName(String ruleType, String columnName) {
+        String prefix = hasText(columnName) ? columnName + " " : "";
+        return prefix + ruleType;
+    }
+
+    /**
+     * 发送状态事件
+     */
+    private void sendStatus(QualityRuleRecommendStreamListener listener, String message) {
+        if (listener != null) {
+            listener.onStatus(message);
+        }
+    }
+
+    /**
+     * 发送推荐候选事件
+     */
+    private void sendSuggestions(QualityRuleRecommendStreamListener listener, List<MetadataQualityRuleSuggestionBO> suggestions) {
+        if (listener != null) {
+            listener.onSuggestions(suggestions);
+        }
     }
 
     /**

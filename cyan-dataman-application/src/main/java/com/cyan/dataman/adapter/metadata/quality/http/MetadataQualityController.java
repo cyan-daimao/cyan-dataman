@@ -1,18 +1,25 @@
 package com.cyan.dataman.adapter.metadata.quality.http;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.cyan.arch.common.api.Response;
 import com.cyan.dataman.adapter.metadata.quality.http.convert.MetadataQualityAdapterConvert;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityAlertDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRuleDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRuleRequestDTO;
+import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRuleSuggestionDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRuleTemplateDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRunDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualitySummaryDTO;
 import com.cyan.dataman.application.metadata.quality.MetadataQualityService;
+import com.cyan.dataman.application.metadata.quality.QualityRuleRecommendStreamListener;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityAlertBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleBO;
+import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleSuggestionBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRunBO;
 import com.cyan.employee.login.filter.UserContextHolder;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +28,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -33,6 +45,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/metadata")
 public class MetadataQualityController {
+
+    private static final MediaType TEXT_EVENT_STREAM_UTF8 = new MediaType("text", "event-stream", StandardCharsets.UTF_8);
 
     private final MetadataQualityService metadataQualityService;
 
@@ -104,6 +118,25 @@ public class MetadataQualityController {
     }
 
     /**
+     * AI 流式推荐规则候选
+     */
+    @PostMapping(value = "/tables/{tableId}/quality/rules/recommend/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<StreamingResponseBody> recommendRulesStream(@PathVariable String tableId) {
+        StreamingResponseBody body = outputStream -> {
+            QualityRuleRecommendStreamWriter writer = new QualityRuleRecommendStreamWriter(outputStream);
+            try {
+                metadataQualityService.recommendRulesStream(tableId, writer);
+                sendEvent(outputStream, "done", new JSONObject().fluentPut("message", "AI 推荐完成"));
+            } catch (Exception e) {
+                sendEvent(outputStream, "error", new JSONObject().fluentPut("message", e.getMessage()));
+            }
+        };
+        return ResponseEntity.ok()
+                .contentType(TEXT_EVENT_STREAM_UTF8)
+                .body(body);
+    }
+
+    /**
      * 立即运行质量检查
      */
     @PostMapping("/tables/{tableId}/quality/runs")
@@ -144,5 +177,55 @@ public class MetadataQualityController {
         String operator = UserContextHolder.getCurrentEmployee().getPassport();
         MetadataQualityAlertBO alert = metadataQualityService.closeAlert(id, operator);
         return Response.success(MetadataQualityAdapterConvert.INSTANCE.toAlertDTO(alert));
+    }
+
+    /**
+     * 数据质量推荐SSE写入器
+     */
+    private static class QualityRuleRecommendStreamWriter implements QualityRuleRecommendStreamListener {
+        private final OutputStream outputStream;
+
+        private QualityRuleRecommendStreamWriter(OutputStream outputStream) {
+            this.outputStream = outputStream;
+        }
+
+        /**
+         * 输出状态信息
+         */
+        @Override
+        public void onStatus(String message) {
+            sendEvent(outputStream, "status", new JSONObject().fluentPut("message", message));
+        }
+
+        /**
+         * 输出 AI 原始回复片段
+         */
+        @Override
+        public void onAnswer(String content) {
+            sendEvent(outputStream, "answer", new JSONObject().fluentPut("content", content));
+        }
+
+        /**
+         * 输出推荐候选
+         */
+        @Override
+        public void onSuggestions(List<MetadataQualityRuleSuggestionBO> suggestions) {
+            List<MetadataQualityRuleSuggestionDTO> dtos = MetadataQualityAdapterConvert.INSTANCE.toRuleSuggestionDTOList(suggestions);
+            sendEvent(outputStream, "suggestions", new JSONObject().fluentPut("data", dtos == null ? Collections.emptyList() : dtos));
+        }
+    }
+
+    /**
+     * 发送 SSE 事件
+     */
+    private static void sendEvent(OutputStream outputStream, String eventName, Object data) {
+        try {
+            String payload = "event:" + eventName + "\n"
+                    + "data:" + JSON.toJSONString(data) + "\n\n";
+            outputStream.write(payload.getBytes(StandardCharsets.UTF_8));
+            outputStream.flush();
+        } catch (IOException e) {
+            throw new IllegalStateException("SSE 事件发送失败", e);
+        }
     }
 }

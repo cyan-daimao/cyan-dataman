@@ -5,12 +5,14 @@ import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityAlertDT
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityResultDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRuleDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRuleRequestDTO;
+import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRuleSuggestionDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRuleTemplateDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualityRunDTO;
 import com.cyan.dataman.adapter.metadata.quality.http.dto.MetadataQualitySummaryDTO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityAlertBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityResultBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleBO;
+import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleSuggestionBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleTemplateBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRunBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualitySummaryBO;
@@ -55,6 +57,11 @@ public interface MetadataQualityAdapterConvert {
      * 转换规则DTO列表
      */
     List<MetadataQualityRuleDTO> toRuleDTOList(List<MetadataQualityRuleBO> rules);
+
+    /**
+     * 转换推荐候选DTO列表
+     */
+    List<MetadataQualityRuleSuggestionDTO> toRuleSuggestionDTOList(List<MetadataQualityRuleSuggestionBO> suggestions);
 
     /**
      * 转换结果DTO

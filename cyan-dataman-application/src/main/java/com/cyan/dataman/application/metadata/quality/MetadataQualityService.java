@@ -2,6 +2,7 @@ package com.cyan.dataman.application.metadata.quality;
 
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityAlertBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleBO;
+import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleSuggestionBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRuleTemplateBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualityRunBO;
 import com.cyan.dataman.application.metadata.quality.bo.MetadataQualitySummaryBO;
@@ -51,6 +52,11 @@ public interface MetadataQualityService {
      * 推荐规则
      */
     List<MetadataQualityRuleBO> recommendRules(String tableId);
+
+    /**
+     * 流式推荐规则候选
+     */
+    List<MetadataQualityRuleSuggestionBO> recommendRulesStream(String tableId, QualityRuleRecommendStreamListener listener);
 
     /**
      * 立即运行质量检查

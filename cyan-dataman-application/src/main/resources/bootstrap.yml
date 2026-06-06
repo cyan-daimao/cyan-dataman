@@ -10,6 +10,9 @@ spring:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
+  mvc:
+    async:
+      request-timeout: 300000
 # 服务监控端点（暴露所有端点，生产环境需调整）
 management:
   endpoints:
@@ -32,6 +35,11 @@ dify:
     enabled: true
     base-url: "http://10.0.0.2:20080/v1"
     api-key: "app-TFQUkCTgneLaJuSOmaiqC2Vr"
+  quality:
+    enabled: ${DIFY_QUALITY_ENABLED:true}
+    base-url: ${DIFY_QUALITY_BASE_URL:http://10.0.0.2:28080/v1}
+    api-key: ${DIFY_QUALITY_API_KEY:app-VjqRmR6yyvNOhB2opVmOiAXN}
+    user: ${DIFY_QUALITY_USER:cyan-dataman-quality}
 
 # 元数据表关联推荐 Embedding 配置，base-url 支持 OpenAI-compatible 根地址或完整 /embeddings 地址
 embedding:
