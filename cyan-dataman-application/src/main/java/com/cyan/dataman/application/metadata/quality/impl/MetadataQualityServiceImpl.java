@@ -85,13 +85,34 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
     @Override
     public List<MetadataQualityRuleTemplateBO> listRuleTemplates() {
         return List.of(
-                template("ROW_COUNT", "完整性", "表行数检查", "检查表行数是否在预期范围内", false, "{\"minCount\":1}"),
-                template("FRESHNESS", "及时性", "数据及时性检查", "检查时间字段距离当前时间是否超出阈值", true, "{\"maxDelayMinutes\":1440}"),
-                template("CUSTOM_SQL", "准确性", "自定义SQL检查", "执行返回 fail_count 的自定义SQL", false, "{\"sql\":\"select 0 as fail_count, count(1) as total_count from table\"}"),
-                template("NOT_NULL", "完整性", "字段非空检查", "检查字段空值数量", true, "{}"),
-                template("UNIQUE", "唯一性", "字段唯一检查", "检查字段重复数量", true, "{}"),
-                template("ENUM", "有效性", "枚举值检查", "检查字段值是否在枚举范围内", true, "{\"values\":[\"A\",\"B\"]}"),
-                template("RANGE", "有效性", "范围检查", "检查字段值是否在上下限范围内", true, "{\"min\":0,\"max\":100}")
+                template("TABLE_ROW_COUNT", "表级", "表行数检查", "检查表行数是否满足固定阈值", false, "{\"operator\":\">=\",\"expected\":1}"),
+                template("CONDITION_MATCH_RATE", "表级", "条件匹配率", "检查满足指定条件的数据占比", false, "{\"condition\":\"status = 'SUCCESS'\",\"operator\":\">=\",\"expected\":0.99}"),
+                template("NULL_COUNT", "空值", "空值行数", "检查字段空值行数是否满足阈值", true, "{\"operator\":\"<=\",\"expected\":0}"),
+                template("NULL_COUNT_ZERO", "空值", "空值行数为0", "检查字段是否不存在空值", true, "{}"),
+                template("NULL_RATE", "空值", "空值率", "检查字段空值占比是否满足阈值", true, "{\"operator\":\"<=\",\"expected\":0.01}"),
+                template("REGEX_FORMAT", "格式校验", "正则格式校验", "检查字段值是否匹配指定正则", true, "{\"pattern\":\"^1[3-9][0-9]{9}$\",\"allowNull\":false}"),
+                template("DATE_FORMAT", "格式校验", "日期格式校验", "检查字段值是否符合日期格式", true, "{\"pattern\":\"^[0-9]{4}-[0-9]{2}-[0-9]{2}$\",\"allowNull\":true}"),
+                template("EMAIL_FORMAT", "格式校验", "邮箱格式校验", "检查字段值是否符合邮箱格式", true, "{\"allowNull\":true}"),
+                template("ID_CARD_FORMAT", "格式校验", "身份证格式校验", "检查字段值是否符合身份证号码格式", true, "{\"allowNull\":true}"),
+                template("MOBILE_FORMAT", "格式校验", "手机号格式校验", "检查字段值是否符合中国大陆手机号格式", true, "{\"allowNull\":true}"),
+                template("CURRENCY_FORMAT", "格式校验", "金额格式校验", "检查字段值是否符合金额格式", true, "{\"allowNull\":true}"),
+                template("NUMERIC_FORMAT", "格式校验", "数值格式校验", "检查字段值是否符合数值格式", true, "{\"allowNull\":true}"),
+                template("PHONE_FORMAT", "格式校验", "电话格式校验", "检查字段值是否符合电话格式", true, "{\"allowNull\":true}"),
+                template("DUPLICATE_COUNT", "重复/唯一", "重复值行数", "检查字段重复值行数是否满足阈值", true, "{\"operator\":\"<=\",\"expected\":0}"),
+                template("DUPLICATE_COUNT_ZERO", "重复/唯一", "重复值行数为0", "检查字段是否不存在重复值", true, "{}"),
+                template("DUPLICATE_RATE", "重复/唯一", "重复值率", "检查字段重复值占比是否满足阈值", true, "{\"operator\":\"<=\",\"expected\":0.01}"),
+                template("MULTI_FIELD_DUPLICATE_COUNT_ZERO", "重复/唯一", "多字段联合重复值为0", "检查多个字段组合是否不存在重复值", false, "{\"columns\":[\"user_id\",\"order_id\"]}"),
+                template("DISTINCT_COUNT", "重复/唯一", "唯一值数", "检查字段唯一值数量是否满足阈值", true, "{\"operator\":\">=\",\"expected\":1}"),
+                template("DISTINCT_RATE", "重复/唯一", "唯一值率", "检查字段唯一值占比是否满足阈值", true, "{\"operator\":\">=\",\"expected\":0.8}"),
+                template("MIN_VALUE", "统计值", "最小值", "检查字段最小值是否满足阈值", true, "{\"operator\":\">=\",\"expected\":0}"),
+                template("MAX_VALUE", "统计值", "最大值", "检查字段最大值是否满足阈值", true, "{\"operator\":\"<=\",\"expected\":100}"),
+                template("AVG_VALUE", "统计值", "平均值", "检查字段平均值是否满足阈值", true, "{\"min\":0,\"max\":100}"),
+                template("SUM_VALUE", "统计值", "汇总值", "检查字段汇总值是否满足阈值", true, "{\"operator\":\">=\",\"expected\":0}"),
+                template("ENUM_MISMATCH_COUNT", "枚举/离散", "枚举不匹配行数", "检查字段值不在枚举集合内的行数", true, "{\"values\":[\"A\",\"B\"],\"allowNull\":true,\"operator\":\"<=\",\"expected\":0}"),
+                template("ENUM_MISMATCH_COUNT_ZERO", "枚举/离散", "枚举不匹配行数为0", "检查字段值是否都在枚举集合内", true, "{\"values\":[\"A\",\"B\"],\"allowNull\":true}"),
+                template("ENUM_MISMATCH_DISTINCT_COUNT", "枚举/离散", "枚举不匹配去重数", "检查不在枚举集合内的不同取值数量", true, "{\"values\":[\"A\",\"B\"],\"allowNull\":true,\"operator\":\"<=\",\"expected\":0}"),
+                template("DISCRETE_GROUP_COUNT", "枚举/离散", "离散值分组数", "检查字段离散取值分组数量", true, "{\"operator\":\"<=\",\"expected\":100}"),
+                template("CUSTOM_SQL", "自定义", "自定义SQL检查", "执行返回 fail_count 的自定义SQL", false, "{\"sql\":\"select 0 as fail_count, count(1) as total_count from iceberg.ods.example_table\"}")
         );
     }
 
@@ -180,13 +201,30 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
         List<MetadataQualityRule> createdRules = new ArrayList<>();
         for (ColumnValObj column : columns(table)) {
             String type = normalizeType(column.getType());
+            String searchText = normalizeType(column.getName() + " " + Optional.ofNullable(column.getComment()).orElse(""));
             if (Boolean.FALSE.equals(column.getNullable())) {
-                addRecommendedRule(tableId, createdRules, existingKeys, "NOT_NULL", "完整性",
-                        column.getName(), column.getName() + " 非空检查", "FAIL", "{}");
+                addRecommendedRule(tableId, createdRules, existingKeys, "NULL_COUNT_ZERO", "空值",
+                        column.getName(), column.getName() + " 空值行数为0", "FAIL", "{}");
+            }
+            if (searchText.contains("mobile") || searchText.contains("phone") || searchText.contains("手机号")) {
+                addRecommendedRule(tableId, createdRules, existingKeys, "MOBILE_FORMAT", "格式校验",
+                        column.getName(), column.getName() + " 手机号格式校验", "WARN", "{\"allowNull\":true}");
+            }
+            if (searchText.contains("id_card") || searchText.contains("idcard") || searchText.contains("身份证")) {
+                addRecommendedRule(tableId, createdRules, existingKeys, "ID_CARD_FORMAT", "格式校验",
+                        column.getName(), column.getName() + " 身份证格式校验", "WARN", "{\"allowNull\":true}");
+            }
+            if (searchText.contains("email") || searchText.contains("邮箱")) {
+                addRecommendedRule(tableId, createdRules, existingKeys, "EMAIL_FORMAT", "格式校验",
+                        column.getName(), column.getName() + " 邮箱格式校验", "WARN", "{\"allowNull\":true}");
             }
             if (isDateTimeType(type)) {
                 addRecommendedRule(tableId, createdRules, existingKeys, "FRESHNESS", "及时性",
                         column.getName(), column.getName() + " 及时性检查", "WARN", "{\"maxDelayMinutes\":1440}");
+            }
+            if (isNumericType(type)) {
+                addRecommendedRule(tableId, createdRules, existingKeys, "MIN_VALUE", "统计值",
+                        column.getName(), column.getName() + " 最小值检查", "WARN", "{\"operator\":\">=\",\"expected\":0}");
             }
         }
 
@@ -196,8 +234,8 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
                     && index.getFieldNames() != null && index.getFieldNames().size() == 1) {
                 String columnName = index.getFieldNames().get(0);
                 if (hasColumn(table, columnName)) {
-                    addRecommendedRule(tableId, createdRules, existingKeys, "UNIQUE", "唯一性",
-                            columnName, columnName + " 唯一性检查", "FAIL", "{}");
+                    addRecommendedRule(tableId, createdRules, existingKeys, "DUPLICATE_COUNT_ZERO", "重复/唯一",
+                            columnName, columnName + " 重复值行数为0", "FAIL", "{}");
                 }
             }
         }
@@ -280,12 +318,20 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
         MetadataQualityResult result = baseResult(rule, runId);
         try {
             validateRuleField(table, rule);
-            return switch (rule.getRuleType()) {
-                case "ROW_COUNT" -> executeRowCount(table, rule, result);
-                case "NOT_NULL" -> executeNotNull(table, rule, result);
-                case "UNIQUE" -> executeUnique(table, rule, result);
-                case "ENUM" -> executeEnum(table, rule, result);
-                case "RANGE" -> executeRange(table, rule, result);
+            String ruleType = normalizeRuleType(rule.getRuleType());
+            return switch (ruleType) {
+                case "TABLE_ROW_COUNT" -> executeTableRowCount(table, rule, result);
+                case "CONDITION_MATCH_RATE" -> executeConditionMatchRate(table, rule, result);
+                case "NULL_COUNT", "NULL_COUNT_ZERO", "NULL_RATE" -> executeNullMetric(table, rule, result, ruleType);
+                case "REGEX_FORMAT", "DATE_FORMAT", "EMAIL_FORMAT", "ID_CARD_FORMAT", "MOBILE_FORMAT",
+                        "CURRENCY_FORMAT", "NUMERIC_FORMAT", "PHONE_FORMAT" -> executeRegexFormat(table, rule, result, ruleType);
+                case "DUPLICATE_COUNT", "DUPLICATE_COUNT_ZERO", "DUPLICATE_RATE" -> executeDuplicateMetric(table, rule, result, ruleType);
+                case "MULTI_FIELD_DUPLICATE_COUNT_ZERO" -> executeMultiFieldDuplicateZero(table, rule, result);
+                case "DISTINCT_COUNT", "DISTINCT_RATE" -> executeDistinctMetric(table, rule, result, ruleType);
+                case "MIN_VALUE", "MAX_VALUE", "AVG_VALUE", "SUM_VALUE" -> executeAggregateMetric(table, rule, result, ruleType);
+                case "ENUM_MISMATCH_COUNT", "ENUM_MISMATCH_COUNT_ZERO", "ENUM_MISMATCH_DISTINCT_COUNT" -> executeEnumMismatchMetric(table, rule, result, ruleType);
+                case "DISCRETE_GROUP_COUNT" -> executeDiscreteGroupCount(table, rule, result);
+                case "FIELD_VALUE_RANGE" -> executeFieldValueRange(table, rule, result);
                 case "FRESHNESS" -> executeFreshness(table, rule, result);
                 case "CUSTOM_SQL" -> executeCustomSql(rule, result);
                 default -> result.setStatus("FAIL")
@@ -301,66 +347,200 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
     /**
      * 执行行数规则
      */
-    private MetadataQualityResult executeRowCount(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result) throws SQLException {
+    private MetadataQualityResult executeTableRowCount(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result) throws SQLException {
         JSONObject config = config(rule);
         Long minCount = config.getLong("minCount");
         Long maxCount = config.getLong("maxCount");
         long total = firstLong(query("select count(1) as total_count from " + tableRef(table) + where(rule)), "total_count");
-        boolean passed = (minCount == null || total >= minCount) && (maxCount == null || total <= maxCount);
+        boolean passed = minCount != null || maxCount != null
+                ? (minCount == null || total >= minCount) && (maxCount == null || total <= maxCount)
+                : compareMetric(BigDecimal.valueOf(total), config, BigDecimal.ONE, ">=");
+        String expected = minCount != null || maxCount != null ? expectedRange(minCount, maxCount) : expectedCompare(config, ">= 1");
         return finish(result, rule, passed, total, passed ? 0L : 1L,
-                String.valueOf(total), expectedRange(minCount, maxCount), null);
+                String.valueOf(total), expected, null);
     }
 
     /**
-     * 执行非空规则
+     * 执行条件匹配率规则
      */
-    private MetadataQualityResult executeNotNull(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result) throws SQLException {
-        String column = columnRef(rule.getColumnName());
-        String sql = "select count(1) as total_count, sum(case when " + column + " is null then 1 else 0 end) as fail_count from "
+    private MetadataQualityResult executeConditionMatchRate(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result) throws SQLException {
+        JSONObject config = config(rule);
+        String condition = config.getString("condition");
+        Assert.notBlank(condition, new SilentException("CONDITION_MATCH_RATE 规则 condition 不能为空"));
+        String sql = "select count(1) as total_count, "
+                + "sum(case when " + condition + " then 1 else 0 end) as match_count, "
+                + "sum(case when " + condition + " then 0 else 1 end) as fail_count, "
+                + "case when count(1) = 0 then 0 else cast(sum(case when " + condition + " then 1 else 0 end) as double) / count(1) end as actual_rate from "
                 + tableRef(table) + where(rule);
         Map<String, Object> row = firstRow(query(sql));
         long total = toLong(row.get("total_count"));
         long fail = toLong(row.get("fail_count"));
-        return finish(result, rule, fail == 0, total, fail, String.valueOf(fail), "0",
+        BigDecimal actual = toBigDecimal(row.get("actual_rate"));
+        boolean passed = compareMetric(actual, config, BigDecimal.ONE, ">=");
+        String invalid = "(not (" + condition + ") or (" + condition + ") is null)";
+        return finish(result, rule, passed, total, fail, decimalText(actual), expectedCompare(config, ">= 1"),
+                "select * from " + tableRef(table) + appendCondition(rule, invalid) + " limit 100");
+    }
+
+    /**
+     * 执行空值指标规则
+     */
+    private MetadataQualityResult executeNullMetric(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result,
+                                                    String ruleType) throws SQLException {
+        String column = columnRef(rule.getColumnName());
+        String sql = "select count(1) as total_count, "
+                + "sum(case when " + column + " is null then 1 else 0 end) as fail_count, "
+                + "case when count(1) = 0 then 0 else cast(sum(case when " + column + " is null then 1 else 0 end) as double) / count(1) end as actual_rate from "
+                + tableRef(table) + where(rule);
+        Map<String, Object> row = firstRow(query(sql));
+        long total = toLong(row.get("total_count"));
+        long fail = toLong(row.get("fail_count"));
+        BigDecimal actual = "NULL_RATE".equals(ruleType) ? toBigDecimal(row.get("actual_rate")) : BigDecimal.valueOf(fail);
+        boolean passed = "NULL_COUNT_ZERO".equals(ruleType)
+                ? fail == 0
+                : compareMetric(actual, config(rule), BigDecimal.ZERO, "<=");
+        return finish(result, rule, passed, total, fail, decimalText(actual), "NULL_COUNT_ZERO".equals(ruleType) ? "0" : expectedCompare(config(rule), "<= 0"),
                 "select * from " + tableRef(table) + appendCondition(rule, column + " is null") + " limit 100");
     }
 
     /**
-     * 执行唯一性规则
+     * 执行格式校验规则
      */
-    private MetadataQualityResult executeUnique(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result) throws SQLException {
+    private MetadataQualityResult executeRegexFormat(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result,
+                                                     String ruleType) throws SQLException {
+        JSONObject config = config(rule);
+        String pattern = patternForRule(ruleType, config);
+        Boolean allowNull = config.getBoolean("allowNull");
         String column = columnRef(rule.getColumnName());
-        String sql = "select count(1) as total_count, count(1) - count(distinct " + column + ") as fail_count from "
+        String regexp = "regexp_like(cast(" + column + " as varchar), '" + escapeSql(pattern) + "')";
+        String invalid = Boolean.FALSE.equals(allowNull)
+                ? "(" + column + " is null or not " + regexp + ")"
+                : "(" + column + " is not null and not " + regexp + ")";
+        Map<String, Object> row = firstRow(query("select count(1) as total_count, sum(case when " + invalid
+                + " then 1 else 0 end) as fail_count from " + tableRef(table) + where(rule)));
+        long total = toLong(row.get("total_count"));
+        long fail = toLong(row.get("fail_count"));
+        return finish(result, rule, fail == 0, total, fail, String.valueOf(fail), "0",
+                "select * from " + tableRef(table) + appendCondition(rule, invalid) + " limit 100");
+    }
+
+    /**
+     * 执行重复值指标规则
+     */
+    private MetadataQualityResult executeDuplicateMetric(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result,
+                                                         String ruleType) throws SQLException {
+        String column = columnRef(rule.getColumnName());
+        String sql = "select count(1) as total_count, count(1) - count(distinct " + column + ") as fail_count, "
+                + "case when count(1) = 0 then 0 else cast(count(1) - count(distinct " + column + ") as double) / count(1) end as actual_rate from "
                 + tableRef(table) + where(rule);
         Map<String, Object> row = firstRow(query(sql));
         long total = toLong(row.get("total_count"));
         long fail = toLong(row.get("fail_count"));
-        return finish(result, rule, fail == 0, total, fail, String.valueOf(fail), "0",
+        BigDecimal actual = "DUPLICATE_RATE".equals(ruleType) ? toBigDecimal(row.get("actual_rate")) : BigDecimal.valueOf(fail);
+        boolean passed = "DUPLICATE_COUNT_ZERO".equals(ruleType)
+                ? fail == 0
+                : compareMetric(actual, config(rule), BigDecimal.ZERO, "<=");
+        return finish(result, rule, passed, total, fail, decimalText(actual), "DUPLICATE_COUNT_ZERO".equals(ruleType) ? "0" : expectedCompare(config(rule), "<= 0"),
                 "select " + column + ", count(1) as duplicate_count from " + tableRef(table)
                         + where(rule) + " group by " + column + " having count(1) > 1 limit 100");
     }
 
     /**
-     * 执行枚举规则
+     * 执行多字段联合重复值为0规则
      */
-    private MetadataQualityResult executeEnum(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result) throws SQLException {
-        JSONArray values = config(rule).getJSONArray("values");
-        Assert.isTrue(values != null && !values.isEmpty(), new SilentException("ENUM 规则 values 不能为空"));
-        String inValues = values.stream().map(value -> "'" + escapeSql(String.valueOf(value)) + "'").reduce((a, b) -> a + "," + b).orElse("''");
-        String column = columnRef(rule.getColumnName());
-        String invalid = column + " is not null and cast(" + column + " as varchar) not in (" + inValues + ")";
-        Map<String, Object> row = firstRow(query("select count(1) as total_count, sum(case when " + invalid
-                + " then 1 else 0 end) as fail_count from " + tableRef(table) + where(rule)));
+    private MetadataQualityResult executeMultiFieldDuplicateZero(MetadataTable table, MetadataQualityRule rule,
+                                                                 MetadataQualityResult result) throws SQLException {
+        List<String> columns = configColumns(rule);
+        String columnRefs = columns.stream().map(this::columnRef).reduce((a, b) -> a + ", " + b).orElse("");
+        String sql = "select (select count(1) from " + tableRef(table) + where(rule) + ") as total_count, "
+                + "(select count(1) from (select " + columnRefs + " from " + tableRef(table) + where(rule)
+                + " group by " + columnRefs + " having count(1) > 1) t) as fail_count";
+        Map<String, Object> row = firstRow(query(sql));
         long total = toLong(row.get("total_count"));
         long fail = toLong(row.get("fail_count"));
-        return finish(result, rule, fail == 0, total, fail, String.valueOf(fail), values.toJSONString(),
+        return finish(result, rule, fail == 0, total, fail, String.valueOf(fail), "0",
+                "select " + columnRefs + ", count(1) as duplicate_count from " + tableRef(table)
+                        + where(rule) + " group by " + columnRefs + " having count(1) > 1 limit 100");
+    }
+
+    /**
+     * 执行唯一值指标规则
+     */
+    private MetadataQualityResult executeDistinctMetric(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result,
+                                                        String ruleType) throws SQLException {
+        String column = columnRef(rule.getColumnName());
+        String sql = "select count(1) as total_count, count(distinct " + column + ") as distinct_count, "
+                + "case when count(1) = 0 then 0 else cast(count(distinct " + column + ") as double) / count(1) end as distinct_rate from "
+                + tableRef(table) + where(rule);
+        Map<String, Object> row = firstRow(query(sql));
+        long total = toLong(row.get("total_count"));
+        BigDecimal actual = "DISTINCT_RATE".equals(ruleType) ? toBigDecimal(row.get("distinct_rate")) : BigDecimal.valueOf(toLong(row.get("distinct_count")));
+        boolean passed = compareMetric(actual, config(rule), null, null);
+        return finish(result, rule, passed, total, passed ? 0L : 1L, decimalText(actual), expectedCompare(config(rule), "按配置阈值"), null);
+    }
+
+    /**
+     * 执行统计值规则
+     */
+    private MetadataQualityResult executeAggregateMetric(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result,
+                                                         String ruleType) throws SQLException {
+        String function = switch (ruleType) {
+            case "MIN_VALUE" -> "min";
+            case "MAX_VALUE" -> "max";
+            case "AVG_VALUE" -> "avg";
+            case "SUM_VALUE" -> "sum";
+            default -> throw new SilentException("不支持的统计规则: " + ruleType);
+        };
+        String column = columnRef(rule.getColumnName());
+        Map<String, Object> row = firstRow(query("select count(1) as total_count, " + function + "(" + column + ") as actual_value from "
+                + tableRef(table) + where(rule)));
+        long total = toLong(row.get("total_count"));
+        BigDecimal actual = toBigDecimal(row.get("actual_value"));
+        boolean passed = compareMetric(actual, config(rule), null, null);
+        return finish(result, rule, passed, total, passed ? 0L : 1L, decimalText(actual), expectedCompare(config(rule), "按配置阈值"), null);
+    }
+
+    /**
+     * 执行枚举不匹配指标规则
+     */
+    private MetadataQualityResult executeEnumMismatchMetric(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result,
+                                                            String ruleType) throws SQLException {
+        JSONObject config = config(rule);
+        String invalid = enumInvalidCondition(rule, config);
+        String column = columnRef(rule.getColumnName());
+        String actualSql = "ENUM_MISMATCH_DISTINCT_COUNT".equals(ruleType)
+                ? "count(distinct case when " + invalid + " then cast(" + column + " as varchar) end)"
+                : "sum(case when " + invalid + " then 1 else 0 end)";
+        Map<String, Object> row = firstRow(query("select count(1) as total_count, " + actualSql + " as fail_count from "
+                + tableRef(table) + where(rule)));
+        long total = toLong(row.get("total_count"));
+        long fail = toLong(row.get("fail_count"));
+        boolean passed = "ENUM_MISMATCH_COUNT_ZERO".equals(ruleType)
+                ? fail == 0
+                : compareMetric(BigDecimal.valueOf(fail), config, BigDecimal.ZERO, "<=");
+        return finish(result, rule, passed, total, fail, String.valueOf(fail),
+                "ENUM_MISMATCH_COUNT_ZERO".equals(ruleType) ? "0" : expectedCompare(config, "<= 0"),
                 "select * from " + tableRef(table) + appendCondition(rule, invalid) + " limit 100");
     }
 
     /**
-     * 执行范围规则
+     * 执行离散分组数规则
      */
-    private MetadataQualityResult executeRange(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result) throws SQLException {
+    private MetadataQualityResult executeDiscreteGroupCount(MetadataTable table, MetadataQualityRule rule,
+                                                            MetadataQualityResult result) throws SQLException {
+        String column = columnRef(rule.getColumnName());
+        Map<String, Object> row = firstRow(query("select count(1) as total_count, count(distinct " + column + ") as group_count from "
+                + tableRef(table) + where(rule)));
+        long total = toLong(row.get("total_count"));
+        BigDecimal actual = BigDecimal.valueOf(toLong(row.get("group_count")));
+        boolean passed = compareMetric(actual, config(rule), null, null);
+        return finish(result, rule, passed, total, passed ? 0L : 1L, decimalText(actual), expectedCompare(config(rule), "按配置阈值"), null);
+    }
+
+    /**
+     * 执行字段值范围规则
+     */
+    private MetadataQualityResult executeFieldValueRange(MetadataTable table, MetadataQualityRule rule, MetadataQualityResult result) throws SQLException {
         JSONObject config = config(rule);
         String column = columnRef(rule.getColumnName());
         List<String> conditions = new ArrayList<>();
@@ -370,8 +550,10 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
         if (config.containsKey("max")) {
             conditions.add(column + " > " + sqlLiteral(config.get("max")));
         }
-        Assert.isTrue(!conditions.isEmpty(), new SilentException("RANGE 规则 min/max 不能同时为空"));
-        String invalid = column + " is not null and (" + String.join(" or ", conditions) + ")";
+        Assert.isTrue(!conditions.isEmpty(), new SilentException("FIELD_VALUE_RANGE 规则 min/max 不能同时为空"));
+        String invalid = Boolean.FALSE.equals(config.getBoolean("allowNull"))
+                ? "(" + column + " is null or " + String.join(" or ", conditions) + ")"
+                : column + " is not null and (" + String.join(" or ", conditions) + ")";
         Map<String, Object> row = firstRow(query("select count(1) as total_count, sum(case when " + invalid
                 + " then 1 else 0 end) as fail_count from " + tableRef(table) + where(rule)));
         long total = toLong(row.get("total_count"));
@@ -518,15 +700,25 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
         Assert.notBlank(cmd.getRuleName(), new SilentException("规则名称不能为空"));
         Assert.notBlank(cmd.getDimension(), new SilentException("质量维度不能为空"));
         Assert.isTrue(List.of("WARN", "FAIL").contains(cmd.getSeverity()), new SilentException("严重等级只能是 WARN/FAIL"));
-        if (List.of("NOT_NULL", "UNIQUE", "ENUM", "RANGE", "FRESHNESS").contains(cmd.getRuleType())) {
+        String ruleType = normalizeRuleType(cmd.getRuleType());
+        Assert.isTrue(supportedRuleTypes().contains(ruleType), new SilentException("不支持的规则类型: " + cmd.getRuleType()));
+        JSONObject config = new JSONObject();
+        if (hasText(cmd.getConfigJson())) {
+            try {
+                config = JSON.parseObject(cmd.getConfigJson());
+            } catch (Exception e) {
+                throw new SilentException("规则配置JSON格式不正确");
+            }
+        }
+        if (singleColumnRuleTypes().contains(ruleType)) {
             Assert.notBlank(cmd.getColumnName(), new SilentException(cmd.getRuleType() + " 规则字段不能为空"));
             Assert.isTrue(hasColumn(table, cmd.getColumnName()), new SilentException("字段不存在: " + cmd.getColumnName()));
         }
-        if (hasText(cmd.getConfigJson())) {
-            try {
-                JSON.parseObject(cmd.getConfigJson());
-            } catch (Exception e) {
-                throw new SilentException("规则配置JSON格式不正确");
+        if ("MULTI_FIELD_DUPLICATE_COUNT_ZERO".equals(ruleType)) {
+            List<String> columns = configColumns(config);
+            Assert.isTrue(!columns.isEmpty(), new SilentException("MULTI_FIELD_DUPLICATE_COUNT_ZERO 规则 columns 不能为空"));
+            for (String column : columns) {
+                Assert.isTrue(hasColumn(table, column), new SilentException("字段不存在: " + column));
             }
         }
     }
@@ -571,8 +763,14 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
      * 校验规则字段
      */
     private void validateRuleField(MetadataTable table, MetadataQualityRule rule) {
-        if (List.of("NOT_NULL", "UNIQUE", "ENUM", "RANGE", "FRESHNESS").contains(rule.getRuleType())) {
+        String ruleType = normalizeRuleType(rule.getRuleType());
+        if (singleColumnRuleTypes().contains(ruleType)) {
             Assert.isTrue(hasColumn(table, rule.getColumnName()), new SilentException("字段不存在: " + rule.getColumnName()));
+        }
+        if ("MULTI_FIELD_DUPLICATE_COUNT_ZERO".equals(ruleType)) {
+            for (String column : configColumns(rule)) {
+                Assert.isTrue(hasColumn(table, column), new SilentException("字段不存在: " + column));
+            }
         }
     }
 
@@ -618,6 +816,181 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
             return new JSONObject();
         }
         return JSON.parseObject(rule.getConfigJson());
+    }
+
+    /**
+     * 归一化规则类型
+     */
+    private String normalizeRuleType(String ruleType) {
+        return switch (Optional.ofNullable(ruleType).orElse("").toUpperCase(Locale.ROOT)) {
+            case "ROW_COUNT" -> "TABLE_ROW_COUNT";
+            case "NOT_NULL" -> "NULL_COUNT_ZERO";
+            case "UNIQUE" -> "DUPLICATE_COUNT_ZERO";
+            case "ENUM" -> "ENUM_MISMATCH_COUNT_ZERO";
+            case "RANGE" -> "FIELD_VALUE_RANGE";
+            default -> Optional.ofNullable(ruleType).orElse("").toUpperCase(Locale.ROOT);
+        };
+    }
+
+    /**
+     * 支持的规则类型
+     */
+    private Set<String> supportedRuleTypes() {
+        return Set.of(
+                "TABLE_ROW_COUNT", "CONDITION_MATCH_RATE",
+                "NULL_COUNT", "NULL_COUNT_ZERO", "NULL_RATE",
+                "REGEX_FORMAT", "DATE_FORMAT", "EMAIL_FORMAT", "ID_CARD_FORMAT", "MOBILE_FORMAT",
+                "CURRENCY_FORMAT", "NUMERIC_FORMAT", "PHONE_FORMAT",
+                "DUPLICATE_COUNT", "DUPLICATE_COUNT_ZERO", "DUPLICATE_RATE", "MULTI_FIELD_DUPLICATE_COUNT_ZERO",
+                "DISTINCT_COUNT", "DISTINCT_RATE",
+                "MIN_VALUE", "MAX_VALUE", "AVG_VALUE", "SUM_VALUE",
+                "ENUM_MISMATCH_COUNT", "ENUM_MISMATCH_COUNT_ZERO", "ENUM_MISMATCH_DISTINCT_COUNT", "DISCRETE_GROUP_COUNT",
+                "FIELD_VALUE_RANGE", "FRESHNESS", "CUSTOM_SQL"
+        );
+    }
+
+    /**
+     * 单字段规则类型
+     */
+    private Set<String> singleColumnRuleTypes() {
+        return Set.of(
+                "NULL_COUNT", "NULL_COUNT_ZERO", "NULL_RATE",
+                "REGEX_FORMAT", "DATE_FORMAT", "EMAIL_FORMAT", "ID_CARD_FORMAT", "MOBILE_FORMAT",
+                "CURRENCY_FORMAT", "NUMERIC_FORMAT", "PHONE_FORMAT",
+                "DUPLICATE_COUNT", "DUPLICATE_COUNT_ZERO", "DUPLICATE_RATE",
+                "DISTINCT_COUNT", "DISTINCT_RATE",
+                "MIN_VALUE", "MAX_VALUE", "AVG_VALUE", "SUM_VALUE",
+                "ENUM_MISMATCH_COUNT", "ENUM_MISMATCH_COUNT_ZERO", "ENUM_MISMATCH_DISTINCT_COUNT",
+                "DISCRETE_GROUP_COUNT", "FIELD_VALUE_RANGE", "FRESHNESS"
+        );
+    }
+
+    /**
+     * 从规则中读取多字段配置
+     */
+    private List<String> configColumns(MetadataQualityRule rule) {
+        return configColumns(config(rule));
+    }
+
+    /**
+     * 从JSON中读取多字段配置
+     */
+    private List<String> configColumns(JSONObject config) {
+        JSONArray columns = config.getJSONArray("columns");
+        if (columns == null) {
+            return List.of();
+        }
+        return columns.stream().map(String::valueOf).filter(this::hasText).toList();
+    }
+
+    /**
+     * 枚举不匹配条件
+     */
+    private String enumInvalidCondition(MetadataQualityRule rule, JSONObject config) {
+        JSONArray values = config.getJSONArray("values");
+        Assert.isTrue(values != null && !values.isEmpty(), new SilentException("枚举规则 values 不能为空"));
+        String inValues = values.stream().map(value -> "'" + escapeSql(String.valueOf(value)) + "'").reduce((a, b) -> a + "," + b).orElse("''");
+        String column = columnRef(rule.getColumnName());
+        String mismatch = "cast(" + column + " as varchar) not in (" + inValues + ")";
+        return Boolean.FALSE.equals(config.getBoolean("allowNull"))
+                ? "(" + column + " is null or " + mismatch + ")"
+                : "(" + column + " is not null and " + mismatch + ")";
+    }
+
+    /**
+     * 获取格式校验正则
+     */
+    private String patternForRule(String ruleType, JSONObject config) {
+        String configuredPattern = config.getString("pattern");
+        if (hasText(configuredPattern)) {
+            return configuredPattern;
+        }
+        return switch (ruleType) {
+            case "DATE_FORMAT" -> "^[0-9]{4}-[0-9]{2}-[0-9]{2}$";
+            case "EMAIL_FORMAT" -> "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$";
+            case "ID_CARD_FORMAT" -> "^[1-9][0-9]{5}(18|19|20)[0-9]{2}(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{3}[0-9Xx]$";
+            case "MOBILE_FORMAT" -> "^1[3-9][0-9]{9}$";
+            case "CURRENCY_FORMAT" -> "^-?[0-9]+(\\.[0-9]{1,2})?$";
+            case "NUMERIC_FORMAT" -> "^-?[0-9]+(\\.[0-9]+)?$";
+            case "PHONE_FORMAT" -> "^(0[0-9]{2,3}-?)?[0-9]{7,8}$|^1[3-9][0-9]{9}$";
+            default -> throw new SilentException("REGEX_FORMAT 规则 pattern 不能为空");
+        };
+    }
+
+    /**
+     * 判断指标是否满足阈值
+     */
+    private boolean compareMetric(BigDecimal actual, JSONObject config, BigDecimal defaultExpected, String defaultOperator) {
+        if (config.containsKey("min") || config.containsKey("max")) {
+            BigDecimal min = config.getBigDecimal("min");
+            BigDecimal max = config.getBigDecimal("max");
+            return (min == null || actual.compareTo(min) >= 0) && (max == null || actual.compareTo(max) <= 0);
+        }
+        String operator = Optional.ofNullable(config.getString("operator")).orElse(defaultOperator);
+        BigDecimal expected = config.getBigDecimal("expected");
+        if (expected == null) {
+            expected = defaultExpected;
+        }
+        if (!hasText(operator) || expected == null) {
+            return true;
+        }
+        return switch (operator) {
+            case ">" -> actual.compareTo(expected) > 0;
+            case ">=" -> actual.compareTo(expected) >= 0;
+            case "<" -> actual.compareTo(expected) < 0;
+            case "<=" -> actual.compareTo(expected) <= 0;
+            case "=", "==" -> actual.compareTo(expected) == 0;
+            case "!=" -> actual.compareTo(expected) != 0;
+            default -> throw new SilentException("不支持的比较操作符: " + operator);
+        };
+    }
+
+    /**
+     * 生成期望比较说明
+     */
+    private String expectedCompare(JSONObject config, String defaultText) {
+        if (config.containsKey("min") || config.containsKey("max")) {
+            BigDecimal min = config.getBigDecimal("min");
+            BigDecimal max = config.getBigDecimal("max");
+            if (min != null && max != null) {
+                return min + " - " + max;
+            }
+            if (min != null) {
+                return ">= " + min;
+            }
+            if (max != null) {
+                return "<= " + max;
+            }
+        }
+        String operator = config.getString("operator");
+        BigDecimal expected = config.getBigDecimal("expected");
+        if (hasText(operator) && expected != null) {
+            return operator + " " + expected;
+        }
+        return defaultText;
+    }
+
+    /**
+     * 转换BigDecimal值
+     */
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+        if (value instanceof BigDecimal bigDecimal) {
+            return bigDecimal;
+        }
+        if (value instanceof Number) {
+            return new BigDecimal(String.valueOf(value));
+        }
+        return new BigDecimal(String.valueOf(value));
+    }
+
+    /**
+     * 格式化小数
+     */
+    private String decimalText(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
     }
 
     /**
@@ -693,7 +1066,7 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
      * 生成规则去重键
      */
     private String ruleKey(String type, String columnName) {
-        return type + ":" + Optional.ofNullable(columnName).orElse("");
+        return normalizeRuleType(type) + ":" + Optional.ofNullable(columnName).orElse("");
     }
 
     /**
@@ -708,6 +1081,14 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
      */
     private boolean isDateTimeType(String type) {
         return type.contains("date") || type.contains("time");
+    }
+
+    /**
+     * 判断是否数值类型
+     */
+    private boolean isNumericType(String type) {
+        return type.contains("int") || type.contains("decimal") || type.contains("numeric")
+                || type.contains("double") || type.contains("float") || type.contains("number");
     }
 
     /**
