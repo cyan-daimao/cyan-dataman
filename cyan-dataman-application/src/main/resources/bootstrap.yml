@@ -37,7 +37,7 @@ dify:
     api-key: "app-TFQUkCTgneLaJuSOmaiqC2Vr"
   quality:
     enabled: ${DIFY_QUALITY_ENABLED:true}
-    base-url: ${DIFY_QUALITY_BASE_URL:http://10.0.0.2:28080/v1}
+    base-url: ${DIFY_QUALITY_BASE_URL:http://10.0.0.2:20080/v1}
     api-key: ${DIFY_QUALITY_API_KEY:app-VjqRmR6yyvNOhB2opVmOiAXN}
     user: ${DIFY_QUALITY_USER:cyan-dataman-quality}
 

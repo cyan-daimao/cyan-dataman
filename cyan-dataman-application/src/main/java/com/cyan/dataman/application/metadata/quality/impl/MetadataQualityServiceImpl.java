@@ -791,10 +791,11 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
                 3. 每个 suggestions 元素必须包含 ruleType、dimension、ruleName、configJson、severity、reason、confidence，可选 columnName、filterSql、exists。
                 4. ruleType 只能使用 ruleTemplates 中提供的类型。
                 5. 字段级规则的 columnName 必须来自 currentTable.columns。
-                6. configJson 必须是 JSON 字符串；多字段唯一规则通过 configJson.columns 返回。
+                6. configJson 必须是单行 JSON 字符串，字符串内部的双引号必须转义；多字段唯一规则通过 configJson.columns 返回。
                 7. severity 只能是 WARN 或 FAIL。强约束用 FAIL，探索性统计规则用 WARN。
                 8. 不要推荐 existingRules 中已有的重复规则；如果判断重复但仍返回，请设置 exists=true。
                 9. CUSTOM_SQL 必须返回 fail_count，可选 total_count，并在 SQL 内自行写 WHERE 范围。
+                10. 不要输出 <think>、</think> 或任何思考过程文本。
 
                 推荐重点：
                 - 不可空字段推荐 NULL_COUNT_ZERO。
@@ -957,15 +958,120 @@ public class MetadataQualityServiceImpl implements MetadataQualityService {
                 text = text.substring(0, fenceIndex).trim();
             }
         }
-        int objectStart = text.indexOf('{');
-        int arrayStart = text.indexOf('[');
-        if (objectStart < 0 && arrayStart < 0) {
-            throw new SilentException("AI 返回内容不包含 JSON");
+        int thinkEnd = text.lastIndexOf("</think>");
+        if (thinkEnd >= 0) {
+            text = text.substring(thinkEnd + "</think>".length()).trim();
         }
-        if (arrayStart >= 0 && (objectStart < 0 || arrayStart < objectStart)) {
-            return text.substring(arrayStart, text.lastIndexOf(']') + 1);
+        for (int index = 0; index < text.length(); index++) {
+            char start = text.charAt(index);
+            if (start != '{' && start != '[') {
+                continue;
+            }
+            int end = findJsonEnd(text, index);
+            if (end < 0) {
+                continue;
+            }
+            String candidate = normalizeAiJsonText(text.substring(index, end + 1));
+            try {
+                if (start == '[') {
+                    JSON.parseArray(candidate);
+                } else {
+                    JSON.parseObject(candidate);
+                }
+                return candidate;
+            } catch (Exception ignored) {
+                // 继续尝试后续 JSON 片段，AI 可能在回答前面输出了调试或思考文本。
+            }
         }
-        return text.substring(objectStart, text.lastIndexOf('}') + 1);
+        throw new SilentException("AI 返回内容不包含可解析 JSON");
+    }
+
+    /**
+     * 定位JSON片段结束位置
+     */
+    private int findJsonEnd(String text, int startIndex) {
+        List<Character> stack = new ArrayList<>();
+        boolean inString = false;
+        boolean escaped = false;
+        for (int index = startIndex; index < text.length(); index++) {
+            char ch = text.charAt(index);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (ch == '\\') {
+                    escaped = true;
+                } else if (ch == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (ch == '"') {
+                inString = true;
+                continue;
+            }
+            if (ch == '{') {
+                stack.add('}');
+            } else if (ch == '[') {
+                stack.add(']');
+            } else if (ch == '}' || ch == ']') {
+                if (stack.isEmpty() || !Objects.equals(stack.get(stack.size() - 1), ch)) {
+                    return -1;
+                }
+                stack.remove(stack.size() - 1);
+                if (stack.isEmpty()) {
+                    return index;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 归一化AI返回的JSON文本
+     */
+    private String normalizeAiJsonText(String json) {
+        StringBuilder builder = new StringBuilder();
+        boolean inString = false;
+        boolean escaped = false;
+        for (int index = 0; index < json.length(); index++) {
+            char ch = json.charAt(index);
+            if (inString) {
+                if (escaped) {
+                    builder.append(ch);
+                    escaped = false;
+                    continue;
+                }
+                if (ch == '\\') {
+                    builder.append(ch);
+                    escaped = true;
+                    continue;
+                }
+                if (ch == '"') {
+                    builder.append(ch);
+                    inString = false;
+                    continue;
+                }
+                if (ch == '\n') {
+                    builder.append("\\n");
+                    continue;
+                }
+                if (ch == '\r') {
+                    builder.append("\\r");
+                    continue;
+                }
+                if (ch == '\t') {
+                    builder.append("\\t");
+                    continue;
+                }
+                builder.append(ch);
+                continue;
+            }
+            builder.append(ch);
+            if (ch == '"') {
+                inString = true;
+            }
+        }
+        return builder.toString().trim();
     }
 
     /**
