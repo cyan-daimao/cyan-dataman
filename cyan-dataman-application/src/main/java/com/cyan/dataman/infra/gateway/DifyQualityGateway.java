@@ -84,17 +84,12 @@ public class DifyQualityGateway {
                 .setUser(Optional.ofNullable(user).filter(item -> !item.isBlank()).orElse("cyan-dataman-quality"))
                 .setFiles(List.of());
         try {
-            if (answerConsumer != null) {
-                answerConsumer.accept("\n[dify_config] baseUrl=" + baseUrl + ", responseMode=streaming, user="
-                        + Optional.ofNullable(user).filter(item -> !item.isBlank()).orElse("cyan-dataman-quality") + "\n");
-            }
             Response response = difyQualityRPC.chat("Bearer " + apiKey, request);
-            if (answerConsumer != null) {
-                answerConsumer.accept("\n[dify_http_response] status=" + (response == null ? "null" : response.status())
-                        + ", reason=" + (response == null ? "null" : response.reason())
-                        + ", bodyPresent=" + (response != null && response.body() != null)
-                        + "\n");
-            }
+            log.debug("Dify 数据质量推荐响应, baseUrl: {}, status: {}, reason: {}, bodyPresent: {}",
+                    baseUrl,
+                    response == null ? null : response.status(),
+                    response == null ? null : response.reason(),
+                    response != null && response.body() != null);
             validateSuccessfulResponse(response);
             return readStreamingAnswer(response, answerConsumer);
         } catch (FeignException e) {
@@ -157,46 +152,33 @@ public class DifyQualityGateway {
      */
     private String readStreamingAnswer(Response response, Consumer<String> answerConsumer) throws IOException {
         if (response == null || response.body() == null) {
-            if (answerConsumer != null) {
-                answerConsumer.accept("\n[dify_stream_summary] responseBodyEmpty=true\n");
-            }
             return null;
         }
         StringBuilder answer = new StringBuilder();
+        StringBuilder answerBuffer = new StringBuilder();
         StringBuilder workflowOutput = new StringBuilder();
-        int lineCount = 0;
-        int dataLineCount = 0;
-        StringBuilder rawSample = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body().asInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                lineCount++;
-                appendRawSample(rawSample, line);
                 String trimmed = line.trim();
                 if (!trimmed.startsWith("data:")) {
                     continue;
                 }
-                dataLineCount++;
                 String json = trimmed.substring(5).trim();
                 if (json.isBlank() || "[DONE]".equals(json)) {
                     continue;
                 }
                 JSONObject event = JSON.parseObject(json);
                 String eventName = event.getString("event");
-                String trace = extractEventTrace(event);
-                if (hasText(trace) && answerConsumer != null) {
-                    answerConsumer.accept(trace);
-                }
                 String analysis = extractAnalysisPart(event);
                 if (hasText(analysis) && answerConsumer != null) {
+                    flushAnswerBuffer(answerBuffer, answerConsumer);
                     answerConsumer.accept(analysis);
                 }
                 String part = extractAnswerPart(event);
                 if (part != null) {
                     answer.append(part);
-                    if (answerConsumer != null) {
-                        answerConsumer.accept(part);
-                    }
+                    appendAnswerPart(answerBuffer, part, answerConsumer);
                 }
                 if ("workflow_finished".equals(eventName)) {
                     String output = extractWorkflowOutput(event);
@@ -210,13 +192,7 @@ public class DifyQualityGateway {
                 }
             }
         }
-        if (answerConsumer != null) {
-            answerConsumer.accept("\n[dify_stream_summary] lineCount=" + lineCount
-                    + ", dataLineCount=" + dataLineCount
-                    + ", answerLength=" + answer.length()
-                    + ", workflowOutputLength=" + workflowOutput.length()
-                    + ", rawSample=" + trimForDisplay(rawSample.toString()) + "\n");
-        }
+        flushAnswerBuffer(answerBuffer, answerConsumer);
         if (answer.isEmpty() && !workflowOutput.isEmpty()) {
             String output = workflowOutput.toString();
             if (answerConsumer != null) {
@@ -228,36 +204,27 @@ public class DifyQualityGateway {
     }
 
     /**
-     * 记录原始响应样例
+     * 追加并缓冲AI回复片段
      */
-    private void appendRawSample(StringBuilder rawSample, String line) {
-        if (rawSample.length() >= 2000) {
+    private void appendAnswerPart(StringBuilder answerBuffer, String part, Consumer<String> answerConsumer) {
+        if (answerConsumer == null) {
             return;
         }
-        rawSample.append(line).append("\n");
+        answerBuffer.append(part);
+        if (part.contains("\n") || answerBuffer.length() >= 80) {
+            flushAnswerBuffer(answerBuffer, answerConsumer);
+        }
     }
 
     /**
-     * 提取 Dify 事件追踪信息
+     * 刷新AI回复缓冲
      */
-    private String extractEventTrace(JSONObject event) {
-        String eventName = event.getString("event");
-        if (!hasText(eventName)) {
-            return null;
+    private void flushAnswerBuffer(StringBuilder answerBuffer, Consumer<String> answerConsumer) {
+        if (answerConsumer == null || answerBuffer.isEmpty()) {
+            return;
         }
-        StringBuilder builder = new StringBuilder("\n[dify_event] ").append(eventName);
-        JSONObject data = event.getJSONObject("data");
-        if (data != null && !data.isEmpty()) {
-            builder.append(" dataKeys=").append(data.keySet());
-            JSONObject outputs = data.getJSONObject("outputs");
-            if (outputs != null && !outputs.isEmpty()) {
-                builder.append(" outputKeys=").append(outputs.keySet());
-            }
-        }
-        if (event.containsKey("answer")) {
-            builder.append(" answerLength=").append(Optional.ofNullable(event.getString("answer")).orElse("").length());
-        }
-        return builder.append("\n").toString();
+        answerConsumer.accept(answerBuffer.toString());
+        answerBuffer.setLength(0);
     }
 
     /**
@@ -267,15 +234,6 @@ public class DifyQualityGateway {
         String eventName = event.getString("event");
         if ("agent_thought".equals(eventName)) {
             return extractAgentThought(event);
-        }
-        if ("workflow_started".equals(eventName)) {
-            return "\n[workflow] 工作流开始\n";
-        }
-        if ("node_started".equals(eventName)) {
-            return extractNodeStatus(event, "开始");
-        }
-        if ("node_finished".equals(eventName)) {
-            return extractNodeFinished(event);
         }
         return null;
     }
@@ -292,43 +250,7 @@ public class DifyQualityGateway {
         if (builder.isEmpty()) {
             return null;
         }
-        return "\n[agent_thought]\n" + builder;
-    }
-
-    /**
-     * 提取节点状态
-     */
-    private String extractNodeStatus(JSONObject event, String status) {
-        JSONObject data = event.getJSONObject("data");
-        if (data == null) {
-            return null;
-        }
-        String title = Optional.ofNullable(data.getString("title")).orElse(data.getString("node_id"));
-        if (!hasText(title)) {
-            return null;
-        }
-        return "\n[node] " + title + " " + status + "\n";
-    }
-
-    /**
-     * 提取节点完成信息
-     */
-    private String extractNodeFinished(JSONObject event) {
-        JSONObject data = event.getJSONObject("data");
-        if (data == null) {
-            return null;
-        }
-        String title = Optional.ofNullable(data.getString("title")).orElse(data.getString("node_id"));
-        String status = Optional.ofNullable(data.getString("status")).orElse("finished");
-        StringBuilder builder = new StringBuilder();
-        if (hasText(title)) {
-            builder.append("\n[node] ").append(title).append(" ").append(status).append("\n");
-        }
-        JSONObject outputs = data.getJSONObject("outputs");
-        if (outputs != null && !outputs.isEmpty()) {
-            builder.append(trimForDisplay(JSON.toJSONString(outputs))).append("\n");
-        }
-        return builder.isEmpty() ? null : builder.toString();
+        return builder.toString();
     }
 
     /**
