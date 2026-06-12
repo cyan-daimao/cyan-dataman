@@ -44,7 +44,8 @@ public class SqlRunner {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
 
-        // 分离 CREATE 和 INSERT 语句
+        // 分离 SET、元数据和 INSERT 语句
+        List<String> configStmts = new ArrayList<>();
         List<String> createStmts = new ArrayList<>();
         List<String> insertStmts = new ArrayList<>();
 
@@ -57,6 +58,10 @@ public class SqlRunner {
             String upper = trimmed.toUpperCase(Locale.ROOT);
             if (upper.startsWith("INSERT")) {
                 insertStmts.add(trimmed);
+            } else if (upper.startsWith("SET ")) {
+                configStmts.add(trimmed);
+            } else if (upper.startsWith("RESET ")) {
+                throw new IllegalArgumentException("Flink SQL Application 模式暂不支持 RESET 语句: " + abbreviate(trimmed));
             } else if (isExecutableMetadataStatement(upper)) {
                 createStmts.add(trimmed);
             } else if (upper.startsWith("SELECT") || upper.startsWith("WITH")) {
@@ -68,6 +73,11 @@ public class SqlRunner {
 
         if (insertStmts.isEmpty()) {
             throw new IllegalArgumentException("Flink SQL Application 模式至少需要一条 INSERT INTO 语句，请配置 Sink 表并使用 INSERT INTO ... SELECT ...");
+        }
+
+        // SET 在 Application 模式下不能通过 executeSql 执行，需要写入 TableConfig
+        for (String stmt : configStmts) {
+            applySetStatement(tableEnv, stmt);
         }
 
         // 先执行所有 CREATE TABLE（注册表元数据）
@@ -95,12 +105,35 @@ public class SqlRunner {
                 || upper.startsWith("DROP ")
                 || upper.startsWith("ALTER ")
                 || upper.startsWith("USE ")
-                || upper.startsWith("SET ")
-                || upper.startsWith("RESET ")
                 || upper.startsWith("LOAD MODULE ")
                 || upper.startsWith("UNLOAD MODULE ")
                 || upper.startsWith("ADD JAR ")
                 || upper.startsWith("REMOVE JAR ");
+    }
+
+    private static void applySetStatement(StreamTableEnvironment tableEnv, String statement) {
+        String body = statement.substring(3).trim();
+        int equalsIndex = body.indexOf('=');
+        if (equalsIndex <= 0 || equalsIndex == body.length() - 1) {
+            throw new IllegalArgumentException("Flink SQL SET 语句格式错误，应为 SET key = value: " + abbreviate(statement));
+        }
+        String key = stripQuotes(body.substring(0, equalsIndex).trim());
+        String value = stripQuotes(body.substring(equalsIndex + 1).trim());
+        if (key.isEmpty() || value.isEmpty()) {
+            throw new IllegalArgumentException("Flink SQL SET 语句 key/value 不能为空: " + abbreviate(statement));
+        }
+        tableEnv.getConfig().getConfiguration().setString(key, value);
+    }
+
+    private static String stripQuotes(String value) {
+        if (value.length() >= 2) {
+            char first = value.charAt(0);
+            char last = value.charAt(value.length() - 1);
+            if ((first == '\'' && last == '\'') || (first == '"' && last == '"')) {
+                return value.substring(1, value.length() - 1);
+            }
+        }
+        return value;
     }
 
     private static String abbreviate(String statement) {
