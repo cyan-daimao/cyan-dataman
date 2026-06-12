@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Flink SQL Runner
@@ -37,8 +38,8 @@ public class SqlRunner {
         String sqlFile = args[0];
         String sql = Files.readString(Paths.get(sqlFile));
 
-        // 先去掉所有单行注释，避免注释和 SQL 混在同一 segment 被误跳过
-        sql = sql.replaceAll("(?m)^\\s*--.*\\n?", "");
+        // 先去掉注释，避免注释和 SQL 混在同一 segment 被误判
+        sql = removeComments(sql);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
@@ -53,12 +54,20 @@ public class SqlRunner {
             if (trimmed.isEmpty()) {
                 continue;
             }
-            String upper = trimmed.toUpperCase();
+            String upper = trimmed.toUpperCase(Locale.ROOT);
             if (upper.startsWith("INSERT")) {
                 insertStmts.add(trimmed);
-            } else {
+            } else if (isExecutableMetadataStatement(upper)) {
                 createStmts.add(trimmed);
+            } else if (upper.startsWith("SELECT") || upper.startsWith("WITH")) {
+                throw new IllegalArgumentException("Flink SQL Application 模式不支持直接执行 SELECT 查询，请改为 INSERT INTO sink_table SELECT ...");
+            } else {
+                throw new IllegalArgumentException("Flink SQL Application 模式不支持该语句: " + abbreviate(trimmed));
             }
+        }
+
+        if (insertStmts.isEmpty()) {
+            throw new IllegalArgumentException("Flink SQL Application 模式至少需要一条 INSERT INTO 语句，请配置 Sink 表并使用 INSERT INTO ... SELECT ...");
         }
 
         // 先执行所有 CREATE TABLE（注册表元数据）
@@ -74,5 +83,30 @@ public class SqlRunner {
             }
             stmtSet.execute();
         }
+    }
+
+    private static String removeComments(String sql) {
+        String withoutBlockComments = sql.replaceAll("(?s)/\\*.*?\\*/", "");
+        return withoutBlockComments.replaceAll("(?m)^\\s*--.*\\n?", "");
+    }
+
+    private static boolean isExecutableMetadataStatement(String upper) {
+        return upper.startsWith("CREATE ")
+                || upper.startsWith("DROP ")
+                || upper.startsWith("ALTER ")
+                || upper.startsWith("USE ")
+                || upper.startsWith("SET ")
+                || upper.startsWith("RESET ")
+                || upper.startsWith("LOAD MODULE ")
+                || upper.startsWith("UNLOAD MODULE ")
+                || upper.startsWith("ADD JAR ")
+                || upper.startsWith("REMOVE JAR ");
+    }
+
+    private static String abbreviate(String statement) {
+        if (statement.length() <= 120) {
+            return statement;
+        }
+        return statement.substring(0, 120) + "...";
     }
 }
