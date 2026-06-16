@@ -28,6 +28,16 @@ public interface CdcFlinkSyncService {
     void stopFlinkSyncJob();
 
     /**
+     * 确保指定 CDC 配置的 ODS 表已准备完成
+     * <p>
+     * 对 Flink CDC 会创建缺失的 Iceberg ODS 表，或修复已存在表缺少的 CDC 元字段。
+     * 该方法必须在启动 Debezium Connector 和 FlinkApplication 前调用。
+     *
+     * @param cdcConfigId CDC 配置 ID
+     */
+    void ensureOdsTableReady(String cdcConfigId);
+
+    /**
      * 为指定 CDC 配置启用 Flink 同步
      * <p>
      * 如果该数据源没有运行中的 Flink 作业，则生成 SQL 并提交新作业；

@@ -116,6 +116,20 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
     }
 
     @Override
+    public void ensureOdsTableReady(String cdcConfigId) {
+        CdcConfig config = cdcConfigRepository.findById(cdcConfigId);
+        Assert.notNull(config, new SilentException("CDC 配置不存在"));
+        Assert.isTrue(SyncTool.FLINK.equals(config.getSyncTool()),
+                new SilentException("该 CDC 配置不是 FLINK 类型"));
+
+        log.info("开始准备 Flink CDC ODS 表, cdcConfigId={}, table={}.{}",
+                cdcConfigId, config.getDbName(), config.getTableName());
+        ensureOdsTableExists(config);
+        log.info("Flink CDC ODS 表准备完成, cdcConfigId={}, odsTable={}",
+                cdcConfigId, config.getIcebergTableName());
+    }
+
+    @Override
     public void enableCdcSync(String cdcConfigId) {
         log.info("enableCdcSync 开始, cdcConfigId={}", cdcConfigId);
         CdcConfig config = cdcConfigRepository.findById(cdcConfigId);
@@ -134,6 +148,9 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         try {
             ensureOdsTableExists(config);
             log.info("ODS 表确保完成, table={}.{}", config.getDbName(), config.getTableName());
+        } catch (SilentException e) {
+            log.error("ensureOdsTableExists 业务异常, table={}.{}: {}", config.getDbName(), config.getTableName(), e.getMessage(), e);
+            throw e;
         } catch (Exception e) {
             log.error("ensureOdsTableExists 异常, table={}.{}: {}", config.getDbName(), config.getTableName(), e.getMessage(), e);
             throw new SilentException("创建 ODS 元数据表失败: " + config.getDbName() + "." + config.getTableName());

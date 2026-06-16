@@ -151,7 +151,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                     .setRunningStatus(RunningStatus.INIT);
 
             config = config.save(cdcConfigRepository);
-            createDebeziumConnector(config, dsConfig, info);
+            if (!SyncTool.FLINK.equals(config.getSyncTool())) {
+                createDebeziumConnector(config, dsConfig, info);
+            }
         } else {
             // 复用已有 connector，但新表状态必须为 INIT（确保首次同步时触发增量快照）
             CdcConfig existingConfig = datasourceConfigs.getFirst();
@@ -160,13 +162,15 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                     .setRunningStatus(RunningStatus.INIT);
 
             config = config.save(cdcConfigRepository);
-            // 走完整的启动流程：更新 include.list → stop → start → 发增量快照信号
-            startConnectorForTable(config);
+            if (!SyncTool.FLINK.equals(config.getSyncTool())) {
+                // 走完整的启动流程：更新 include.list → stop → start → 发增量快照信号
+                startConnectorForTable(config);
+            }
         }
 
         // Flink 类型自动启动同步
         if (SyncTool.FLINK.equals(config.getSyncTool())) {
-            cdcFlinkSyncService.enableCdcSync(config.getId());
+            startFlinkCdc(config);
             cdcFieldLineageSyncService.syncFlinkConfig(config);
         }
 
@@ -271,13 +275,11 @@ public class CdcConfigServiceImpl implements CdcConfigService {
         config.toggle(cdcConfigRepository, enabled);
 
         if (Boolean.TRUE.equals(enabled)) {
-            // CDC 开启时创建元数据表
-            createMetadataTable(config);
-
             if (SyncTool.FLINK.equals(config.getSyncTool())) {
-                startConnectorForTable(config);
-                cdcFlinkSyncService.enableCdcSync(config.getId());
+                startFlinkCdc(config);
             } else if (SyncTool.SPARK.equals(config.getSyncTool())) {
+                // CDC 开启时创建元数据表
+                createMetadataTable(config);
                 triggerSparkSyncIfNeeded(config);
             }
             syncCdcConfigLineage(config);
@@ -304,6 +306,10 @@ public class CdcConfigServiceImpl implements CdcConfigService {
                     dsConfigService.getTableSchema(config.getDsName(), config.getDbName(), config.getTableName());
             if (tableSchema == null || tableSchema.getColumns() == null || tableSchema.getColumns().isEmpty()) {
                 log.warn("无法获取业务表结构，跳过创建元数据表: {}.{}", config.getDbName(), config.getTableName());
+                if (SyncTool.FLINK.equals(config.getSyncTool())) {
+                    throw new SilentException("无法获取业务表结构，不能创建 Flink CDC ODS 元数据表: "
+                            + config.getDbName() + "." + config.getTableName());
+                }
                 return;
             }
 
@@ -359,8 +365,23 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             log.info("CDC 开启时创建元数据表成功: {}", config.getIcebergTableName());
         } catch (Exception e) {
             log.warn("CDC 开启时创建元数据表失败: {}, error: {}", config.getIcebergTableName(), e.getMessage());
-            // 不阻断 CDC 启动流程
+            if (SyncTool.FLINK.equals(config.getSyncTool())) {
+                throw new SilentException("创建 Flink CDC ODS 元数据表失败: " + config.getIcebergTableName());
+            }
+            // Spark CDC 保持原有语义：元数据表创建失败不阻断同步启动流程
         }
+    }
+
+    /**
+     * 启动 Flink CDC 同步
+     * <p>
+     * 固定顺序：清空旧 ODS 表 -> 创建/修复 ODS 表 -> 启动 Debezium Connector -> 启动 FlinkApplication。
+     */
+    private void startFlinkCdc(CdcConfig config) {
+        clearOdsTable(config);
+        cdcFlinkSyncService.ensureOdsTableReady(config.getId());
+        startConnectorForTable(config, false);
+        cdcFlinkSyncService.enableCdcSync(config.getId());
     }
 
     /**
@@ -539,6 +560,16 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      * 重新启用时先清空 Iceberg ODS 表数据，保证全量写入无重复。
      */
     private void startConnectorForTable(CdcConfig config) {
+        startConnectorForTable(config, true);
+    }
+
+    /**
+     * 启动指定表对应的 CDC
+     *
+     * @param config              CDC 配置
+     * @param clearOdsBeforeStart 是否在启动 connector 前清空 ODS 表
+     */
+    private void startConnectorForTable(CdcConfig config, boolean clearOdsBeforeStart) {
         DsConfig dsConfig = getDsConfigByName(config.getDsName());
         DatasourceInfo info = parseJdbcUrl(dsConfig.getUrl());
         String connectorName = config.getConnectorName();
@@ -548,7 +579,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
 
         // 重新启用时，先清空 Iceberg ODS 表数据（删物理表 + 删元数据记录）
         // 后续 ensureOdsTableExists 会自动重建空表
-        clearOdsTable(config);
+        if (clearOdsBeforeStart) {
+            clearOdsTable(config);
+        }
 
         // 获取该数据源下所有配置
         List<CdcConfig> allConfigs = cdcConfigRepository.findByDatasource(config.getDsName());
@@ -1005,10 +1038,7 @@ public class CdcConfigServiceImpl implements CdcConfigService {
      * 后续 ensureOdsTableExists 会自动重建空表
      */
     private void clearOdsTable(CdcConfig config) {
-        String safeSubject = safeName(config.getSubjectCode());
-        String safeDb = safeName(config.getDbName());
-        String safeTable = safeName(config.getTableName());
-        String odsTableName = "ods_cdc_raw_" + safeSubject + "_" + safeDb + "_" + safeTable;
+        String odsTableName = config.getIcebergTableName();
 
         MetadataTableBO odsTable = metadataTableService.findOne(new MetadataTableOneQuery().setName(odsTableName));
         if (odsTable != null) {
