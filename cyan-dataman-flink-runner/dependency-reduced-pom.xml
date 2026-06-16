@@ -42,6 +42,8 @@
                     <exclude>META-INF/*.SF</exclude>
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
+                    <exclude>software/amazon/awssdk/thirdparty/org/slf4j/impl/**</exclude>
+                    <exclude>org/slf4j/impl/**</exclude>
                   </excludes>
                 </filter>
               </filters>
