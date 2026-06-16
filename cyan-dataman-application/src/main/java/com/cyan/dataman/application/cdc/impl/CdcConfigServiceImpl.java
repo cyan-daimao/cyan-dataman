@@ -12,6 +12,7 @@ import com.cyan.dataman.application.cdc.convert.CdcAppConvert;
 import com.cyan.dataman.application.cdc.job.SparkJobExecutor;
 import com.cyan.dataman.application.cdc.service.CdcFieldLineageSyncService;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
+import com.cyan.dataman.application.cdc.service.CdcOdsColumnBuilder;
 import com.cyan.dataman.application.cdc.service.DebeziumSignalService;
 import com.cyan.dataman.application.ds.DsConfigService;
 import com.cyan.dataman.application.metadata.MetadataTableService;
@@ -315,7 +316,9 @@ public class CdcConfigServiceImpl implements CdcConfigService {
             }
             SecretLevel finalSecretLevel = secretLevel;
             List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> metadataColumns =
-                    tableSchema.getColumns().stream()
+                    SyncTool.FLINK.equals(config.getSyncTool())
+                            ? CdcOdsColumnBuilder.buildFlinkOdsColumns(tableSchema.getColumns(), finalSecretLevel)
+                            : tableSchema.getColumns().stream()
                             .map(col -> toMetadataColumn(col, finalSecretLevel))
                             .toList();
 

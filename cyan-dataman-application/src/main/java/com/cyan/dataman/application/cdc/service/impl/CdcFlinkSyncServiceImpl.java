@@ -4,7 +4,9 @@ import com.cyan.arch.common.api.Assert;
 import com.cyan.arch.common.api.SilentException;
 import com.cyan.arch.common.util.StrUtils;
 import com.cyan.dataman.application.cdc.service.CdcFlinkSyncService;
+import com.cyan.dataman.application.cdc.service.CdcOdsColumnBuilder;
 import com.cyan.dataman.application.metadata.MetadataTableService;
+import com.cyan.dataman.application.metadata.bo.MetadataTableBO;
 import com.cyan.dataman.application.metadata.cmd.MetadataTableCmd;
 import com.cyan.dataman.domain.cdc.CdcConfig;
 import com.cyan.dataman.domain.cdc.CdcFlinkJob;
@@ -15,6 +17,8 @@ import com.cyan.dataman.domain.ds.DsConfig;
 import com.cyan.dataman.domain.ds.repository.DsConfigRepository;
 import com.cyan.dataman.domain.ds.valobj.ColumnValObj;
 import com.cyan.dataman.domain.ds.valobj.TableSchemaValObj;
+import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
+import com.cyan.dataman.domain.metadata.valobj.TableValObj;
 import com.cyan.dataman.enums.*;
 import com.cyan.dataman.infra.util.DebeziumTypeMapper;
 import com.cyan.dataman.infra.util.DsJdbcUtil;
@@ -566,54 +570,18 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
         log.info("源表 {}.{} 共 {} 个字段: {}", config.getDbName(), config.getTableName(),
                 sourceColumns.size(), sourceColNames);
 
-        List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> odsColumns = new ArrayList<>();
-        for (ColumnValObj sourceCol : sourceColumns) {
-            com.cyan.dataman.domain.metadata.valobj.ColumnValObj col =
-                    new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                            .setName(sourceCol.getName())
-                            .setType(sourceCol.getType())
-                            .setComment(sourceCol.getComment())
-                            .setNullable(true)
-                            .setPrecision(sourceCol.getPrecision())
-                            .setScale(sourceCol.getScale());
-            odsColumns.add(col);
-        }
-
-        if (!sourceColNames.contains("_op")) {
-            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                    .setName("_op").setType("STRING").setComment("操作类型").setNullable(true));
-        }
-        if (!sourceColNames.contains("_ts")) {
-            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                    .setName("_ts").setType("LONG").setComment("变更时间戳").setNullable(true));
-        }
-        if (!sourceColNames.contains("_db")) {
-            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                    .setName("_db").setType("STRING").setComment("源数据库").setNullable(true));
-        }
-        if (!sourceColNames.contains("_table")) {
-            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                    .setName("_table").setType("STRING").setComment("源表名").setNullable(true));
-        }
-        if (!sourceColNames.contains("_ingestion_time")) {
-            odsColumns.add(new com.cyan.dataman.domain.metadata.valobj.ColumnValObj()
-                    .setName("_ingestion_time").setType("TIMESTAMP_TZ").setComment("入库时间").setNullable(true));
-        }
-
-        List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> uniqueOdsColumns = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
-        for (com.cyan.dataman.domain.metadata.valobj.ColumnValObj col : odsColumns) {
-            if (seen.add(col.getName())) {
-                uniqueOdsColumns.add(col);
-            } else {
-                log.warn("ODS 表 {} 出现重复字段名 [{}]，已去重", odsTableName, col.getName());
-            }
-        }
-        odsColumns = uniqueOdsColumns;
+        List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> odsColumns =
+                CdcOdsColumnBuilder.buildFlinkOdsColumns(sourceColumns, secretLevel);
         log.info("ODS 表 {} 最终字段列表 ({} 个): {}", odsTableName, odsColumns.size(),
                 odsColumns.stream().map(com.cyan.dataman.domain.metadata.valobj.ColumnValObj::getName).toList());
 
         try {
+            MetadataTableBO existingTable = metadataTableService.findOne(new MetadataTableOneQuery().setName(odsTableName));
+            if (existingTable != null) {
+                ensureExistingOdsMetadataColumns(existingTable, odsColumns);
+                return;
+            }
+
             MetadataTableCmd cmd = new MetadataTableCmd()
                     .setName(odsTableName)
                     .setOwner(config.getCreateBy())
@@ -633,15 +601,59 @@ public class CdcFlinkSyncServiceImpl implements CdcFlinkSyncService {
             metadataTableService.save(cmd);
             log.info("ODS 表创建成功: {}", odsTableName);
         } catch (SilentException e) {
-            if (e.getMessage() != null && e.getMessage().contains("表已存在")) {
-                log.info("ODS 表已存在，跳过创建: {}", odsTableName);
-            } else {
-                log.error("创建 ODS 表失败: {}", odsTableName, e);
-                throw e;
-            }
+            log.error("创建或修复 ODS 表失败: {}", odsTableName, e);
+            throw e;
         } catch (Exception e) {
-            log.error("创建 ODS 表失败: {}", odsTableName, e);
-            throw new SilentException("创建 ODS 表失败: " + odsTableName);
+            log.error("创建或修复 ODS 表失败: {}", odsTableName, e);
+            throw new SilentException("创建或修复 ODS 表失败: " + odsTableName + "，请删除重建或执行 Schema 修复");
+        }
+    }
+
+    /**
+     * 修复已存在 ODS 表缺失的 CDC 元字段
+     */
+    private void ensureExistingOdsMetadataColumns(MetadataTableBO existingTable,
+                                                  List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> expectedColumns) {
+        TableValObj table = existingTable.getTable();
+        if (table == null) {
+            throw new SilentException("ODS 元数据表缺少表结构: " + existingTable.getName());
+        }
+        List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> existingColumns =
+                new ArrayList<>(Optional.ofNullable(table.getColumns()).orElse(List.of()));
+        Set<String> existingNames = existingColumns.stream()
+                .map(com.cyan.dataman.domain.metadata.valobj.ColumnValObj::getName)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<com.cyan.dataman.domain.metadata.valobj.ColumnValObj> missingColumns = expectedColumns.stream()
+                .filter(column -> CdcOdsColumnBuilder.isCdcMetadataColumn(column.getName()))
+                .filter(column -> !existingNames.contains(column.getName()))
+                .toList();
+
+        if (missingColumns.isEmpty()) {
+            log.info("ODS 表已存在且 CDC 元字段完整: {}", existingTable.getName());
+            return;
+        }
+
+        existingColumns.addAll(missingColumns);
+        table.setColumns(existingColumns);
+        MetadataTableCmd cmd = new MetadataTableCmd()
+                .setName(existingTable.getName())
+                .setOwner(existingTable.getOwner())
+                .setSubjectCode(existingTable.getSubjectCode())
+                .setLayerCode(DataLayer.getByCode(existingTable.getLayerCode()) == null
+                        ? DataLayer.ODS
+                        : DataLayer.getByCode(existingTable.getLayerCode()))
+                .setComment(existingTable.getComment())
+                .setHeatLevel(existingTable.getHeatLevel())
+                .setSecretLevel(existingTable.getSecretLevel())
+                .setOnlineStatus(existingTable.getOnlineStatus())
+                .setTableValObj(table);
+
+        try {
+            metadataTableService.update(existingTable.getId(), cmd);
+            log.info("ODS 表 {} 已补齐 CDC 元字段: {}", existingTable.getName(),
+                    missingColumns.stream().map(com.cyan.dataman.domain.metadata.valobj.ColumnValObj::getName).toList());
+        } catch (Exception e) {
+            throw new SilentException("ODS 表缺少 CDC 元字段，自动补列失败，请删除重建或执行 Schema 修复: " + existingTable.getName());
         }
     }
 
