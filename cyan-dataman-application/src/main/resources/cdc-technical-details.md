@@ -143,7 +143,16 @@ INSERT INTO rest.ods.ods_cdc_raw_xxx
 SELECT
   CAST(JSON_VALUE(_raw_json, '$.payload.after.id') AS BIGINT) AS `id`,
   JSON_VALUE(_raw_json, '$.payload.after.name') AS `name`,
-  TO_TIMESTAMP_LTZ(CAST(JSON_VALUE(_raw_json, '$.payload.after.created_at') AS BIGINT), 3) AS `created_at`,
+  CASE
+    WHEN NULLIF(TRIM(JSON_VALUE(_raw_json, '$.payload.after.created_at')), '') IS NULL THEN CAST(NULL AS TIMESTAMP_LTZ(3))
+    WHEN REGEXP(NULLIF(TRIM(JSON_VALUE(_raw_json, '$.payload.after.created_at')), ''), '^[0-9]+$')
+      THEN TO_TIMESTAMP_LTZ(CAST(NULLIF(TRIM(JSON_VALUE(_raw_json, '$.payload.after.created_at')), '') AS BIGINT), 3)
+    ELSE TO_TIMESTAMP_LTZ(
+      REPLACE(REPLACE(REGEXP_REPLACE(NULLIF(TRIM(JSON_VALUE(_raw_json, '$.payload.after.created_at')), ''), '[.][0-9]+Z$', 'Z'), 'T', ' '), 'Z', ''),
+      'yyyy-MM-dd HH:mm:ss',
+      'UTC'
+    )
+  END AS `created_at`,
   -- ... 业务字段提取
   COALESCE(JSON_VALUE(_raw_json, '$.payload.op'), JSON_VALUE(_raw_json, '$.op')) AS `_op`,
   CAST(COALESCE(JSON_VALUE(_raw_json, '$.payload.ts_ms'), JSON_VALUE(_raw_json, '$.ts_ms')) AS BIGINT) AS `_ts`,
@@ -162,7 +171,7 @@ FROM kafka_source;
 | INT/INTEGER | INT | `CAST(... AS INT)` |
 | BIGINT | BIGINT | `CAST(... AS BIGINT)` |
 | DECIMAL(p,s) | DECIMAL(p,s) | `CAST(... AS DECIMAL(p,s))` |
-| DATETIME/TIMESTAMP | TIMESTAMP_LTZ(3) | `TO_TIMESTAMP_LTZ(CAST(... AS BIGINT), 3)` |
+| DATETIME/TIMESTAMP | TIMESTAMP_LTZ(3) | 兼容 epoch millis 与 ISO `yyyy-MM-ddTHH:mm:ssZ` |
 | VARCHAR/TEXT/CHAR | STRING | 直接 `JSON_VALUE()` |
 | BLOB/BINARY | BYTES | `CAST(... AS BYTES)` |
 

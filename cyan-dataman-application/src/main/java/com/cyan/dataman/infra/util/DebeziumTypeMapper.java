@@ -77,13 +77,29 @@ public class DebeziumTypeMapper {
         String jsonPath = "JSON_VALUE(_raw_json, '$.payload.after." + escapeJsonPath(columnName) + "')";
         String quotedName = "`" + columnName + "`";
         if ("TIMESTAMP_LTZ(3)".equals(flinkType)) {
-            // Debezium 时间戳为 int64 毫秒，直接用 TO_TIMESTAMP_LTZ 转换
-            return "TO_TIMESTAMP_LTZ(CAST(" + jsonPath + " AS BIGINT), 3) AS " + quotedName;
+            return buildTimestampLtzExtractExpr(jsonPath, quotedName);
         }
         if (needsCast(flinkType)) {
             return "CAST(" + jsonPath + " AS " + flinkType + ") AS " + quotedName;
         }
         return jsonPath + " AS " + quotedName;
+    }
+
+    /**
+     * 构建 TIMESTAMP_LTZ 字段提取表达式
+     * <p>
+     * Debezium 不同连接器或字段类型可能输出 epoch millis，也可能输出 ISO 字符串。
+     */
+    private static String buildTimestampLtzExtractExpr(String jsonPath, String quotedName) {
+        String value = "NULLIF(TRIM(" + jsonPath + "), '')";
+        String isoPattern = "'^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$'";
+        String normalizedIso = "REPLACE(REPLACE(REGEXP_REPLACE(" + value + ", '[.][0-9]+Z$', 'Z'), 'T', ' '), 'Z', '')";
+        return "CASE "
+                + "WHEN " + value + " IS NULL THEN CAST(NULL AS TIMESTAMP_LTZ(3)) "
+                + "WHEN REGEXP(" + value + ", '^[0-9]+$') THEN TO_TIMESTAMP_LTZ(CAST(" + value + " AS BIGINT), 3) "
+                + "WHEN REGEXP(" + value + ", " + isoPattern + ") THEN TO_TIMESTAMP_LTZ(" + normalizedIso + ", 'yyyy-MM-dd HH:mm:ss', 'UTC') "
+                + "ELSE CAST(NULL AS TIMESTAMP_LTZ(3)) "
+                + "END AS " + quotedName;
     }
 
     /**
