@@ -55,4 +55,9 @@ public class TableValObj {
      * 索引列表
      */
     private List<IndexValObj> indexes;
+
+    /**
+     * 分区列表
+     */
+    private List<PartitionValObj> partitions;
 }

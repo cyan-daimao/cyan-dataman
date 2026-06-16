@@ -2,6 +2,7 @@ package com.cyan.dataman.adapter.metadata.http.dto;
 
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
+import com.cyan.dataman.domain.metadata.valobj.PartitionValObj;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -48,4 +49,9 @@ public class TableDTO {
      * 索引列表
      */
     private List<IndexValObj> indexes;
+
+    /**
+     * 分区列表
+     */
+    private List<PartitionValObj> partitions;
 }

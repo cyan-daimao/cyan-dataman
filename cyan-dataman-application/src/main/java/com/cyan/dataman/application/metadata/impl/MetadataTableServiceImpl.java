@@ -21,9 +21,11 @@ import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataSubjectRepository;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.PartitionValObj;
 import com.cyan.dataman.domain.metadata.valobj.TableSnapshotValObj;
 import com.cyan.dataman.enums.ColumnDataType;
 import com.cyan.dataman.enums.DatasourceType;
+import com.cyan.dataman.enums.PartitionType;
 import io.micrometer.common.util.StringUtils;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
@@ -31,6 +33,8 @@ import org.apache.gravitino.client.GravitinoClient;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.TableCatalog;
 import org.apache.gravitino.rel.TableChange;
+import org.apache.gravitino.rel.expressions.transforms.Transform;
+import org.apache.gravitino.rel.expressions.transforms.Transforms;
 import org.apache.gravitino.rel.types.Type;
 import org.apache.gravitino.rel.types.Types;
 import org.apache.iceberg.Snapshot;
@@ -121,6 +125,7 @@ public class MetadataTableServiceImpl implements MetadataTableService {
         metadataTable.setDatasourceType(DatasourceType.ICEBERG);
         metadataTable.setLayerCode(cmd.getLayerCode().getCode().toLowerCase());
         metadataTable.getTable().setSchema(cmd.getLayerCode().getCode().toLowerCase());
+        validatePartitions(metadataTable);
         // 保存到数据库
         metadataTable = metadataTable.save(metadataTableRepository);
         // 在Gravitino中创建表
@@ -149,8 +154,69 @@ public class MetadataTableServiceImpl implements MetadataTableService {
                 Map.of(
                         "write.metadata.delete-after-commit.enabled", "true",
                         "write.metadata.previous-versions-max", "10"
-                )
+                ),
+                toPartitionTransforms(table)
         );
+    }
+
+    /**
+     * 校验分区配置
+     */
+    private void validatePartitions(MetadataTable table) {
+        if (table == null || table.getTable() == null || !CollUtils.isNotEmpty(table.getTable().getPartitions())) {
+            return;
+        }
+        Set<String> columnNames = Optional.ofNullable(table.getTable().getColumns()).orElse(List.of())
+                .stream()
+                .map(ColumnValObj::getName)
+                .collect(Collectors.toSet());
+        Set<String> partitionKeys = new HashSet<>();
+        for (PartitionValObj partition : table.getTable().getPartitions()) {
+            Assert.notNull(partition, new SilentException("分区配置不能为空"));
+            Assert.notBlank(partition.getColumnName(), new SilentException("分区字段不能为空"));
+            Assert.notNull(partition.getPartitionType(), new SilentException("分区类型不能为空"));
+            if (!columnNames.contains(partition.getColumnName())) {
+                throw new SilentException("分区字段不存在：" + partition.getColumnName());
+            }
+            String key = partition.getPartitionType().name() + ":" + partition.getColumnName();
+            if (!partitionKeys.add(key)) {
+                throw new SilentException("分区配置重复：" + partition.getPartitionType().name() + "(" + partition.getColumnName() + ")");
+            }
+            if (partition.getPartitionType() == PartitionType.BUCKET || partition.getPartitionType() == PartitionType.TRUNCATE) {
+                Integer param = partition.getParam();
+                if (param == null || param <= 0) {
+                    throw new SilentException(partition.getPartitionType().name() + " 分区参数必须为正整数");
+                }
+            }
+        }
+    }
+
+    /**
+     * 转换分区配置
+     */
+    private Transform[] toPartitionTransforms(MetadataTable table) {
+        if (table == null || table.getTable() == null || !CollUtils.isNotEmpty(table.getTable().getPartitions())) {
+            return Transforms.EMPTY_TRANSFORM;
+        }
+        return table.getTable().getPartitions().stream()
+                .sorted(Comparator.comparing(partition -> Optional.ofNullable(partition.getSortOrder()).orElse(0)))
+                .map(this::toPartitionTransform)
+                .toArray(Transform[]::new);
+    }
+
+    /**
+     * 转换单个分区配置
+     */
+    private Transform toPartitionTransform(PartitionValObj partition) {
+        return switch (partition.getPartitionType()) {
+            case IDENTITY -> Transforms.identity(partition.getColumnName());
+            case DAY -> Transforms.day(partition.getColumnName());
+            case HOUR -> Transforms.hour(partition.getColumnName());
+            case MONTH -> Transforms.month(partition.getColumnName());
+            case YEAR -> Transforms.year(partition.getColumnName());
+            case BUCKET -> Transforms.bucket(partition.getParam(), new String[]{partition.getColumnName()});
+            case TRUNCATE -> Transforms.truncate(partition.getParam(), partition.getColumnName());
+        };
     }
 
     /**

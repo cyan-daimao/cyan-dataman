@@ -3,17 +3,23 @@ package com.cyan.dataman.adapter.metadata.http.convert;
 import com.cyan.arch.base.mapstruct.MapstructConvert;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
 import com.cyan.dataman.domain.metadata.valobj.IndexValObj;
+import com.cyan.dataman.domain.metadata.valobj.PartitionValObj;
 import com.cyan.dataman.adapter.metadata.http.dto.TableDTO;
+import com.cyan.dataman.enums.PartitionType;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.expressions.Expression;
+import org.apache.gravitino.rel.expressions.NamedReference;
 import org.apache.gravitino.rel.expressions.FunctionExpression;
 import org.apache.gravitino.rel.expressions.literals.Literals;
+import org.apache.gravitino.rel.expressions.transforms.Transform;
+import org.apache.gravitino.rel.expressions.transforms.Transforms;
 import org.apache.gravitino.rel.indexes.Index;
 import org.mapstruct.Mapper;
 import org.mapstruct.factory.Mappers;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.List;
 import java.util.Optional;
 
@@ -58,11 +64,54 @@ public interface TableAdapterConvert {
                                 .setFieldNames(Arrays.stream(idx.fieldNames()).map(fieldName -> fieldName[0]).toList())
                 )
                 .toList();
+        // 分区
+        List<PartitionValObj> partitions = Arrays.stream(Optional.ofNullable(table.partitioning()).orElse(new Transform[0]))
+                .map(this::transformToPartition)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .toList();
         return new TableDTO()
                 .setName(table.name())
                 .setComment(table.comment())
                 .setColumns(columns)
-                .setIndexes(indexes);
+                .setIndexes(indexes)
+                .setPartitions(partitions);
+    }
+
+    /**
+     * 将Gravitino分区表达式转换为分区值对象
+     */
+    private Optional<PartitionValObj> transformToPartition(Transform transform) {
+        PartitionType partitionType = PartitionType.getByCode(transform.name().toUpperCase(Locale.ROOT));
+        if (partitionType == null) {
+            return Optional.empty();
+        }
+        String columnName = firstReferenceName(transform);
+        if (columnName == null || columnName.isBlank()) {
+            return Optional.empty();
+        }
+        PartitionValObj partition = new PartitionValObj()
+                .setColumnName(columnName)
+                .setPartitionType(partitionType);
+        if (transform instanceof Transforms.BucketTransform bucketTransform) {
+            partition.setParam(bucketTransform.numBuckets());
+        }
+        if (transform instanceof Transforms.TruncateTransform truncateTransform) {
+            partition.setParam(truncateTransform.width());
+        }
+        return Optional.of(partition);
+    }
+
+    /**
+     * 获取分区表达式首个字段名
+     */
+    private String firstReferenceName(Transform transform) {
+        NamedReference[] references = Optional.ofNullable(transform.references()).orElse(new NamedReference[0]);
+        if (references.length == 0 || references[0].fieldName().length == 0) {
+            return null;
+        }
+        String[] fieldName = references[0].fieldName();
+        return fieldName[fieldName.length - 1];
     }
 
     /**

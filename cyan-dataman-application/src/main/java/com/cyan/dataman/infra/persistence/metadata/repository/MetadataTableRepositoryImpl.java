@@ -10,16 +10,20 @@ import com.cyan.dataman.domain.metadata.query.MetadataTableOneQuery;
 import com.cyan.dataman.domain.metadata.query.MetadataTablePageQuery;
 import com.cyan.dataman.domain.metadata.repository.MetadataTableRepository;
 import com.cyan.dataman.domain.metadata.valobj.ColumnValObj;
+import com.cyan.dataman.domain.metadata.valobj.PartitionValObj;
 import com.cyan.dataman.enums.SecretLevel;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataColumnInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.convert.MetadataTableInfraConvert;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataColumnDO;
+import com.cyan.dataman.infra.persistence.metadata.dos.MetadataPartitionDO;
 import com.cyan.dataman.infra.persistence.metadata.dos.MetadataTableDO;
 import com.cyan.dataman.infra.persistence.metadata.mappers.MetadataColumnMapper;
+import com.cyan.dataman.infra.persistence.metadata.mappers.MetadataPartitionMapper;
 import com.cyan.dataman.infra.persistence.metadata.mappers.MetadataTableMapper;
 import io.micrometer.common.util.StringUtils;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,10 +37,14 @@ import java.util.Optional;
 public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     private final MetadataTableMapper metadataTableMapper;
     private final MetadataColumnMapper metadataColumnMapper;
+    private final MetadataPartitionMapper metadataPartitionMapper;
 
-    public MetadataTableRepositoryImpl(MetadataTableMapper metadataTableMapper, MetadataColumnMapper metadataColumnMapper) {
+    public MetadataTableRepositoryImpl(MetadataTableMapper metadataTableMapper,
+                                       MetadataColumnMapper metadataColumnMapper,
+                                       MetadataPartitionMapper metadataPartitionMapper) {
         this.metadataTableMapper = metadataTableMapper;
         this.metadataColumnMapper = metadataColumnMapper;
+        this.metadataPartitionMapper = metadataPartitionMapper;
     }
 
     /**
@@ -97,8 +105,14 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
                 .eq(MetadataColumnDO::getDataCatalog, metadataTableDO.getDataCatalog())
                 .eq(MetadataColumnDO::getDataSchema, metadataTableDO.getDataSchema())
                 .eq(MetadataColumnDO::getTbl, metadataTableDO.getTbl()));
+        metadataPartitionMapper.delete(new LambdaQueryWrapper<MetadataPartitionDO>()
+                .eq(MetadataPartitionDO::getDataCatalog, metadataTableDO.getDataCatalog())
+                .eq(MetadataPartitionDO::getDataSchema, metadataTableDO.getDataSchema())
+                .eq(MetadataPartitionDO::getTbl, metadataTableDO.getTbl()));
         // 保存字段信息
         saveColumns(table, metadataTableDO);
+        // 保存分区信息
+        savePartitions(table, metadataTableDO);
         return findById(metadataTableDO.getId() + "");
     }
 
@@ -121,6 +135,31 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
     }
 
     /**
+     * 保存分区信息
+     */
+    private void savePartitions(MetadataTable table, MetadataTableDO metadataTableDO) {
+        if (table == null || table.getTable() == null || !CollUtils.isNotEmpty(table.getTable().getPartitions())) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        List<PartitionValObj> partitions = table.getTable().getPartitions();
+        for (int i = 0; i < partitions.size(); i++) {
+            PartitionValObj partition = partitions.get(i);
+            MetadataPartitionDO partitionDO = new MetadataPartitionDO()
+                    .setDataCatalog(metadataTableDO.getDataCatalog())
+                    .setDataSchema(metadataTableDO.getDataSchema())
+                    .setTbl(metadataTableDO.getTbl())
+                    .setCol(partition.getColumnName())
+                    .setPartitionType(partition.getPartitionType())
+                    .setParam(partition.getParam())
+                    .setSortOrder(partition.getSortOrder() == null ? i : partition.getSortOrder())
+                    .setCreatedAt(now)
+                    .setUpdatedAt(now);
+            metadataPartitionMapper.insert(partitionDO);
+        }
+    }
+
+    /**
      * 获取表
      */
     @Override
@@ -136,9 +175,31 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
                 .orderByAsc(MetadataColumnDO::getId);
         List<MetadataColumnDO> metadataColumnDOS = metadataColumnMapper.selectList(queryWrapper);
         List<ColumnValObj> cols = MetadataColumnInfraConvert.INSTANCE.toColumnValObjList(metadataColumnDOS);
+        List<PartitionValObj> partitions = findPartitions(metadataTableDO);
         MetadataTable metadataTable = MetadataTableInfraConvert.INSTANCE.toMetadataTable(metadataTableDO);
         metadataTable.getTable().setColumns(cols);
+        metadataTable.getTable().setPartitions(partitions);
         return metadataTable;
+    }
+
+    /**
+     * 查询分区信息
+     */
+    private List<PartitionValObj> findPartitions(MetadataTableDO metadataTableDO) {
+        LambdaQueryWrapper<MetadataPartitionDO> queryWrapper = new LambdaQueryWrapper<MetadataPartitionDO>()
+                .eq(MetadataPartitionDO::getDataCatalog, metadataTableDO.getDataCatalog())
+                .eq(MetadataPartitionDO::getDataSchema, metadataTableDO.getDataSchema())
+                .eq(MetadataPartitionDO::getTbl, metadataTableDO.getTbl())
+                .orderByAsc(MetadataPartitionDO::getSortOrder)
+                .orderByAsc(MetadataPartitionDO::getId);
+        List<MetadataPartitionDO> partitionDOS = Optional.ofNullable(metadataPartitionMapper.selectList(queryWrapper)).orElse(List.of());
+        return partitionDOS.stream()
+                .map(partitionDO -> new PartitionValObj()
+                        .setColumnName(partitionDO.getCol())
+                        .setPartitionType(partitionDO.getPartitionType())
+                        .setParam(partitionDO.getParam())
+                        .setSortOrder(partitionDO.getSortOrder()))
+                .toList();
     }
 
     /**
@@ -156,7 +217,11 @@ public class MetadataTableRepositoryImpl implements MetadataTableRepository {
         metadataColumnMapper.delete(new LambdaQueryWrapper<MetadataColumnDO>()
                 .eq(MetadataColumnDO::getDataCatalog, table.getTable().getCatalog())
                 .eq(MetadataColumnDO::getDataSchema, table.getTable().getSchema())
-                .eq(MetadataColumnDO::getTbl, table.getName()));
+                .eq(MetadataColumnDO::getTbl, table.getTable().getName()));
+        metadataPartitionMapper.delete(new LambdaQueryWrapper<MetadataPartitionDO>()
+                .eq(MetadataPartitionDO::getDataCatalog, table.getTable().getCatalog())
+                .eq(MetadataPartitionDO::getDataSchema, table.getTable().getSchema())
+                .eq(MetadataPartitionDO::getTbl, table.getTable().getName()));
     }
 
     /**
